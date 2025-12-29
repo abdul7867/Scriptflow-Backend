@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Main Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.aws
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=${REDIS_URL}
+      - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-5}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      # Vertex AI (replaces GEMINI_API_KEY)
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_LOCATION=${GCP_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
+      - MANYCHAT_API_KEY=${MANYCHAT_API_KEY}
+      - MANYCHAT_SCRIPT_FIELD_ID=${MANYCHAT_SCRIPT_FIELD_ID}
+      - MANYCHAT_COPY_FIELD_ID=${MANYCHAT_COPY_FIELD_ID:-}
+      - IMGBB_API_KEY=${IMGBB_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - ANALYSIS_MODE=${ANALYSIS_MODE:-hybrid}
+      - BASE_URL=${BASE_URL:-}
+      - INSTAGRAM_COOKIES_PATH=/app/instagram_cookies.txt
+      # AWS S3 Configuration (optional - for image hosting)
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-imgbb}
+      # User limits
+      - USER_RATE_LIMIT=${USER_RATE_LIMIT:-10}
+      - MAX_BETA_USERS=${MAX_BETA_USERS:-100}
+    volumes:
+      - ./temp:/app/temp
+      - ./fonts:/app/fonts
+      - ./instagram_cookies.txt:/app/instagram_cookies.txt:ro
+      - ./gcp-service-account.json:/app/gcp-service-account.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (only for local development)
+  # In production, use Upstash or Redis Cloud
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - local # Only start in local profile
+
+  # MongoDB (only for local development)
+  # In production, use MongoDB Atlas
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=scriptflow
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - local # Only start in local profile
+
+volumes:
+  redis_data:
+  mongodb_data:
+
+# Usage:
+# Production (uses external MongoDB Atlas + Upstash Redis):
+#   docker-compose up app
+#
+# Local Development (with local MongoDB + Redis):
+#   docker-compose --profile local up

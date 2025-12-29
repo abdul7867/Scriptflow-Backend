@@ -1,0 +1,127 @@
+# ==============================================
+# SCRIPTFLOW BACKEND - .gitignore
+# ==============================================
+
+# ==============================================
+# BUILD & COMPILED OUTPUT
+# ==============================================
+dist/
+build/
+*.js.map
+
+# ==============================================
+# DEPENDENCIES
+# ==============================================
+node_modules/
+!package-lock.json
+
+# ==============================================
+# ENVIRONMENT & SECRETS (NEVER COMMIT!)
+# ==============================================
+.env
+.env.*
+!.env.example
+
+# Instagram Authentication (contains sensitive session data)
+instagram_cookies.txt
+*_cookies.txt
+cookies.txt
+
+# GCP Service Account Keys (NEVER COMMIT!)
+gcp-service-account.json
+*-service-account*.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# AWS Credentials
+.aws/
+credentials
+
+# ==============================================
+# DATABASE & DATA FILES
+# ==============================================
+*.db
+*.sqlite
+*.sqlite3
+data/
+mongodb_data/
+redis_data/
+scriptflow.db
+
+# ==============================================
+# TEMPORARY & GENERATED FILES
+# ==============================================
+temp/
+tmp/
+logs/
+*.log
+logs.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated images and scripts
+*.png
+*.jpg
+*.jpeg
+*.gif
+generated_scripts/
+
+# Test output files
+*_output.txt
+full_test_output.txt
+test_output.txt
+
+# ==============================================
+# OS-SPECIFIC FILES
+# ==============================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# ==============================================
+# IDE & EDITOR SETTINGS
+# ==============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# ==============================================
+# TESTING
+# ==============================================
+coverage/
+.nyc_output/
+jest.config.js
+jest.setup.js
+*.test.ts
+*.spec.ts
+
+# ==============================================
+# SCRATCH & DEBUG FILES
+# ==============================================
+src/test-*.ts
+scratch/
+debug/
+
+# ==============================================
+# DEPLOYMENT CONFIGS (Platform-specific)
+# ==============================================
+render.yaml
+
+# ==============================================
+# DOCUMENTATION (Keep locally, don't commit)
+# ==============================================
+*.md
+!README.md

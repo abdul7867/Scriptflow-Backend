@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enhanced Copy Link Page Demo | ScriptFlow</title>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Poppins', sans-serif;
+      background: linear-gradient(180deg, #09090b 0%, #18181b 100%);
+      color: #fafafa;
+      min-height: 100vh;
+      padding: 20px;
+      padding-bottom: 120px;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid rgba(255,255,255,0.08);
+    }
+    
+    .logo {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.8px;
+    }
+    
+    .logo span {
+      color: #22d3ee;
+      text-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+    }
+    
+    .badge {
+      font-size: 10px;
+      color: #22d3ee;
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    
+    .idea {
+      font-size: 13px;
+      color: #d4d4d8;
+      margin-bottom: 32px;
+      padding: 16px 20px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      border-left: 4px solid #22d3ee;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    .idea-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: #22d3ee;
+      margin-bottom: 8px;
+    }
+    
+    .section-card {
+      background: rgba(24, 24, 27, 0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+    }
+    
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    
+    .section-title {
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      color: #22d3ee;
+    }
+    
+    .copy-section-btn {
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      color: #22d3ee;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 1px;
+    }
+    
+    .copy-section-btn:hover {
+      background: rgba(34, 211, 238, 0.2);
+      border-color: rgba(34, 211, 238, 0.5);
+    }
+    
+    .copy-section-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .copy-section-btn.copied {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: rgba(34, 197, 94, 0.5);
+      color: #22c55e;
+    }
+    
+    .section-text {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 14px;
+      line-height: 2;
+      color: #e4e4e7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: all;
+      -webkit-user-select: all;
+    }
+    
+    .copy-all-button {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+      color: #09090b;
+      border: none;
+      border-radius: 14px;
+      padding: 18px 28px;
+      font-size: 17px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 12px 36px rgba(34, 211, 238, 0.4);
+      transition: all 0.2s ease;
+      z-index: 1000;
+      letter-spacing: 0.5px;
+    }
+    
+    .copy-all-button:active {
+      transform: scale(0.97);
+    }
+    
+    .copy-all-button.copied {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      box-shadow: 0 12px 36px rgba(34, 197, 94, 0.4);
+    }
+    
+    .copy-icon {
+      width: 22px;
+      height: 22px;
+    }
+    
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: #52525b;
+      margin-top: 32px;
+      letter-spacing: 2px;
+    }
+
+    @media (min-width: 768px) {
+      body {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 40px;
+      }
+      
+      .copy-all-button {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        max-width: 400px;
+      }
+      
+      .copy-all-button:active {
+        transform: translateX(-50%) scale(0.97);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">SCRIPT<span>FLOW</span></div>
+    <div class="badge">✦ COPY READY</div>
+  </div>
+  
+  <div class="idea">
+    <div class="idea-label">💡 Your Concept</div>
+    Create a compelling Instagram reel about productivity tips for remote workers
+  </div>
+  
+  <div class="section-card">
+    <div class="section-header">
+      <div class="section-title">01 / HOOK</div>
+      <button class="copy-section-btn" onclick="copySection('hook')">
+        <span class="copy-text-hook">COPY</span>
+      </button>
+    </div>
+    <pre class="section-text" id="hookText">🎬 VISUAL: Close-up on your face, speaking directly to camera
+💬 SAY: Are you working from home but still feeling overwhelmed?
+
+🎬 VISUAL: Quick cut to cluttered desk with multiple screens
+💬 SAY: Here's what nobody tells you about remote work productivity...</pre>
+  </div>
+  
+  <div class="section-card">
+    <div class="section-header">
+      <div class="section-title">02 / BODY</div>
+      <button class="copy-section-btn" onclick="copySection('body')">
+        <span class="copy-text-body">COPY</span>
+      </button>
+    </div>
+    <pre class="section-text" id="bodyText">🎬 VISUAL: Show clean, organized workspace
+💬 SAY: First, create dedicated zones. Your work zone should trigger productivity mode.
+
+🎬 VISUAL: Timer on screen showing 25-minute intervals
+💬 SAY: Second, use the Pomodoro technique. 25 minutes focused work, 5 minutes break.
+
+🎬 VISUAL: Calendar app with color-coded blocks
+💬 SAY: Third, time-block your calendar. Treat your focus time like important meetings.</pre>
+  </div>
+  
+  <div class="section-card">
+    <div class="section-header">
+      <div class="section-title">03 / CALL TO ACTION</div>
+      <button class="copy-section-btn" onclick="copySection('cta')">
+        <span class="copy-text-cta">COPY</span>
+      </button>
+    </div>
+    <pre class="section-text" id="ctaText">🎬 VISUAL: Back to your face, confident smile
+💬 SAY: Try these three strategies for one week and watch your productivity soar.
+
+🎬 VISUAL: Text overlay: "Follow for more productivity hacks"
+💬 SAY: Follow me for more remote work tips. Comment "PRODUCTIVE" if you're ready to level up!</pre>
+  </div>
+  
+  <button class="copy-all-button" id="copyAllBtn" onclick="copyAll()">
+    <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+    </svg>
+    <span id="copyAllText">COPY ENTIRE SCRIPT</span>
+  </button>
+  
+  <div class="footer">
+    POWERED BY SCRIPTFLOW AI
+  </div>
+  
+  <script>
+    const fullScript = `[HOOK]
+🎬 VISUAL: Close-up on your face, speaking directly to camera
+💬 SAY: Are you working from home but still feeling overwhelmed?
+
+🎬 VISUAL: Quick cut to cluttered desk with multiple screens
+💬 SAY: Here's what nobody tells you about remote work productivity...
+
+[BODY]
+🎬 VISUAL: Show clean, organized workspace
+💬 SAY: First, create dedicated zones. Your work zone should trigger productivity mode.
+
+🎬 VISUAL: Timer on screen showing 25-minute intervals
+💬 SAY: Second, use the Pomodoro technique. 25 minutes focused work, 5 minutes break.
+
+🎬 VISUAL: Calendar app with color-coded blocks
+💬 SAY: Third, time-block your calendar. Treat your focus time like important meetings.
+
+[CTA]
+🎬 VISUAL: Back to your face, confident smile
+💬 SAY: Try these three strategies for one week and watch your productivity soar.
+
+🎬 VISUAL: Text overlay: "Follow for more productivity hacks"
+💬 SAY: Follow me for more remote work tips. Comment "PRODUCTIVE" if you're ready to level up!`;
+    
+    async function copySection(section) {
+      const elementId = section + 'Text';
+      const textElement = document.getElementById(elementId);
+      const btnTextElement = document.querySelector('.copy-text-' + section);
+      const btnElement = btnTextElement.parentElement;
+      
+      if (!textElement) return;
+      
+      const text = textElement.innerText;
+      
+      try {
+        await navigator.clipboard.writeText(text);
+        btnElement.classList.add('copied');
+        btnTextElement.innerText = '✓ COPIED';
+        
+        setTimeout(function() {
+          btnElement.classList.remove('copied');
+          btnTextElement.innerText = 'COPY';
+        }, 2000);
+      } catch (err) {
+        fallbackCopy(text, btnElement, btnTextElement, 'COPY');
+      }
+    }
+    
+    async function copyAll() {
+      const btn = document.getElementById('copyAllBtn');
+      const btnText = document.getElementById('copyAllText');
+      
+      try {
+        await navigator.clipboard.writeText(fullScript);
+        btn.classList.add('copied');
+        btnText.innerText = '✓ COPIED TO CLIPBOARD!';
+        
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          btnText.innerText = 'COPY ENTIRE SCRIPT';
+        }, 2000);
+      } catch (err) {
+        fallbackCopy(fullScript, btn, btnText, 'COPY ENTIRE SCRIPT');
+      }
+    }
+    
+    function fallbackCopy(text, btn, btnText, originalText) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      
+      try {
+        document.execCommand('copy');
+        btn.classList.add('copied');
+        btnText.innerText = '✓ COPIED!';
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          btnText.innerText = originalText;
+        }, 2000);
+      } catch (e) {
+        btnText.innerText = 'Long-press to copy';
+      }
+      
+      document.body.removeChild(textarea);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+# Build Stage
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Production Stage
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install runtime dependencies (FFmpeg + Python3 for yt-dlp)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python-is-python3 \
+    ffmpeg \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install yt-dlp (required for Instagram video downloads)
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp
+
+# Create non-root user for security
+RUN groupadd -r scriptflow && useradd -r -g scriptflow scriptflow
+
+# Copy built artifacts and production deps
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+
+# Install production dependencies only (npm 7+ syntax)
+RUN npm ci --omit=dev
+
+# Copy necessary static assets (fonts for Satori image generation)
+COPY fonts ./fonts
+
+# Create temp directory for video processing and cookie file
+RUN mkdir -p temp && touch instagram_cookies.txt \
+    && chown -R scriptflow:scriptflow /app
+
+# Copy GCP Service Account for Vertex AI (must be added during build or mounted at runtime)
+# Option 1: Build-time copy (uncomment if baking into image)
+# COPY gcp-service-account.json /app/gcp-service-account.json
+
+# Environment Setup
+ENV NODE_ENV=production
+ENV PORT=3000
+# For runtime mount: docker run -v /path/to/gcp-service-account.json:/app/gcp-service-account.json
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
+
+# Switch to non-root user
+USER scriptflow
+
+# Expose port
+EXPOSE 3000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Start application
+CMD ["node", "dist/index.js"]
