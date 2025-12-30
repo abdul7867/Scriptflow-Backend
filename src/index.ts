@@ -14,9 +14,14 @@ if (!fs.existsSync(tempDir)) {
 }
 
 // Initialize Instagram cookies from environment variable (for Docker deployments)
-const COOKIES_PATH = '/app/instagram_cookies.txt';
+const COOKIES_PATH = '/app/cookies/instagram_cookies.txt';
 if (process.env.INSTAGRAM_COOKIES) {
   try {
+    // Ensure cookies directory exists
+    const cookiesDir = path.dirname(COOKIES_PATH);
+    if (!fs.existsSync(cookiesDir)) {
+      fs.mkdirSync(cookiesDir, { recursive: true });
+    }
     fs.writeFileSync(COOKIES_PATH, process.env.INSTAGRAM_COOKIES, 'utf-8');
     logger.info('Successfully initialized cookies from ENV');
     logger.info(`Instagram cookies initialized at ${COOKIES_PATH}`);

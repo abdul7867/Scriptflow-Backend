@@ -12,7 +12,7 @@ const pipeline = promisify(stream.pipeline);
 const MAX_DURATION_SEC = 300; // 5 minutes
 
 // Fixed paths for Docker deployment
-const COOKIES_PATH = '/app/instagram_cookies.txt';
+const COOKIES_PATH = '/app/cookies/instagram_cookies.txt';
 const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
 
 /**
@@ -60,12 +60,17 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
     retries: 3, // Auto-retry on transient failures
     fragmentRetries: 3,
     skipUnavailableFragments: true,
+    noCookiesUpdate: true, // CRITICAL: Prevent yt-dlp from writing back to cookies file
   };
 
-  // Add cookies if requested and available
-  if (useCookies && fs.existsSync(COOKIES_PATH)) {
-    ytDlpOptions.cookies = COOKIES_PATH;
-    logger.info(`[${id}] Using cookies for yt-dlp download`);
+  // Add cookies if requested and available (with error handling)
+  if (useCookies) {
+    if (fs.existsSync(COOKIES_PATH)) {
+      ytDlpOptions.cookies = COOKIES_PATH;
+      logger.info(`[${id}] Using cookies from: ${COOKIES_PATH}`);
+    } else {
+      logger.warn(`[${id}] Cookies file not found at: ${COOKIES_PATH}`);
+    }
   }
 
   await ytDlpExec(url, ytDlpOptions, { execPath: YTDLP_BINARY_PATH });
