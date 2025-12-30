@@ -33,14 +33,25 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
   const safeId = sanitizeId(id);
   const outputPath = path.join(tempDir, `${safeId}.mp4`);
 
+  // Clean up existing file before download to prevent resume errors
+  if (fs.existsSync(outputPath)) {
+    try {
+      fs.unlinkSync(outputPath);
+      logger.info(`[${id}] Deleted existing file: ${outputPath}`);
+    } catch (err: any) {
+      logger.warn(`[${id}] Failed to delete existing file: ${err.message}`);
+    }
+  }
+
   const ytDlpOptions: any = {
     output: outputPath,
     format: 'worst[ext=mp4]',
     maxFilesize: '50M',
     matchFilter: `duration <= ${MAX_DURATION_SEC}`,
     noPlaylist: true,
-    noPart: true, // Prevent .part files on interrupted downloads
-    noMtime: true, // Prevent filesystem timestamp errors
+    noPart: true, // Prevent .part files on interrupted downloads (fixes HTTP 416)
+    noMtime: true, // Prevent filesystem timestamp errors (fixes permission errors)
+    noCacheDir: true, // Prevent writing to cache folder (fixes read-only errors)
     retries: 3, // Auto-retry on transient failures
     fragmentRetries: 3,
     skipUnavailableFragments: true,
@@ -70,6 +81,16 @@ async function downloadViaCobalt(url: string, id: string): Promise<string> {
 
   const safeId = sanitizeId(id);
   const outputPath = path.join(tempDir, `${safeId}.mp4`);
+
+  // Clean up existing file before download to prevent conflicts
+  if (fs.existsSync(outputPath)) {
+    try {
+      fs.unlinkSync(outputPath);
+      logger.info(`[${id}] Deleted existing file: ${outputPath}`);
+    } catch (err: any) {
+      logger.warn(`[${id}] Failed to delete existing file: ${err.message}`);
+    }
+  }
 
   // Step 1: Get download URL from Cobalt API
   const apiResponse = await axios.post(
