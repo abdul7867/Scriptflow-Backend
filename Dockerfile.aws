@@ -51,8 +51,8 @@ RUN npm ci --omit=dev
 # Copy necessary static assets (fonts for Satori image generation)
 COPY fonts ./fonts
 
-# Create temp directory for video processing and cookie file
-RUN mkdir -p temp && touch instagram_cookies.txt \
+# Create temp directory with cache/config subdirectories for yt-dlp
+RUN mkdir -p temp/.cache temp/.config && touch instagram_cookies.txt \
     && chown -R scriptflow:scriptflow /app
 
 # Copy GCP Service Account for Vertex AI (must be added during build or mounted at runtime)
@@ -62,6 +62,10 @@ RUN mkdir -p temp && touch instagram_cookies.txt \
 # Environment Setup
 ENV NODE_ENV=production
 ENV PORT=3000
+# Redirect yt-dlp to use writable temp directory (prevents read-only filesystem errors)
+ENV HOME=/app/temp
+ENV XDG_CACHE_HOME=/app/temp/.cache
+ENV XDG_CONFIG_HOME=/app/temp/.config
 # For runtime mount: docker run -v /path/to/gcp-service-account.json:/app/gcp-service-account.json
 ENV GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
 
