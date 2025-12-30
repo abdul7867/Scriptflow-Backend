@@ -6,6 +6,7 @@ WORKDIR /app
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
+    python-is-python3 \
     make \
     g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -25,6 +26,8 @@ WORKDIR /app
 # Install runtime dependencies (FFmpeg + Python3 for yt-dlp)
 RUN apt-get update && apt-get install -y \
     python3 \
+    python-is-python3 \
+    python-is-python3 \
     python-is-python3 \
     ffmpeg \
     ca-certificates \
