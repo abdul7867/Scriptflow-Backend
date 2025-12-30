@@ -26,8 +26,9 @@ export function createServer() {
   // ===== PROXY CONFIGURATION =====
   // Trust proxy to correctly handle X-Forwarded-* headers from Nginx/AWS/reverse proxy
   // This fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR from express-rate-limit
-  // 'true' = trust first hop (appropriate when behind single proxy like AWS ALB, Nginx)
-  app.set('trust proxy', true);
+  // Use 1 instead of true to resolve ERR_ERL_PERMISSIVE_TRUST_PROXY
+  // 1 = trust first proxy hop (appropriate when behind single proxy like AWS ALB, Nginx)
+  app.set('trust proxy', 1);
 
   // ===== SECURITY MIDDLEWARE (Order matters!) =====
   
