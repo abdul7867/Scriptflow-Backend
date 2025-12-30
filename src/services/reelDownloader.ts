@@ -2,6 +2,7 @@ import ytDlpExec from 'yt-dlp-exec';
 import axios from 'axios';
 import path from 'path';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import stream from 'stream';
 import { promisify } from 'util';
 import { logger } from '../utils/logger';
@@ -62,23 +63,39 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
     skipUnavailableFragments: true,
   };
 
-  // Add cookies if requested and available (with error handling)
-  if (useCookies) {
-    if (fs.existsSync(COOKIES_PATH)) {
-      ytDlpOptions.cookies = COOKIES_PATH;
-      logger.info(`[${id}] Using cookies from: ${COOKIES_PATH}`);
-    } else {
-      logger.warn(`[${id}] Cookies file not found at: ${COOKIES_PATH}`);
+  // Copy cookies to writable temp location if requested (yt-dlp writes back to cookie file)
+  let tempCookiePath: string | null = null;
+  
+  if (useCookies && fs.existsSync(COOKIES_PATH)) {
+    tempCookiePath = path.join(tempDir, `${safeId}_cookies.txt`);
+    try {
+      await fsPromises.copyFile(COOKIES_PATH, tempCookiePath);
+      ytDlpOptions.cookies = tempCookiePath;
+      logger.info(`[${id}] Using temp cookies at: ${tempCookiePath}`);
+    } catch (err: any) {
+      logger.warn(`[${id}] Failed to copy cookies: ${err.message}`);
+      tempCookiePath = null; // Reset so we don't try to delete non-existent file
+    }
+  } else if (useCookies) {
+    logger.warn(`[${id}] Cookies file not found at: ${COOKIES_PATH}`);
+  }
+
+  try {
+    await ytDlpExec(url, ytDlpOptions, { execPath: YTDLP_BINARY_PATH });
+
+    if (!fs.existsSync(outputPath)) {
+      throw new Error('yt-dlp did not create output file');
+    }
+
+    return outputPath;
+  } finally {
+    // Clean up temp cookie file (regardless of success or failure)
+    if (tempCookiePath) {
+      await fsPromises.unlink(tempCookiePath).catch(() => {
+        // Silently ignore cleanup errors
+      });
     }
   }
-
-  await ytDlpExec(url, ytDlpOptions, { execPath: YTDLP_BINARY_PATH });
-
-  if (!fs.existsSync(outputPath)) {
-    throw new Error('yt-dlp did not create output file');
-  }
-
-  return outputPath;
 }
 
 /**
