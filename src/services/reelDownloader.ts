@@ -40,6 +40,7 @@ export async function downloadReel(url: string, id: string): Promise<string> {
       maxFilesize: '50M',
       matchFilter: `duration <= ${MAX_DURATION_SEC}`,
       noPlaylist: true,
+      noWriteCookies: true, // Prevent writing cookies back to file (read-only filesystem)
     };
 
     // Add cookies if available (required for Instagram authentication)
