@@ -60,7 +60,6 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
     retries: 3, // Auto-retry on transient failures
     fragmentRetries: 3,
     skipUnavailableFragments: true,
-    noCookiesUpdate: true, // CRITICAL: Prevent yt-dlp from writing back to cookies file
   };
 
   // Add cookies if requested and available (with error handling)
