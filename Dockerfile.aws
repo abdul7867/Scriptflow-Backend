@@ -3,7 +3,7 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (python-is-python3 creates symlink from python -> python3)
 RUN apt-get update && apt-get install -y \
     python3 \
     python-is-python3 \
