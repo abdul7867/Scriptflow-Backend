@@ -28,7 +28,12 @@ function sanitizeId(id: string): string {
  */
 async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): Promise<string> {
   const tempDir = path.join(process.cwd(), 'temp');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    // Create cache/config subdirectories for yt-dlp
+    fs.mkdirSync(path.join(tempDir, '.cache'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, '.config'), { recursive: true });
+  }
 
   const safeId = sanitizeId(id);
   const outputPath = path.join(tempDir, `${safeId}.mp4`);
@@ -77,7 +82,12 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
  */
 async function downloadViaCobalt(url: string, id: string): Promise<string> {
   const tempDir = path.join(process.cwd(), 'temp');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    // Create cache/config subdirectories for consistency
+    fs.mkdirSync(path.join(tempDir, '.cache'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, '.config'), { recursive: true });
+  }
 
   const safeId = sanitizeId(id);
   const outputPath = path.join(tempDir, `${safeId}.mp4`);
@@ -140,7 +150,12 @@ async function downloadViaCobalt(url: string, id: string): Promise<string> {
  */
 export async function downloadReel(url: string, id: string): Promise<string> {
   const tempDir = path.join(process.cwd(), 'temp');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    // Create cache/config subdirectories for yt-dlp
+    fs.mkdirSync(path.join(tempDir, '.cache'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, '.config'), { recursive: true });
+  }
 
   // SECURITY: Sanitize ID to prevent path traversal
   const safeId = sanitizeId(id);
