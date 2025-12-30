@@ -15,8 +15,11 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 
 WORKDIR /app
 
-# Create temp dir and data dir
-RUN mkdir -p temp data && chown -R node:node /app
+# Create temp dir with cache/config subdirectories for yt-dlp
+RUN mkdir -p temp/.cache temp/.config data && chown -R node:node /app
+
+# Set HOME to writable temp directory to prevent read-only filesystem errors
+ENV HOME=/app/temp
 
 COPY package*.json ./
 

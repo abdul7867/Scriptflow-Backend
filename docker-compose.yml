@@ -11,6 +11,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # yt-dlp filesystem configuration (prevents read-only errors)
+      - HOME=/app/temp
+      - XDG_CACHE_HOME=/app/temp/.cache
+      - XDG_CONFIG_HOME=/app/temp/.config
       - MONGODB_URI=${MONGODB_URI}
       - REDIS_URL=${REDIS_URL}
       - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-5}
