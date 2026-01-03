@@ -22,7 +22,7 @@ services:
       # Vertex AI (replaces GEMINI_API_KEY)
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GCP_LOCATION=${GCP_LOCATION:-us-central1}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-service-account.json
       - MANYCHAT_API_KEY=${MANYCHAT_API_KEY}
       - MANYCHAT_SCRIPT_FIELD_ID=${MANYCHAT_SCRIPT_FIELD_ID}
       - MANYCHAT_COPY_FIELD_ID=${MANYCHAT_COPY_FIELD_ID:-}
@@ -30,7 +30,7 @@ services:
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - ANALYSIS_MODE=${ANALYSIS_MODE:-hybrid}
       - BASE_URL=${BASE_URL:-}
-      - INSTAGRAM_COOKIES_PATH=/app/cookies/instagram_cookies.txt
+      - INSTAGRAM_COOKIES_PATH=/app/secrets/instagram_cookies.txt
       # AWS S3 Configuration (optional - for image hosting)
       - AWS_REGION=${AWS_REGION:-ap-south-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
@@ -43,8 +43,13 @@ services:
     volumes:
       - ./temp:/app/temp
       - ./fonts:/app/fonts
-      - ./cookies:/app/cookies:rw
-      - ./gcp-service-account.json:/app/gcp-service-account.json:ro
+      - ./secrets:/app/secrets:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]

@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # =============================================================================
-# Automated AWS Deployment Script for ScriptFlow Backend
+# LOCAL → EC2 Deployment Script (Run from your Windows/Mac machine)
 # Usage: ./deploy-to-aws.sh <EC2_IP> <PEM_KEY_PATH> [PROJECT_DIR]
-# Example: ./deploy-to-aws.sh 13.234.56.78 ~/.ssh/scriptflow-key.pem
-# Example: ./deploy-to-aws.sh 13.234.56.78 ~/.ssh/scriptflow-key.pem /path/to/project
+# 
+# This script syncs code from your local machine to EC2.
+# For git-based deployment, use deploy.sh on the server instead.
 # =============================================================================
 
 set -e
@@ -81,9 +82,9 @@ if ! ssh -i "$PEM_KEY" -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$EC2_US
     exit 1
 fi
 
-# Create remote directory
-print_status "Creating remote directory..."
-ssh -i "$PEM_KEY" "$EC2_USER@$EC2_IP" "mkdir -p $REMOTE_DIR"
+# Create remote directories
+print_status "Creating remote directories..."
+ssh -i "$PEM_KEY" "$EC2_USER@$EC2_IP" "mkdir -p $REMOTE_DIR $REMOTE_DIR/secrets $REMOTE_DIR/temp $REMOTE_DIR/fonts"
 
 # Sync files using rsync (faster and better than scp)
 print_status "Syncing files to EC2... (this may take a few minutes)"
@@ -92,6 +93,7 @@ rsync -avz -e "ssh -i $PEM_KEY" \
     --exclude '.git' \
     --exclude 'temp/*' \
     --exclude '.env' \
+    --exclude 'secrets/*' \
     --exclude '*.log' \
     --exclude 'dist' \
     "$LOCAL_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/"
@@ -105,27 +107,55 @@ if [ -d "$LOCAL_DIR/fonts" ]; then
     print_status "Fonts synced"
 fi
 
-# Upload sensitive files separately
-print_warning "Uploading sensitive files..."
+# Upload sensitive files to secrets/ folder
+print_warning "Uploading sensitive files to secrets/ folder..."
 
+# Upload .env
 if [ -f "$LOCAL_DIR/.env" ]; then
-    scp -i "$PEM_KEY" "$LOCAL_DIR/.env" "$EC2_USER@$EC2_IP:$REMOTE_DIR/.env"
-    print_status ".env uploaded"
+    scp -i "$PEM_KEY" "$LOCAL_DIR/.env" "$EC2_USER@$EC2_IP:$REMOTE_DIR/secrets/.env"
+    print_status ".env uploaded to secrets/"
+elif [ -f "$LOCAL_DIR/secrets/.env" ]; then
+    scp -i "$PEM_KEY" "$LOCAL_DIR/secrets/.env" "$EC2_USER@$EC2_IP:$REMOTE_DIR/secrets/.env"
+    print_status ".env uploaded to secrets/"
 else
-    print_warning ".env not found locally - you'll need to create it on the server"
+    print_warning ".env not found locally - upload it manually via MobaXterm"
 fi
 
-if [ -f "$LOCAL_DIR/gcp-service-account.json" ]; then
-    scp -i "$PEM_KEY" "$LOCAL_DIR/gcp-service-account.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/gcp-service-account.json"
-    print_status "GCP service account uploaded"
-else
-    print_warning "gcp-service-account.json not found - you'll need to upload it manually"
+# Upload GCP credentials (check multiple possible names)
+GCP_FILE=""
+if [ -f "$LOCAL_DIR/secrets/gcp-service-account.json" ]; then
+    GCP_FILE="$LOCAL_DIR/secrets/gcp-service-account.json"
+elif [ -f "$LOCAL_DIR/gcp-service-account.json" ]; then
+    GCP_FILE="$LOCAL_DIR/gcp-service-account.json"
+elif [ -f "$LOCAL_DIR/abdul-content-creation-82cb87bf38df.json" ]; then
+    GCP_FILE="$LOCAL_DIR/abdul-content-creation-82cb87bf38df.json"
 fi
 
-if [ -f "$LOCAL_DIR/instagram_cookies.txt" ]; then
-    scp -i "$PEM_KEY" "$LOCAL_DIR/instagram_cookies.txt" "$EC2_USER@$EC2_IP:$REMOTE_DIR/instagram_cookies.txt"
-    print_status "Instagram cookies uploaded"
+if [ -n "$GCP_FILE" ]; then
+    scp -i "$PEM_KEY" "$GCP_FILE" "$EC2_USER@$EC2_IP:$REMOTE_DIR/secrets/gcp-service-account.json"
+    print_status "GCP credentials uploaded to secrets/gcp-service-account.json"
+else
+    print_warning "GCP credentials not found - upload manually via MobaXterm"
 fi
+
+# Upload Instagram cookies
+COOKIES_FILE=""
+if [ -f "$LOCAL_DIR/secrets/instagram_cookies.txt" ]; then
+    COOKIES_FILE="$LOCAL_DIR/secrets/instagram_cookies.txt"
+elif [ -f "$LOCAL_DIR/instagram_cookies.txt" ]; then
+    COOKIES_FILE="$LOCAL_DIR/instagram_cookies.txt"
+fi
+
+if [ -n "$COOKIES_FILE" ]; then
+    scp -i "$PEM_KEY" "$COOKIES_FILE" "$EC2_USER@$EC2_IP:$REMOTE_DIR/secrets/instagram_cookies.txt"
+    print_status "Instagram cookies uploaded to secrets/"
+else
+    print_warning "Instagram cookies not found - optional, upload manually if needed"
+fi
+
+# Set proper permissions on secrets
+ssh -i "$PEM_KEY" "$EC2_USER@$EC2_IP" "chmod 700 $REMOTE_DIR/secrets && chmod 600 $REMOTE_DIR/secrets/* 2>/dev/null || true"
+print_status "Secrets permissions secured"
 
 # Deploy on server
 print_status "Deploying application on EC2..."
@@ -138,20 +168,36 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if .env exists
-if [ ! -f .env ]; then
-    echo "WARNING: .env file not found!"
-    echo "Please create .env file before starting the application"
+# Check if secrets/.env exists
+if [ ! -f secrets/.env ]; then
+    echo "ERROR: secrets/.env file not found!"
+    echo "Please upload .env to /home/ubuntu/scriptflow-backend/secrets/"
     exit 1
+fi
+
+# Check if GCP credentials exist
+if [ ! -f secrets/gcp-service-account.json ]; then
+    echo "ERROR: secrets/gcp-service-account.json not found!"
+    echo "Please upload your GCP credentials to /home/ubuntu/scriptflow-backend/secrets/"
+    exit 1
+fi
+
+# Create backup of current deployment
+if docker-compose ps 2>/dev/null | grep -q "app"; then
+    echo "Creating backup..."
+    BACKUP_DIR="/home/ubuntu/scriptflow-backups/backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+    docker-compose logs --tail=500 app > "$BACKUP_DIR/app.log" 2>&1 || true
+    echo "Backup saved to $BACKUP_DIR"
 fi
 
 # Stop existing containers
 echo "Stopping existing containers..."
 docker-compose down 2>/dev/null || true
 
-# Build and start
+# Build and start with secrets/.env
 echo "Building and starting containers..."
-docker-compose up -d --build app
+docker-compose --env-file secrets/.env up -d --build app
 
 # Wait for health check
 echo "Waiting for application to start..."

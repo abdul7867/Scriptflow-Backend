@@ -27,6 +27,10 @@ instagram_cookies.txt
 *_cookies.txt
 cookies.txt
 
+# Secrets folder (contains .env, GCP credentials, cookies)
+secrets/
+!secrets/.gitkeep
+
 # GCP Service Account Keys (NEVER COMMIT!)
 gcp-service-account.json
 *-service-account*.json

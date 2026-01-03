@@ -8,6 +8,7 @@ import { VideoAnalysis } from '../../services/videoAnalyzer';
 export interface IReelDNA extends Document {
   reelUrlHash: string;       // SHA-256 of the reel URL (unique key)
   reelUrl: string;           // Original URL for reference
+  videoUrl?: string;         // S3 URL of the downloaded video (if uploaded)
   analysis: VideoAnalysis;   // The cached video analysis
   createdAt: Date;
   expiresAt: Date;           // Cache expiration (e.g., 7 days)
@@ -24,6 +25,10 @@ const ReelDNASchema = new Schema<IReelDNA>({
     type: String, 
     required: true 
   },
+  videoUrl: {
+    type: String,
+    default: null
+  },
   analysis: {
     transcript: { type: String, default: null },
     visualCues: [{ type: String }],
@@ -33,8 +38,7 @@ const ReelDNASchema = new Schema<IReelDNA>({
   },
   expiresAt: {
     type: Date,
-    default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-    index: true
+    default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
   }
 }, {
   timestamps: true

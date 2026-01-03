@@ -151,4 +151,94 @@ echo ""
 print_warning "IMPORTANT: Log out and log back in, or run 'newgrp docker' to use Docker without sudo"
 print_warning "Also run 'source ~/.bashrc' or restart your terminal to use NVM/Node.js"
 echo ""
+
+# =============================================================================
+# Configure Firewall (UFW)
+# =============================================================================
+print_header "Configuring Firewall (UFW)"
+
+sudo apt-get install -y ufw
+
+# Allow SSH (important - don't lock yourself out!)
+sudo ufw allow 22/tcp
+# Allow HTTP
+sudo ufw allow 80/tcp
+# Allow HTTPS
+sudo ufw allow 443/tcp
+# Allow Node.js app port (remove this if using NGINX reverse proxy only)
+sudo ufw allow 3000/tcp
+
+# Enable firewall
+sudo ufw --force enable
+sudo ufw status
+
+print_status "Firewall configured successfully"
+
+# =============================================================================
+# Enable Automatic Security Updates
+# =============================================================================
+print_header "Enabling Automatic Security Updates"
+
+sudo apt-get install -y unattended-upgrades
+sudo dpkg-reconfigure -plow unattended-upgrades
+
+print_status "Automatic security updates enabled"
+
+# =============================================================================
+# Clone Repository and Setup Project
+# =============================================================================
+print_header "Setting Up ScriptFlow Project"
+
+PROJECT_DIR="/home/ubuntu/scriptflow-backend"
+REPO_URL="https://github.com/YOUR_USERNAME/ScriptFlow-backend.git"
+
+# Check if directory already exists
+if [ -d "$PROJECT_DIR" ]; then
+    print_warning "Project directory already exists at $PROJECT_DIR"
+    echo "Skipping git clone. Run 'git pull' manually to update."
+else
+    echo "Enter your GitHub repository URL (or press Enter to skip):"
+    read -r USER_REPO_URL
+    
+    if [ -n "$USER_REPO_URL" ]; then
+        REPO_URL="$USER_REPO_URL"
+        git clone "$REPO_URL" "$PROJECT_DIR"
+        print_status "Repository cloned to $PROJECT_DIR"
+    else
+        print_warning "Skipping git clone. Clone manually later."
+        mkdir -p "$PROJECT_DIR"
+    fi
+fi
+
+# Create secrets directory
+mkdir -p "$PROJECT_DIR/secrets"
+mkdir -p "$PROJECT_DIR/temp"
+mkdir -p "$PROJECT_DIR/fonts"
+
+# Set proper permissions
+chmod 700 "$PROJECT_DIR/secrets"
+
+print_status "Project directories created"
+
+# =============================================================================
+# Summary
+# =============================================================================
+print_header "Setup Complete!"
+
+echo ""
+echo "============================================="
+echo "  NEXT STEPS - Upload Secrets via MobaXterm"
+echo "============================================="
+echo ""
+echo "Upload the following files to $PROJECT_DIR/secrets/:"
+echo ""
+echo "  1. .env                        → $PROJECT_DIR/secrets/.env"
+echo "  2. gcp-service-account.json    → $PROJECT_DIR/secrets/gcp-service-account.json"
+echo "     (rename your abdul-content-creation-*.json to gcp-service-account.json)"
+echo "  3. instagram_cookies.txt       → $PROJECT_DIR/secrets/instagram_cookies.txt"
+echo ""
+echo "Then run:"
+echo "  cd $PROJECT_DIR"
+echo "  docker-compose --env-file secrets/.env up -d --build app"
+echo ""
 print_status "Setup completed successfully! 🚀"

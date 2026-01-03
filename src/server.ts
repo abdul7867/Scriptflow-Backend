@@ -1,10 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { generateScriptHandler } from './api/generateScript';
+import { generateScriptHandler, generateScriptHandlerV2, getJobStatusHandler } from './api/generateScript';
 import { healthHandler, detailedHealthHandler } from './api/health';
 import { exportDatasetHandler } from './api/dataset';
 import { submitFeedbackHandler, getFeedbackStatsHandler } from './api/feedback';
+import { submitFeedbackHandlerV2, getFeedbackStatsHandlerV2, quickFeedbackHandler } from './api/feedbackV2';
 import { viewScriptHandler } from './api/viewScript';
+import metricsRouter from './api/metrics';
 import { logger } from './utils/logger';
 import { config } from './config';
 import {
@@ -66,13 +68,22 @@ export function createServer() {
 
   // ===== TIMEOUT MIDDLEWARE =====
   app.use((req: Request, res: Response, next: NextFunction) => {
+    // Add request ID for distributed tracing
+    const requestId = req.headers['x-request-id'] as string || 
+                      req.headers['x-amzn-trace-id'] as string || 
+                      `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    req.requestId = requestId;
+    res.setHeader('X-Request-ID', requestId);
+    
     const timeout = setTimeout(() => {
       if (!res.headersSent) {
-        logger.warn(`Request timed out: ${req.method} ${req.path}`);
+        logger.warn(`Request timed out: ${req.method} ${req.path}`, { requestId });
+        res.setHeader('Retry-After', '60'); // Suggest retry after 60 seconds
         res.status(503).json({
           status: 'error',
           code: 'TIMEOUT',
-          message: 'Request processing exceeded time limit'
+          message: 'Request processing exceeded time limit',
+          requestId
         });
       }
     }, 30000); // 30 seconds for queued operations
@@ -103,17 +114,36 @@ export function createServer() {
     userRateLimiter,
     generateScriptHandler
   );
+  
+  // V2 Unified Handler (with smart flow detection)
+  app.post('/api/v2/script/generate',
+    betaAccessControl,
+    checkUserBlocked,
+    userRateLimiter,
+    generateScriptHandlerV2
+  );
+  
+  // Job status endpoint
+  app.get('/api/v1/job/:jobId', getJobStatusHandler);
 
   // Feedback submission (public - tied to subscriber_id)
   app.post('/api/v1/feedback', submitFeedbackHandler);
+  
+  // V2 Enhanced Feedback
+  app.post('/api/v2/feedback', submitFeedbackHandlerV2);
+  app.post('/api/v2/feedback/quick', quickFeedbackHandler);
 
   // ===== PROTECTED ROUTES (Admin) =====
+  
+  // Prometheus metrics endpoint
+  app.use('/metrics', metricsRouter);
   
   // Dataset export (requires API key)
   app.get('/api/v1/dataset/export', apiKeyAuth, exportDatasetHandler);
   
   // Feedback stats (requires API key)
   app.get('/api/v1/feedback/stats', apiKeyAuth, getFeedbackStatsHandler);
+  app.get('/api/v2/feedback/stats', apiKeyAuth, getFeedbackStatsHandlerV2);
 
   // ===== ERROR HANDLING =====
   

@@ -23,6 +23,9 @@ gcp-service-account.json
 *-service-account*.json
 abdul-content-creation-*.json
 
+# Secrets folder (mount at runtime)
+secrets/
+
 # Instagram Cookies (mount at runtime)
 instagram_cookies.txt
 *_cookies.txt

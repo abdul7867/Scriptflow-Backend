@@ -6,14 +6,16 @@ import fsPromises from 'fs/promises';
 import stream from 'stream';
 import { promisify } from 'util';
 import { logger } from '../utils/logger';
+import { config } from '../config';
+import { withCircuitBreaker, CircuitOpenError } from '../utils/circuitBreaker';
 
 const pipeline = promisify(stream.pipeline);
 
 // Max duration to process (to avoid huge files)
 const MAX_DURATION_SEC = 300; // 5 minutes
 
-// Fixed paths for Docker deployment
-const COOKIES_PATH = '/app/cookies/instagram_cookies.txt';
+// Use cookies path from config (supports both Docker and local development)
+const getCookiesPath = () => config.INSTAGRAM_COOKIES_PATH;
 const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
 
 /**
@@ -58,18 +60,19 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
     noPart: true, // Prevent .part files on interrupted downloads (fixes HTTP 416)
     noMtime: true, // Prevent filesystem timestamp errors (fixes permission errors)
     noCacheDir: true, // Prevent writing to cache folder (fixes read-only errors)
-    retries: 3, // Auto-retry on transient failures
-    fragmentRetries: 3,
+    retries: 1, // Reduced retries - circuit breaker handles failure protection
+    fragmentRetries: 1,
     skipUnavailableFragments: true,
   };
 
   // Copy cookies to writable temp location if requested (yt-dlp writes back to cookie file)
   let tempCookiePath: string | null = null;
+  const cookiesPath = getCookiesPath();
   
-  if (useCookies && fs.existsSync(COOKIES_PATH)) {
+  if (useCookies && fs.existsSync(cookiesPath)) {
     tempCookiePath = path.join(tempDir, `${safeId}_cookies.txt`);
     try {
-      await fsPromises.copyFile(COOKIES_PATH, tempCookiePath);
+      await fsPromises.copyFile(cookiesPath, tempCookiePath);
       ytDlpOptions.cookies = tempCookiePath;
       logger.info(`[${id}] Using temp cookies at: ${tempCookiePath}`);
     } catch (err: any) {
@@ -77,7 +80,7 @@ async function downloadViaYtDlp(url: string, id: string, useCookies: boolean): P
       tempCookiePath = null; // Reset so we don't try to delete non-existent file
     }
   } else if (useCookies) {
-    logger.warn(`[${id}] Cookies file not found at: ${COOKIES_PATH}`);
+    logger.warn(`[${id}] Cookies file not found at: ${cookiesPath}`);
   }
 
   try {
@@ -168,8 +171,17 @@ async function downloadViaCobalt(url: string, id: string): Promise<string> {
 /**
  * MAIN EXPORT: Hybrid downloader with 3-tier fallback cascade
  * Priority: yt-dlp (cookies) → Cobalt API → yt-dlp (no cookies)
+ * Protected by circuit breaker to prevent excessive retries when Instagram is blocking
  */
 export async function downloadReel(url: string, id: string): Promise<string> {
+  // Wrap the download logic with circuit breaker protection
+  return withCircuitBreaker('instagram-download', () => downloadReelInternal(url, id));
+}
+
+/**
+ * Internal download function - called by circuit breaker
+ */
+async function downloadReelInternal(url: string, id: string): Promise<string> {
   const tempDir = path.join(process.cwd(), 'temp');
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
@@ -188,13 +200,16 @@ export async function downloadReel(url: string, id: string): Promise<string> {
 
   // Build fallback cascade
   const methods: Array<{ name: string; fn: () => Promise<string> }> = [];
+  const cookiesPath = getCookiesPath();
 
   // Method 1: yt-dlp with cookies (highest reliability for private content)
-  if (fs.existsSync(COOKIES_PATH)) {
+  if (fs.existsSync(cookiesPath)) {
     methods.push({
       name: 'yt-dlp-cookies',
       fn: () => downloadViaYtDlp(url, id, true),
     });
+  } else {
+    logger.warn(`[${id}] Cookies file not found at: ${cookiesPath}, skipping cookie-based download`);
   }
 
   // Method 2: Cobalt API (cookie-less, good for public content)

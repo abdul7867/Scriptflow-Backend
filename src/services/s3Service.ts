@@ -2,6 +2,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import path from 'path';
+import fs from 'fs';
 
 // Initialize S3 Client only if credentials are provided
 let s3Client: S3Client | null = null;
@@ -73,4 +74,56 @@ export async function uploadToS3(
  */
 export function generateS3Url(key: string): string {
   return `https://${config.S3_BUCKET_NAME}.s3.${config.AWS_REGION}.amazonaws.com/${key}`;
+}
+
+/**
+ * Upload a video file to S3
+ * @param filePath - Local path to the video file
+ * @param reelId - Unique identifier for the reel (e.g., hash or ID)
+ * @returns The public URL of the uploaded video
+ */
+export async function uploadVideoToS3(filePath: string, reelId: string): Promise<string> {
+  if (!s3Client) {
+    throw new Error('S3 Client not initialized. Check AWS credentials.');
+  }
+
+  const bucket = config.S3_BUCKET_NAME;
+  if (!bucket) {
+    throw new Error('S3_BUCKET_NAME is not defined in config.');
+  }
+
+  try {
+    // Read file as buffer
+    const fileBuffer = await fs.promises.readFile(filePath);
+    
+    // Get file extension
+    const ext = path.extname(filePath) || '.mp4';
+    
+    // Generate key: videos/YYYY-MM-DD/reelId.ext
+    const date = new Date().toISOString().split('T')[0];
+    const key = `videos/${date}/${reelId}${ext}`;
+
+    // Determine content type
+    const contentType = ext === '.mp4' ? 'video/mp4' : 
+                       ext === '.mov' ? 'video/quicktime' : 
+                       'application/octet-stream';
+
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: contentType,
+    });
+
+    await s3Client.send(command);
+
+    const videoUrl = `https://${bucket}.s3.${config.AWS_REGION}.amazonaws.com/${key}`;
+    logger.info(`Successfully uploaded video to S3: ${videoUrl}`);
+    
+    return videoUrl;
+
+  } catch (error: any) {
+    logger.error('Failed to upload video to S3:', error);
+    throw new Error(`S3 Video Upload failed: ${error.message}`);
+  }
 }

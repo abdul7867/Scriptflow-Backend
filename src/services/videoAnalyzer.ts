@@ -22,17 +22,23 @@ interface AnalyzeOptions {
 
 // Model configuration with fallback hierarchy (Vertex AI compatible)
 const MODEL_HIERARCHY = [
-  'gemini-2.0-flash-001', // Primary (New 2.0 Flash)
-  'gemini-1.5-flash',     // Fallback
+  'gemini-2.5-flash',     // Primary (2.5 Flash)
+  'gemini-2.0-flash-001', // Fallback (2.0 Flash)
 ];
 
 // Initialize Vertex AI
 const vertexAI = new VertexAI({
   project: config.GCP_PROJECT_ID,
   location: config.GCP_LOCATION,
+  googleAuthOptions: {
+    keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+  },
 });
 
 logger.info(`✅ Vertex AI initialized for project: ${config.GCP_PROJECT_ID}`);
+if (config.GOOGLE_APPLICATION_CREDENTIALS) {
+  logger.info(`✅ Using credentials from: ${config.GOOGLE_APPLICATION_CREDENTIALS}`);
+}
 
 
 /**

@@ -14,7 +14,7 @@ if (!fs.existsSync(tempDir)) {
 }
 
 // Initialize Instagram cookies from environment variable (for Docker deployments)
-const COOKIES_PATH = '/app/cookies/instagram_cookies.txt';
+const COOKIES_PATH = config.INSTAGRAM_COOKIES_PATH;
 if (process.env.INSTAGRAM_COOKIES) {
   try {
     // Ensure cookies directory exists
@@ -29,7 +29,10 @@ if (process.env.INSTAGRAM_COOKIES) {
     logger.error('Failed to write Instagram cookies from ENV:', err);
   }
 } else {
-  logger.warn('INSTAGRAM_COOKIES environment variable not set - Instagram downloads may fail');
+  logger.info(`Using cookies path from config: ${COOKIES_PATH}`);
+  if (!fs.existsSync(COOKIES_PATH)) {
+    logger.warn(`Instagram cookies file not found at ${COOKIES_PATH} - Instagram downloads may fail`);
+  }
 }
 
 /**
@@ -117,7 +120,9 @@ async function bootstrap() {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      logger.error(`Unhandled Rejection: ${reason}`);
+      logger.error('Unhandled Rejection at promise:', { reason: String(reason) });
+      // Don't shutdown on unhandled rejection - just log it
+      // Node.js 15+ will crash by default anyway if --unhandled-rejections=strict
     });
 
   } catch (error) {

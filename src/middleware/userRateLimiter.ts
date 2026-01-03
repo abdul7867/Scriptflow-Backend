@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getRedis } from '../queue/redis';
 import { logger } from '../utils/logger';
+import { sendTextMessage } from '../services/manychat';
 
 /**
  * User-Based Rate Limiter
@@ -56,15 +57,31 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
       if (count >= maxRequests) {
         const ttl = await redis.ttl(key);
         const resetTime = new Date(Date.now() + ttl * 1000).toISOString();
+        const resetMinutes = Math.ceil(ttl / 60);
 
         logger.warn(`User rate limit exceeded: ${subscriberId} (${count}/${maxRequests})`);
+
+        // Send friendly DM to user via ManyChat with upgrade prompt
+        const rateLimitMessage = 
+          `⏰ You've used all ${maxRequests} scripts this hour!\n\n` +
+          `🔄 Reset in ${resetMinutes} minute${resetMinutes !== 1 ? 's' : ''}.\n\n` +
+          `💡 Want more? Reply UPGRADE to unlock 50 scripts/hour!`;
+        
+        try {
+          await sendTextMessage(subscriberId, rateLimitMessage);
+          logger.info(`Rate limit DM sent to user: ${subscriberId}`);
+        } catch (dmError) {
+          logger.warn(`Failed to send rate limit DM to ${subscriberId}:`, dmError);
+        }
 
         return res.status(429).json({
           status: 'error',
           code: 'USER_RATE_LIMIT_EXCEEDED',
-          message: `You've used all ${maxRequests} requests for this hour. Try again later!`,
+          message: `You've used all ${maxRequests} scripts this hour. Reset in ${resetMinutes} minute${resetMinutes !== 1 ? 's' : ''}.`,
           retryAfter: ttl,
-          resetAt: resetTime
+          resetAt: resetTime,
+          remainingRequests: 0,
+          upgradeAvailable: true
         });
       }
 

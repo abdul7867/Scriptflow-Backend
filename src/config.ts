@@ -3,7 +3,8 @@ import dotenv from 'dotenv';
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static').path;
 
-dotenv.config();
+// Override system environment variables with .env file values
+dotenv.config({ override: true });
 
 export const config = cleanEnv(process.env, {
   // Server
@@ -56,4 +57,7 @@ export const config = cleanEnv(process.env, {
   
   // Image Provider Selection
   IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb'], default: 'imgbb' }),
+  
+  // Instagram Cookies Path
+  INSTAGRAM_COOKIES_PATH: str({ desc: 'Path to Instagram cookies file', default: '/app/secrets/instagram_cookies.txt' }),
 });

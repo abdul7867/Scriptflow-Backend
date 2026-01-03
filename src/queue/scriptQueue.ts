@@ -16,6 +16,18 @@ export interface ScriptJobData {
   toneHint?: 'professional' | 'funny' | 'provocative' | 'educational' | 'casual';
   languageHint?: string;
   mode?: 'full' | 'hook_only';
+  
+  // Copy mode: output transcript as-is formatted as script
+  isCopyMode?: boolean;
+}
+
+/**
+ * Job data interface for copy/download operations
+ */
+export interface CopyJobData {
+  requestId: string;
+  subscriberId: string;
+  reelUrl: string;
 }
 
 /**
@@ -28,8 +40,18 @@ export interface ScriptJobResult {
   error?: string;
 }
 
+/**
+ * Copy job result interface
+ */
+export interface CopyJobResult {
+  success: boolean;
+  videoUrl?: string;
+  reelHash?: string;
+  error?: string;
+}
+
 // Queue name
-const QUEUE_NAME = 'script-generation';
+export const QUEUE_NAME = 'script-generation';
 
 // Lazy-initialized queue instances
 let scriptQueue: Queue<ScriptJobData, ScriptJobResult> | null = null;
@@ -46,10 +68,10 @@ export function initializeQueue(): Queue<ScriptJobData, ScriptJobResult> {
   scriptQueue = new Queue<ScriptJobData, ScriptJobResult>(QUEUE_NAME, {
     connection: getRedis(),
     defaultJobOptions: {
-      attempts: 3,
+      attempts: 2, // Reduced from 3 - circuit breaker handles failure protection
       backoff: {
         type: 'exponential',
-        delay: 2000
+        delay: 3000 // Increased from 2000 to give more breathing room
       },
       removeOnComplete: {
         count: 100
@@ -103,6 +125,19 @@ export async function addScriptJob(data: ScriptJobData): Promise<string> {
 }
 
 /**
+ * Add a copy/download job to the queue
+ */
+export async function addCopyJob(data: CopyJobData): Promise<string> {
+  const queue = getQueue() as Queue<any, any>;
+  const job = await queue.add('copy', data, {
+    jobId: data.requestId,
+  });
+  
+  logger.info(`Copy job ${job.id} added to queue for user ${data.subscriberId}`);
+  return job.id!;
+}
+
+/**
  * Get queue statistics for health endpoint
  */
 export async function getQueueStats() {
@@ -131,4 +166,4 @@ export async function closeQueue(): Promise<void> {
   logger.info('BullMQ queue closed');
 }
 
-export { QUEUE_NAME, scriptQueue };
+export { scriptQueue };

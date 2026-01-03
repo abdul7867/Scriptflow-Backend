@@ -8,6 +8,9 @@ import { config } from '../config';
 const vertexAI = new VertexAI({
   project: config.GCP_PROJECT_ID,
   location: config.GCP_LOCATION,
+  googleAuthOptions: {
+    keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+  },
 });
 
 /**
@@ -30,6 +33,14 @@ async function fileToGenerativePart(path: string, mimeType: string): Promise<Par
 export type ToneHint = 'professional' | 'funny' | 'provocative' | 'educational' | 'casual';
 export type GenerationMode = 'full' | 'hook_only';
 
+/** Summary of a previous variation to help AI avoid repetition */
+export interface VariationSummary {
+  idea: string;
+  hookSummary: string;
+  angleSummary: string;
+  isSameIdea: boolean;
+}
+
 export interface ScriptGeneratorOptions {
   userIdea: string;
   transcript: string | null;
@@ -40,8 +51,11 @@ export interface ScriptGeneratorOptions {
   languageHint?: string;
   mode?: GenerationMode;
   
-  // NEW: Previous scripts for same reel (for context/learning)
+  // Previous scripts with DIFFERENT ideas (for context/learning)
   previousScripts?: { idea: string; script: string }[];
+  
+  // Previous variation SUMMARIES with SAME idea (for avoiding repetition)
+  previousVariationSummaries?: VariationSummary[];
 }
 
 export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
@@ -91,10 +105,33 @@ Make the hook extra impactful since it's standalone.
 Still follow all other formatting rules for the hook.`);
   }
   
-  if (hints.length === 0) return '';
+  // CRITICAL: Add variation avoidance instructions if user is regenerating
+  if (options.previousVariationSummaries && options.previousVariationSummaries.length > 0) {
+    const summaries = options.previousVariationSummaries;
+    hints.push(`
+🔄 VARIATION MODE - CREATE SOMETHING DISTINCTLY DIFFERENT!
+The user has already generated ${summaries.length} script(s) for this SAME idea.
+You MUST create a FRESH, UNIQUE version that is NOTICEABLY DIFFERENT.
+
+HOOKS TO AVOID (do NOT use similar openings):
+${summaries.map((s, i) => `${i + 1}. "${s.hookSummary}"`).join('\n')}
+
+ANGLES TO AVOID (do NOT use similar approaches):
+${summaries.map((s, i) => `${i + 1}. "${s.angleSummary}"`).join('\n')}
+
+VARIATION REQUIREMENTS:
+- Use a COMPLETELY DIFFERENT hook style (question vs statement, shocking fact vs relatable moment, etc.)
+- Take a DIFFERENT angle/perspective on the topic
+- Use DIFFERENT examples or analogies
+- Change the emotional tone (curiosity vs urgency vs humor)
+- If previous was direct, try storytelling. If previous was personal, try educational.
+
+The user wants VARIETY - give them something they haven't seen before!`);
+  }
   
   // Always add visual guidance reminder for better shooting instructions
-  hints.push(`
+  if (hints.length > 0) {
+    hints.push(`
 VISUAL DIRECTION REMINDER:
 For each 🎬 VISUAL: line, be EXTREMELY SPECIFIC about:
 - Exact camera angle (e.g., "Close-up face shot, slightly above eye level")
@@ -103,6 +140,9 @@ For each 🎬 VISUAL: line, be EXTREMELY SPECIFIC about:
 - Text overlays (e.g., "Text appears top-center: 'THE 3 SECRETS'")
 
 The creator should be able to shoot the video EXACTLY as described without guessing.`);
+  }
+  
+  if (hints.length === 0) return '';
   
   return `
 
@@ -198,8 +238,8 @@ ${ps.script}
 
   // Model configuration with fallback hierarchy (Vertex AI compatible)
   const MODEL_HIERARCHY = [
-    'gemini-2.0-flash-001',  // Primary (New 2.0 Flash)
-    'gemini-1.5-flash',      // Fallback
+    'gemini-2.5-flash',          // Primary (2.5 Flash)
+    'gemini-2.0-flash-001',      // Fallback (2.0 Flash)
   ];
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -295,9 +335,9 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
 
   const fullPrompt = masterPrompt + priorContext + optionalHints;
 
-  // 3. Call Model (Gemini 2.0 Flash is best for multimodal one-shot)
-  // We use 2.0 Flash because it handles video tokens natively and efficiently
-  const modelName = 'gemini-2.0-flash-001';
+  // 3. Call Model (Gemini 2.5 Flash is best for multimodal one-shot)
+  // We use 2.5 Flash because it handles video tokens natively and efficiently
+  const modelName = 'gemini-2.5-flash';
   
   try {
     logger.info(`Generating One-Shot script with model: ${modelName}`);
