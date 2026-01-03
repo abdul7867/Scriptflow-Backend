@@ -111,13 +111,13 @@ fi
 # =============================================================================
 # Backup current deployment (if exists)
 # =============================================================================
-if docker-compose ps | grep -q "app"; then
+if docker-compose --env-file "$SECRETS_DIR/.env" ps 2>/dev/null | grep -q "app"; then
     print_status "Creating backup of current deployment..."
     BACKUP_DIR="/home/ubuntu/scriptflow-backups/backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_DIR"
     
     # Save current container logs
-    docker-compose logs --tail=1000 app > "$BACKUP_DIR/app.log" 2>&1 || true
+    docker-compose --env-file "$SECRETS_DIR/.env" logs --tail=1000 app > "$BACKUP_DIR/app.log" 2>&1 || true
     
     print_status "Backup saved to: $BACKUP_DIR"
 fi
@@ -129,7 +129,7 @@ echo ""
 echo "Deploying application..."
 
 # Stop existing containers
-docker-compose down 2>/dev/null || true
+docker-compose --env-file "$SECRETS_DIR/.env" down 2>/dev/null || true
 
 # Build and start (with --build flag if requested or always for safety)
 if [ "$1" == "--rebuild" ] || [ "$1" == "-r" ]; then
@@ -163,7 +163,7 @@ done
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     print_error "Health check failed after $MAX_RETRIES attempts"
     echo ""
-    echo "Check logs with: docker-compose logs app"
+    echo "Check logs with: docker-compose --env-file $SECRETS_DIR/.env logs app"
     exit 1
 fi
 
@@ -175,14 +175,14 @@ echo "============================================="
 echo "  Deployment Successful! 🚀"
 echo "============================================="
 echo ""
-docker-compose ps
+docker-compose --env-file "$SECRETS_DIR/.env" ps
 echo ""
 echo "Application URL: http://$(curl -s ifconfig.me):3000"
 echo "Health Check:    http://$(curl -s ifconfig.me):3000/health"
 echo ""
 echo "Useful commands:"
-echo "  View logs:     docker-compose logs -f app"
-echo "  Restart:       docker-compose restart app"
-echo "  Stop:          docker-compose down"
+echo "  View logs:     docker-compose --env-file secrets/.env logs -f app"
+echo "  Restart:       docker-compose --env-file secrets/.env restart app"
+echo "  Stop:          docker-compose --env-file secrets/.env down"
 echo "  Rebuild:       ./deployment/deploy.sh --rebuild"
 echo ""
