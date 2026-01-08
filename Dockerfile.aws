@@ -50,12 +50,14 @@ RUN npm ci --omit=dev
 COPY fonts ./fonts
 
 # Create temp directory with cache/config subdirectories for yt-dlp
-RUN mkdir -p temp/.cache temp/.config && touch instagram_cookies.txt \
+RUN mkdir -p temp/.cache temp/.config \
     && chown -R scriptflow:scriptflow /app
 
-# Copy GCP Service Account for Vertex AI (must be added during build or mounted at runtime)
-# Option 1: Build-time copy (uncomment if baking into image)
-# COPY gcp-service-account.json /app/gcp-service-account.json
+# Create secrets directory for sensitive files (mounted at runtime)
+# Contains: gcp-service-account.json, instagram_cookies.txt, etc.
+RUN mkdir -p secrets \
+    && touch secrets/gcp-service-account.json secrets/instagram_cookies.txt \
+    && chown -R scriptflow:scriptflow /app/secrets
 
 # Environment Setup
 ENV NODE_ENV=production
@@ -64,8 +66,8 @@ ENV PORT=3000
 ENV HOME=/app/temp
 ENV XDG_CACHE_HOME=/app/temp/.cache
 ENV XDG_CONFIG_HOME=/app/temp/.config
-# For runtime mount: docker run -v /path/to/gcp-service-account.json:/app/gcp-service-account.json
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
+# GCP credentials path (mounted at runtime from ./secrets volume)
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-service-account.json
 
 # Switch to non-root user
 USER scriptflow

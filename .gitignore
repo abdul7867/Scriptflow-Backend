@@ -9,6 +9,8 @@ dist/
 build/
 *.js.map
 
+*.md
+
 # ==============================================
 # DEPENDENCIES
 # ==============================================
@@ -28,8 +30,10 @@ instagram_cookies.txt
 cookies.txt
 
 # Secrets folder (contains .env, GCP credentials, cookies)
-secrets/
+# Allow folder structure and documentation, but exclude sensitive files
+secrets/*
 !secrets/.gitkeep
+!secrets/README.md
 
 # GCP Service Account Keys (NEVER COMMIT!)
 gcp-service-account.json

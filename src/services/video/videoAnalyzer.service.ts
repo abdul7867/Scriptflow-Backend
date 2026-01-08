@@ -26,19 +26,33 @@ const MODEL_HIERARCHY = [
   'gemini-2.0-flash-001', // Fallback (2.0 Flash)
 ];
 
-// Initialize Vertex AI
-const vertexAI = new VertexAI({
-  project: config.GCP_PROJECT_ID,
-  location: config.GCP_LOCATION,
-  googleAuthOptions: {
-    keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
-  },
-});
+// Initialize Vertex AI with error handling
+let vertexAI: VertexAI | null = null;
 
-logger.info(`✅ Vertex AI initialized for project: ${config.GCP_PROJECT_ID}`);
-if (config.GOOGLE_APPLICATION_CREDENTIALS) {
-  logger.info(`✅ Using credentials from: ${config.GOOGLE_APPLICATION_CREDENTIALS}`);
+try {
+  if (!config.GCP_PROJECT_ID) {
+    throw new Error('GCP_PROJECT_ID environment variable is not set');
+  }
+
+  vertexAI = new VertexAI({
+    project: config.GCP_PROJECT_ID,
+    location: config.GCP_LOCATION,
+    googleAuthOptions: {
+      keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+    },
+  });
+
+  logger.info(`✅ Vertex AI initialized for project: ${config.GCP_PROJECT_ID}`);
+  if (config.GOOGLE_APPLICATION_CREDENTIALS) {
+    logger.info(`✅ Using credentials from: ${config.GOOGLE_APPLICATION_CREDENTIALS}`);
+  }
+} catch (error: any) {
+  logger.error(`❌ Failed to initialize Vertex AI: ${error.message}`);
+  logger.error('⚠️  Video analysis features will not be available');
+  logger.error('⚠️  Please set GCP_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS environment variables');
+  vertexAI = null;
 }
+
 
 
 /**
@@ -63,6 +77,11 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * Analyze video frames and/or audio using Gemini with fallback support
  */
 export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalysis> {
+  // Check if Vertex AI is available
+  if (!vertexAI) {
+    throw new Error('Vertex AI is not initialized. Please configure GCP_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS environment variables.');
+  }
+
   const { frames = [], audioPath, includeAudio } = options;
   
   // Input validation
