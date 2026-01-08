@@ -8,9 +8,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "clean": "rm -rf dist",
+    "start": "node --max-old-space-size=512 --expose-gc dist/index.js",
+    "start:prod": "node --max-old-space-size=900 --expose-gc dist/index.js",
+    "dev": "node --max-old-space-size=2048 --expose-gc -r ts-node/register src/index.ts",
+    "dev:optimized": "npm run build && node --max-old-space-size=1024 --expose-gc dist/index.js",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
     "prebuild": "npm run clean"
   },
   "dependencies": {

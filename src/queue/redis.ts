@@ -21,19 +21,40 @@ export function getRedis(): Redis {
     redis = new Redis(redisUrl, {
       maxRetriesPerRequest: null, // Required for BullMQ
       retryStrategy: (times: number) => {
-        if (times > 10) {
-          logger.error('Redis: Max retries reached, giving up');
+        if (times > 20) {
+          logger.error('Redis: Max retries reached (20 attempts), giving up');
           return null;
         }
-        const delay = Math.min(times * 100, 3000);
-        logger.warn(`Redis: Retrying connection in ${delay}ms (attempt ${times})`);
+        // Exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms, max 5000ms
+        const delay = Math.min(times * 100 * Math.pow(1.5, times - 1), 5000);
+        logger.warn(`Redis: Retrying connection in ${delay}ms (attempt ${times}/20)`);
         return delay;
       },
       enableReadyCheck: true,
-      connectTimeout: 10000
+      connectTimeout: 15000, // Increased to 15s for Upstash
+      // Connection pooling for 50-100 concurrent users
+      lazyConnect: false,
+      keepAlive: 60000, // Keep alive for 60 seconds (prevent Upstash timeout)
+      family: 0, // Auto-detect IPv4/IPv6
+      // CRITICAL: Enable offline queue to buffer commands during reconnection
+      enableOfflineQueue: true, // Queue commands when disconnected (prevents failures)
+      // Upstash-specific optimizations
+      reconnectOnError: (err: Error) => {
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          // Reconnect on READONLY errors (Upstash failover)
+          logger.warn('Redis: READONLY error detected, reconnecting...');
+          return true;
+        }
+        return false;
+      },
+      // Connection pool settings for high concurrency
+      commandTimeout: 30000, // 30s timeout per command (increased for Upstash latency)
+      autoResubscribe: true, // Auto-resubscribe to channels on reconnect
+      autoResendUnfulfilledCommands: true, // Resend commands that were sent but not fulfilled
     });
 
-    // Connection event handlers
+    // Connection event handlers with detailed monitoring
     redis.on('connect', () => {
       logger.info('✅ Redis connecting...');
     });
@@ -43,11 +64,24 @@ export function getRedis(): Redis {
     });
 
     redis.on('error', (err: Error) => {
-      logger.error('Redis error:', err.message);
+      // Don't log ECONNRESET as error (expected during reconnection)
+      if (err.message.includes('ECONNRESET') || err.message.includes('ETIMEDOUT')) {
+        logger.warn(`Redis connection issue: ${err.message} (will auto-reconnect)`);
+      } else {
+        logger.error('Redis error:', err.message);
+      }
     });
 
     redis.on('close', () => {
-      logger.warn('Redis connection closed');
+      logger.warn('Redis connection closed (will auto-reconnect)');
+    });
+
+    redis.on('reconnecting', (delay: number) => {
+      logger.info(`Redis reconnecting in ${delay}ms...`);
+    });
+
+    redis.on('end', () => {
+      logger.error('Redis connection ended permanently');
     });
   }
   
@@ -93,10 +127,14 @@ export async function disconnectRedis(): Promise<void> {
   
   try {
     await redis.quit();
+    redis = null; // Nullify to allow reconnection
     logger.info('Redis disconnected gracefully');
   } catch (error) {
     logger.error('Error disconnecting Redis:', error);
-    redis.disconnect();
+    if (redis) {
+      redis.disconnect();
+    }
+    redis = null; // Nullify even on error
   }
 }
 

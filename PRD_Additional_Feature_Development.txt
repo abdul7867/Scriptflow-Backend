@@ -1,0 +1,695 @@
+# ScriptFlow 2.0 - Additional Feature Development PRD
+
+**Document Version**: 1.0  
+**Created**: January 4, 2026  
+**Author**: ScriptFlow Team  
+**Status**: Draft  
+
+---
+
+## 📋 Table of Contents
+
+1. [Executive Summary](#1-executive-summary)
+2. [Current State Analysis](#2-current-state-analysis)
+3. [Problem Statements](#3-problem-statements)
+4. [Proposed Features](#4-proposed-features)
+5. [User Stories](#5-user-stories)
+6. [Technical Requirements](#6-technical-requirements)
+7. [Implementation Roadmap](#7-implementation-roadmap)
+8. [Success Metrics](#8-success-metrics)
+9. [Risk Assessment](#9-risk-assessment)
+10. [Appendix](#10-appendix)
+
+---
+
+## 1. Executive Summary
+
+### 1.1 Product Vision
+ScriptFlow is an AI-powered script generation tool that helps content creators "steal like an artist" by analyzing viral Instagram Reels and generating customized scripts based on the user's unique ideas.
+
+### 1.2 Purpose of This Document
+This PRD outlines the additional features and enhancements planned for ScriptFlow 2.x to improve user experience, increase engagement, and build a robust platform for future ML model training.
+
+### 1.3 Key Objectives
+- **Improve Script Quality**: Better language matching, tone consistency, and variation diversity
+- **Enhance User Experience**: Cleaner copy interface, pro insights, personalization
+- **Enable Learning Loop**: Build feedback mechanisms for continuous improvement
+- **Scale Platform**: Performance optimizations and infrastructure improvements
+
+---
+
+## 2. Current State Analysis
+
+### 2.1 Existing Features (ScriptFlow 2.0)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Instant Flow** | ✅ Live | User sends reel + "generate" → AI picks default idea |
+| **Guided Flow** | ✅ Live | User sends reel + custom idea → AI generates script |
+| **Redo/Variation** | ✅ Live | User says "another" → Gets variation with different hook |
+| **Copy Mode** | ✅ Live | User says "copy" → Gets exact transcript formatted as script |
+| **Carousel Output** | ✅ Live | 3-card Instagram carousel (Hook/Body/CTA) |
+| **Copy-Friendly URL** | ✅ Live | Web page with mobile-optimized copy buttons |
+| **Beta Access Control** | ✅ Live | First 100 users get access, others on waitlist |
+| **Rate Limiting** | ✅ Live | 10 requests/hour per user |
+| **Tone Hints** | ✅ Live | User can specify tone preference |
+| **Language Hints** | ✅ Live | User can specify output language |
+
+### 2.2 Current Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      ManyChat Webhook                        │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Express API Server                         │
+│  • Request validation  • Session management                  │
+│  • Flow detection      • Rate limiting                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      BullMQ Queue                            │
+│  • Script jobs         • Copy jobs                           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Worker Process                           │
+│  • Video download      • Frame extraction                    │
+│  • Audio extraction    • Video analysis (Gemini)             │
+│  • Script generation   • Image generation                    │
+│  • ManyChat delivery                                         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       Data Layer                             │
+│  • MongoDB (Scripts, Jobs, ReelDNA, Dataset)                │
+│  • Redis (Queue, Sessions, Rate limits)                      │
+│  • S3/ImgBB (Images)                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 2.3 Known Issues (To Address)
+
+| Issue | Severity | Status |
+|-------|----------|--------|
+| Language mismatch (Spanish output for English transcript) | High | ✅ Fixed |
+| Cluttered copy page layout | Medium | ✅ Fixed |
+| Visual cues sometimes empty | Medium | Open |
+| Hook variations not distinct enough | Medium | Open |
+| No user preference memory across sessions | Low | Open |
+
+---
+
+## 3. Problem Statements
+
+### 3.1 User Problems
+
+**P1: "I don't know if my script is good until I film it"**
+- Users have no way to preview how the script will feel before shooting
+- No audio preview or TTS for dialogue
+
+**P2: "I keep regenerating but get similar scripts"**
+- Variation mode needs more creativity
+- Users want more control over variation direction
+
+**P3: "I want to save my favorite scripts for later"**
+- No favorites/collection system
+- No way to organize scripts by niche or style
+
+**P4: "I want to learn what makes a hook work"**
+- Metadata (Hook Type, Tone) is hidden or unclear
+- No educational layer explaining the patterns
+
+### 3.2 Business Problems
+
+**B1: "We need more feedback data for model training"**
+- Current feedback loop is minimal
+- No granular section-level feedback
+
+**B2: "We need to convert waitlist users to paying customers"**
+- No monetization strategy implemented
+- No premium tier differentiation
+
+**B3: "We need to reduce API costs"**
+- Some video analysis is redundant
+- Caching could be more aggressive
+
+---
+
+## 4. Proposed Features
+
+### 4.1 Feature Priority Matrix
+
+| Feature | User Impact | Dev Effort | Priority |
+|---------|-------------|------------|----------|
+| Pro Insights Toggle | Medium | Low | P1 |
+| Audio Preview (TTS) | High | Medium | P1 |
+| Script Collections | Medium | Medium | P2 |
+| Enhanced Variations | High | Medium | P1 |
+| Feedback Loop 2.0 | High | High | P1 |
+| Monetization (Pro Tier) | High | High | P2 |
+| Multi-language Support | Medium | Low | P2 |
+| Analytics Dashboard | Medium | Medium | P3 |
+| Custom Niche Models | Low | High | P3 |
+
+---
+
+### 4.2 Feature Specifications
+
+#### FEATURE 1: Pro Insights Toggle
+
+**Description**: Allow users to toggle visibility of script metadata (Hook Type, Tone, Visual Cues) for educational purposes.
+
+**User Value**: 
+- Creators learn why scripts work
+- Helps them internalize patterns for future content
+
+**Requirements**:
+- Add toggle button on copy page
+- Store preference in UserMemory
+- Default: OFF for simplicity
+
+**Acceptance Criteria**:
+- [ ] Toggle appears on script view page
+- [ ] Metadata section expands/collapses smoothly
+- [ ] User preference persists across sessions
+- [ ] Mobile-responsive design
+
+---
+
+#### FEATURE 2: Audio Preview (TTS)
+
+**Description**: Allow users to preview how the dialogue sounds before filming.
+
+**User Value**:
+- Hear pacing and flow
+- Catch awkward phrasing before shooting
+- Especially helpful for non-native speakers
+
+**Requirements**:
+- Integrate TTS service (Google Cloud TTS / ElevenLabs)
+- Generate audio for dialogue sections only
+- Add play button next to each dialogue block
+- Add "Play All" button for full script
+
+**Technical Considerations**:
+- Cache TTS audio in S3 to avoid regeneration
+- Offer voice selection (male/female/accent)
+- Keep audio files < 30 seconds for cost efficiency
+
+**Acceptance Criteria**:
+- [ ] Play button appears next to each dialogue
+- [ ] Audio plays inline without page navigation
+- [ ] Works on mobile Safari (autoplay restrictions)
+- [ ] Voice quality is professional grade
+
+---
+
+#### FEATURE 3: Enhanced Variations (Variation Modes)
+
+**Description**: Give users control over HOW the script should vary.
+
+**User Value**:
+- Instead of just "another", users can specify:
+  - "Make it funnier"
+  - "More controversial"
+  - "Shorter hook"
+  - "Story-based angle"
+
+**Requirements**:
+- Detect variation intent from message
+- Pass variation mode to AI prompt
+- Show variation mode in response
+
+**Variation Modes**:
+| Mode | Trigger Keywords | Effect |
+|------|------------------|--------|
+| Funnier | "funnier", "more funny", "😂" | Add humor, wordplay |
+| Edgier | "edgier", "more controversial", "spicy" | More provocative takes |
+| Shorter | "shorter", "tighter", "quick" | Reduce word count by 30% |
+| Story | "story", "narrative", "personal" | Story-based structure |
+| Data | "stats", "data", "facts" | Add statistics/proof points |
+
+**Acceptance Criteria**:
+- [ ] At least 5 variation modes work
+- [ ] Mode is correctly passed to AI
+- [ ] Script output reflects the requested mode
+- [ ] User feedback confirms variation is noticeable
+
+---
+
+#### FEATURE 4: Script Collections
+
+**Description**: Allow users to save, organize, and revisit their favorite scripts.
+
+**User Value**:
+- Build a library of proven scripts
+- Organize by niche, topic, or performance
+- Reference past scripts when filming
+
+**Requirements**:
+- Add "⭐ Save" button on script view
+- Create Collection model in MongoDB
+- API endpoints: save, list, delete, tag
+- ManyChat flow: "Show my saved scripts"
+
+**Data Model**:
+```
+Collection {
+  subscriberId: string
+  scripts: [{
+    scriptId: ObjectId
+    addedAt: Date
+    tags: string[]
+    notes: string
+  }]
+  maxScripts: number (limit: 50 for free, 500 for pro)
+}
+```
+
+**Acceptance Criteria**:
+- [ ] Save button works on copy page
+- [ ] User can view list of saved scripts
+- [ ] User can add tags to scripts
+- [ ] Scripts persist across sessions
+- [ ] Delete functionality works
+
+---
+
+#### FEATURE 5: Feedback Loop 2.0
+
+**Description**: Collect granular, actionable feedback on generated scripts.
+
+**User Value**:
+- Influence future script quality
+- Feel heard and engaged
+
+**Business Value**:
+- High-quality training data
+- Understand what works per niche
+
+**Requirements**:
+- After script delivery, send feedback prompt
+- Quick reactions: 👍 👎 ⭐ (loved it)
+- Section-specific feedback: "Hook was weak" / "CTA was perfect"
+- Track regeneration as implicit negative feedback
+
+**Feedback Data Model**:
+```
+Feedback {
+  scriptId: ObjectId
+  subscriberId: string
+  
+  // Quick feedback
+  overallRating: 'loved' | 'good' | 'bad'
+  
+  // Section feedback
+  sections: {
+    hook: { rating: 1-5, wasRegenerated: boolean }
+    body: { rating: 1-5, wasRegenerated: boolean }
+    cta: { rating: 1-5, wasRegenerated: boolean }
+  }
+  
+  // Open feedback
+  comment: string
+  wouldFilm: boolean
+  didFilm: boolean
+  performanceScore: number (if they share metrics later)
+}
+```
+
+**Acceptance Criteria**:
+- [ ] Feedback prompt sent after script delivery
+- [ ] Quick reactions captured
+- [ ] Section feedback UI works
+- [ ] Data stored correctly in MongoDB
+- [ ] Feedback stats API returns aggregated data
+
+---
+
+#### FEATURE 6: Monetization (Pro Tier)
+
+**Description**: Introduce a paid tier with premium features.
+
+**Pricing Strategy**:
+- **Free Tier**: 3 scripts/day, basic features
+- **Pro Tier ($19/month)**: Unlimited scripts, TTS, collections, priority queue
+
+**Pro Features**:
+| Feature | Free | Pro |
+|---------|------|-----|
+| Scripts per day | 3 | Unlimited |
+| Audio preview (TTS) | ❌ | ✅ |
+| Script collections | 10 max | 500 max |
+| Pro insights | ❌ | ✅ |
+| Priority queue | ❌ | ✅ |
+| Multi-language | ❌ | ✅ |
+| Custom tone presets | ❌ | ✅ |
+
+**Technical Requirements**:
+- Stripe integration for payments
+- Subscription management (create, cancel, renew)
+- Pro badge on ManyChat
+- Middleware to check subscription status
+
+**Acceptance Criteria**:
+- [ ] Stripe checkout flow works
+- [ ] Subscription status checked on each request
+- [ ] Pro features gated correctly
+- [ ] Cancellation flow works
+- [ ] Webhook handles payment events
+
+---
+
+## 5. User Stories
+
+### 5.1 Pro Insights Toggle
+```
+AS A content creator
+I WANT to see why my script's hook works
+SO THAT I can apply the same pattern to future content
+
+GIVEN I'm on the script view page
+WHEN I tap "Show Pro Insights"
+THEN I see Hook Type, Tone, and Visual Cues metadata
+```
+
+### 5.2 Audio Preview
+```
+AS A creator who struggles with pacing
+I WANT to hear my script read aloud
+SO THAT I can fix awkward phrasing before filming
+
+GIVEN I'm viewing a generated script
+WHEN I tap the play button next to a dialogue
+THEN I hear the dialogue spoken in a natural voice
+```
+
+### 5.3 Enhanced Variations
+```
+AS A creator who wants more humor
+I WANT to say "make it funnier"
+SO THAT I get a variation with jokes and wordplay
+
+GIVEN I received a script
+WHEN I say "funnier" or "make it funny"
+THEN I receive a new variation with added humor
+```
+
+### 5.4 Script Collections
+```
+AS A creator with many scripts
+I WANT to save my favorites
+SO THAT I can reference them later when filming
+
+GIVEN I'm viewing a script I love
+WHEN I tap the "Save" button
+THEN the script is added to my collection
+```
+
+### 5.5 Pro Tier
+```
+AS A power user
+I WANT unlimited scripts and premium features
+SO THAT I can create content faster
+
+GIVEN I'm a free user hitting rate limits
+WHEN I see the "Upgrade to Pro" prompt
+THEN I can subscribe and immediately access Pro features
+```
+
+---
+
+## 6. Technical Requirements
+
+### 6.1 Backend Changes
+
+| Feature | Files to Modify | New Files |
+|---------|-----------------|-----------|
+| Pro Insights | `viewScript.ts` | - |
+| Audio Preview | `worker.ts` | `services/ttsService.ts` |
+| Enhanced Variations | `triggerDetector.ts`, `scriptGenerator.ts` | - |
+| Script Collections | - | `api/collections.ts`, `db/models/Collection.ts` |
+| Feedback 2.0 | `api/feedbackV2.ts` | - |
+| Monetization | `middleware/` | `services/stripe.ts`, `db/models/Subscription.ts` |
+
+### 6.2 New API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v2/collections` | GET | List user's saved scripts |
+| `/api/v2/collections` | POST | Save script to collection |
+| `/api/v2/collections/:id` | DELETE | Remove script from collection |
+| `/api/v2/tts/generate` | POST | Generate TTS audio for script |
+| `/api/v2/subscription/create` | POST | Create Stripe checkout session |
+| `/api/v2/subscription/cancel` | POST | Cancel subscription |
+| `/api/v2/subscription/webhook` | POST | Handle Stripe webhooks |
+
+### 6.3 Database Schema Additions
+
+```typescript
+// New Collection Model
+interface Collection {
+  subscriberId: string;
+  scripts: {
+    scriptId: ObjectId;
+    addedAt: Date;
+    tags: string[];
+    notes: string;
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// New Subscription Model
+interface Subscription {
+  subscriberId: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  plan: 'free' | 'pro';
+  status: 'active' | 'cancelled' | 'past_due';
+  currentPeriodEnd: Date;
+  createdAt: Date;
+}
+
+// Updated Script Model (add field)
+interface Script {
+  // ... existing fields
+  ttsAudioUrl?: string;  // NEW: Cached TTS audio
+}
+```
+
+### 6.4 External Service Integrations
+
+| Service | Purpose | Estimated Cost |
+|---------|---------|----------------|
+| **Google Cloud TTS** | Audio preview | ~$4 per 1M chars |
+| **ElevenLabs** (alt) | Higher quality TTS | ~$22/month |
+| **Stripe** | Payments | 2.9% + $0.30 per txn |
+
+---
+
+## 7. Implementation Roadmap
+
+### Phase 1: Quick Wins (Week 1-2)
+**Goal**: Ship low-effort, high-impact improvements
+
+| Task | Priority | Effort | Owner |
+|------|----------|--------|-------|
+| Pro Insights Toggle | P1 | 4h | Frontend |
+| Enhanced Variation Modes (5 modes) | P1 | 8h | Backend |
+| Fix: Visual cues detection | P1 | 4h | Backend |
+| UI: Cleaner copy page (done) | P1 | ✅ | - |
+| Fix: Language matching (done) | P1 | ✅ | - |
+
+**Deliverables**:
+- [ ] Pro insights toggle live
+- [ ] 5 variation modes working
+- [ ] Visual cues consistently populated
+
+---
+
+### Phase 2: Feedback & Collections (Week 3-4)
+**Goal**: Build learning loop and user retention
+
+| Task | Priority | Effort | Owner |
+|------|----------|--------|-------|
+| Feedback Loop 2.0 implementation | P1 | 16h | Backend |
+| Feedback UI in ManyChat | P1 | 8h | ManyChat |
+| Script Collections API | P2 | 12h | Backend |
+| Collections UI (web view) | P2 | 8h | Frontend |
+| Feedback stats dashboard | P3 | 8h | Backend |
+
+**Deliverables**:
+- [ ] Feedback collected on every script
+- [ ] Users can save favorite scripts
+- [ ] Admin can view aggregate feedback stats
+
+---
+
+### Phase 3: Audio Preview (Week 5-6)
+**Goal**: Premium feature differentiator
+
+| Task | Priority | Effort | Owner |
+|------|----------|--------|-------|
+| TTS service integration | P1 | 12h | Backend |
+| Audio caching in S3 | P1 | 4h | Backend |
+| Play button UI on copy page | P1 | 8h | Frontend |
+| Voice selection (optional) | P3 | 4h | Backend |
+| Mobile Safari compatibility | P1 | 4h | Frontend |
+
+**Deliverables**:
+- [ ] Users can hear scripts read aloud
+- [ ] Audio cached for repeat plays
+- [ ] Works on mobile devices
+
+---
+
+### Phase 4: Monetization (Week 7-8)
+**Goal**: Generate revenue, sustainability
+
+| Task | Priority | Effort | Owner |
+|------|----------|--------|-------|
+| Stripe integration | P1 | 16h | Backend |
+| Subscription model & middleware | P1 | 8h | Backend |
+| Pro feature gating | P1 | 8h | Backend |
+| Checkout flow in ManyChat | P1 | 8h | ManyChat |
+| Upgrade prompts (contextual) | P2 | 4h | ManyChat |
+| Cancel/refund handling | P1 | 4h | Backend |
+
+**Deliverables**:
+- [ ] Users can subscribe to Pro
+- [ ] Pro features gated correctly
+- [ ] Billing works end-to-end
+
+---
+
+### Phase 5: Analytics & Optimization (Week 9-10)
+**Goal**: Data-driven improvements
+
+| Task | Priority | Effort | Owner |
+|------|----------|--------|-------|
+| User analytics dashboard | P3 | 16h | Full-stack |
+| A/B testing framework | P3 | 12h | Backend |
+| ML training data export | P2 | 8h | Backend |
+| Performance optimization | P2 | 8h | Backend |
+| Cost optimization (caching) | P2 | 8h | Backend |
+
+**Deliverables**:
+- [ ] Admin dashboard with key metrics
+- [ ] Training data exportable for ML
+- [ ] System performance improved
+
+---
+
+## 8. Success Metrics
+
+### 8.1 Key Performance Indicators (KPIs)
+
+| Metric | Current | Target (90 days) | How to Measure |
+|--------|---------|------------------|----------------|
+| **Daily Active Users** | ~50 | 500+ | ManyChat analytics |
+| **Scripts Generated/Day** | ~100 | 1,000+ | MongoDB count |
+| **Variation Requests** | 20% | 40% | Queue metrics |
+| **User Retention (7-day)** | Unknown | 50%+ | Cohort analysis |
+| **Feedback Response Rate** | 5% | 30%+ | Feedback collection |
+| **Pro Conversion Rate** | 0% | 5% | Stripe signups |
+| **Avg. Scripts per User** | 2 | 5+ | User aggregation |
+
+### 8.2 Feature-Specific Metrics
+
+| Feature | Success Metric | Target |
+|---------|----------------|--------|
+| Pro Insights | Toggle engagement rate | 20% of views |
+| Audio Preview | Play button taps | 40% of views |
+| Collections | Scripts saved per user | 3+ average |
+| Feedback Loop | Feedback completion rate | 30%+ |
+| Variation Modes | Mode-specific usage | 15% use modes |
+
+---
+
+## 9. Risk Assessment
+
+### 9.1 Technical Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| TTS service downtime | Low | Medium | Graceful fallback, show text only |
+| Stripe webhook failures | Low | High | Retry logic, manual reconciliation |
+| AI model degradation | Medium | High | Monitor quality scores, rollback prompt |
+| Database scaling issues | Low | High | Add indexes, consider sharding |
+
+### 9.2 Business Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Low Pro conversion | Medium | High | A/B test pricing, add value |
+| User churn after trial | Medium | Medium | Improve onboarding, value delivery |
+| Competitor copying features | Low | Low | Focus on execution, community |
+| API cost overruns | Medium | Medium | Aggressive caching, usage alerts |
+
+### 9.3 User Experience Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Feature overload | Medium | Medium | Keep defaults simple |
+| Audio quality complaints | Low | Medium | Use high-quality TTS provider |
+| Payment confusion | Low | High | Clear pricing, easy cancel |
+
+---
+
+## 10. Appendix
+
+### 10.1 Competitive Analysis
+
+| Competitor | Strengths | Weaknesses | ScriptFlow Advantage |
+|------------|-----------|------------|---------------------|
+| ChatGPT | Generic, powerful | No video analysis | Reel-specific DNA extraction |
+| Jasper AI | Marketing focus | Expensive, no video | ManyChat integration, cheaper |
+| Copy.ai | Easy to use | Template-based | Creative "stealing" approach |
+
+### 10.2 User Personas
+
+**Persona 1: Aspiring Creator (25-35)**
+- Posts 3-5 reels/week
+- Struggles with hook ideas
+- Wants proven formulas
+- Price sensitive
+
+**Persona 2: Marketing Agency (Team)**
+- Creates content for clients
+- Needs volume and consistency
+- Willing to pay for efficiency
+- Values organization (collections)
+
+**Persona 3: Personal Brand Builder**
+- Focused on one niche
+- Wants to sound authentic
+- Uses for inspiration, not copy-paste
+- Values learning (pro insights)
+
+### 10.3 Glossary
+
+| Term | Definition |
+|------|------------|
+| **Hook Type** | The psychological pattern used in the first 3 seconds (e.g., Question, Controversy, Pattern Interrupt) |
+| **Reel DNA** | Extracted characteristics of a reference video (transcript, tone, visual cues) |
+| **Variation** | A new version of a script with different hook/angle but same idea |
+| **TTS** | Text-to-Speech - converting script text to audio |
+
+---
+
+## Document History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | Jan 4, 2026 | ScriptFlow Team | Initial draft |
+
+---
+
+*This document is a living artifact and will be updated as requirements evolve.*

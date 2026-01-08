@@ -1,0 +1,1291 @@
+# Product Requirements Document: ScriptFlow System Robustness on t3.micro
+**Version:** 1.0  
+**Date:** January 8, 2026  
+**Status:** Planning Phase  
+**Owner:** Engineering Team  
+**Companion Document:** [PRD_Performance_Optimization_2026.md](PRD_Performance_Optimization_2026.md)
+
+---
+
+## Executive Summary
+
+This PRD outlines a comprehensive system robustness initiative for ScriptFlow to ensure **zero-crash operation** on AWS t3.micro instances while supporting **100 concurrent users**. This document **complements** the Performance Optimization PRD and focuses on reliability, failover mechanisms, and graceful degradation.
+
+### Key Objectives
+1. **Zero system crashes** under 100 concurrent users
+2. **99.9% uptime** with automatic recovery
+3. **Graceful degradation** when services fail
+4. **Memory-safe operation** within t3.micro's 1GB limit
+5. **No additional infrastructure cost** (utilize free tiers)
+
+### Relationship to Performance Optimization PRD
+- **Performance PRD**: Focuses on *speed* and *cost reduction* (Redis commands, download speed)
+- **This PRD**: Focuses on *reliability* and *crash prevention*
+- **Shared Goals**: Both reduce Redis usage, both optimize for t3.micro constraints
+- **No Conflicts**: This PRD builds upon Performance PRD optimizations
+
+---
+
+## Table of Contents
+1. [Background & Risk Analysis](#1-background--risk-analysis)
+2. [t3.micro Constraints & Capacity Planning](#2-t3micro-constraints--capacity-planning)
+3. [Defense-in-Depth Architecture](#3-defense-in-depth-architecture)
+4. [Health Gate System](#4-health-gate-system)
+5. [Circuit Breaker Enhancements](#5-circuit-breaker-enhancements)
+6. [Memory Governor](#6-memory-governor)
+7. [Graceful Degradation Strategy](#7-graceful-degradation-strategy)
+8. [Queue Backpressure Management](#8-queue-backpressure-management)
+9. [External Service Migration](#9-external-service-migration)
+10. [Monitoring & Auto-Recovery](#10-monitoring--auto-recovery)
+11. [Implementation Roadmap](#11-implementation-roadmap)
+12. [Success Metrics](#12-success-metrics)
+13. [Risk Assessment](#13-risk-assessment)
+
+---
+
+## 1. Background & Risk Analysis
+
+### 1.1 Current Architecture Risk Profile
+
+**Single Point of Failure Analysis:**
+```
+┌────────────────────────────────────────────────────────┐
+│              t3.micro (1 GB RAM, 2 vCPU)              │
+├────────────────────────────────────────────────────────┤
+│  Component          │ Memory (MB) │ Crash Risk       │
+├─────────────────────┼─────────────┼──────────────────┤
+│  Node.js Express    │ 150-250     │ Low (stable)     │
+│  BullMQ Worker      │ 100-400     │ HIGH (spikes)    │
+│  Redis (local)      │ 50-150      │ Medium           │
+│  MongoDB Driver     │ 30-50       │ Low              │
+│  OS Overhead        │ 150         │ N/A              │
+├─────────────────────┼─────────────┼──────────────────┤
+│  TOTAL (Idle)       │ 480-600     │                  │
+│  TOTAL (Peak)       │ 750-1000    │ ⚠️ CRITICAL     │
+└────────────────────────────────────────────────────────┘
+```
+
+### 1.2 Current Failure Scenarios
+
+| Scenario | Current Behavior | Impact | Frequency |
+|----------|-----------------|--------|-----------|
+| **Memory exhaustion** | Process killed by OS (OOM) | Full downtime | High (100 users) |
+| **Redis connection lost** | Queue stops, rate limiting fails | Degraded service | Medium |
+| **MongoDB timeout** | Jobs fail, scripts not saved | Data loss | Low |
+| **Claude/Gemini API error** | Job retries, user waits | Poor UX | Medium |
+| **Queue backlog > 200** | Memory grows, eventual crash | Full downtime | High (burst) |
+| **Worker stuck on job** | Other jobs blocked | Degraded throughput | Low |
+
+### 1.3 Current Code Gaps
+
+Based on codebase analysis:
+
+**Missing in `src/queue/worker.ts`:**
+- No memory monitoring before job start
+- No dynamic concurrency adjustment
+- No queue depth check
+
+**Missing in `src/api/controllers/health.controller.ts`:**
+- No memory percentage threshold alerts
+- No queue overload flag
+- No proactive health degradation
+
+**Missing in `src/queue/scriptQueue.ts`:**
+- No backpressure mechanism
+- No queue depth monitoring interval
+- QueueEvents adds unnecessary Redis overhead
+
+**Existing strengths (preserve these):**
+- ✅ Circuit breaker pattern in `src/utils/circuitBreaker.ts`
+- ✅ Job timeout via AbortController in worker
+- ✅ Graceful shutdown handlers in `src/index.ts`
+- ✅ Rate limiting per user in `src/middleware/userRateLimiter.ts`
+
+---
+
+## 2. t3.micro Constraints & Capacity Planning
+
+### 2.1 Hardware Specifications
+
+| Resource | t3.micro Spec | Available for App |
+|----------|---------------|-------------------|
+| **RAM** | 1,024 MB | ~850 MB (after OS) |
+| **vCPU** | 2 (burstable) | 20-40% sustained |
+| **CPU Credits** | 6/hour (144/day) | ~30 min burst/day |
+| **Network** | Up to 5 Gbps | Shared |
+| **Storage** | EBS (pay per GB) | 8 GB minimum |
+
+### 2.2 Memory Budget Allocation
+
+**Target: Keep total memory < 800 MB (78% utilization)**
+
+```
+┌────────────────────────────────────────────────────────┐
+│              MEMORY BUDGET (800 MB MAX)                │
+├────────────────────────────────────────────────────────┤
+│  Component          │ Budget │ Current │ Optimized   │
+├─────────────────────┼────────┼─────────┼─────────────┤
+│  Node.js Base       │ 200 MB │ 250 MB  │ 180 MB ✅   │
+│  Worker (3 jobs)    │ 180 MB │ 400 MB  │ 180 MB ✅   │
+│  Redis (external)   │ 0 MB   │ 100 MB  │ 0 MB ✅     │
+│  MongoDB Driver     │ 50 MB  │ 50 MB   │ 50 MB ✅    │
+│  Session Cache      │ 20 MB  │ 30 MB   │ 15 MB ✅    │
+│  Request Buffers    │ 50 MB  │ 70 MB   │ 50 MB ✅    │
+│  OS Reserved        │ 150 MB │ 150 MB  │ 150 MB      │
+│  Safety Buffer      │ 150 MB │ 0 MB    │ 175 MB ✅   │
+├─────────────────────┼────────┼─────────┼─────────────┤
+│  TOTAL              │ 800 MB │ 1050 MB │ 800 MB ✅   │
+│  Peak Headroom      │ 200 MB │ -50 MB  │ 200 MB ✅   │
+└────────────────────────────────────────────────────────┘
+```
+
+### 2.3 Concurrency Capacity Model
+
+**100 Users Traffic Pattern (Realistic):**
+```
+Peak Hour (1 hour window):
+├── Active users online: 30-40
+├── Scripts generated: 60-80
+├── Requests per minute: 1-2
+├── Concurrent jobs: 3-5 max
+└── Queue depth: 10-20 avg
+
+Burst Scenario (5-minute window):
+├── Simultaneous requests: 20
+├── Queue depth spike: 20-30
+├── Memory spike: +200 MB
+├── Recovery time: 3-5 minutes
+└── User experience: 2-3 min wait
+```
+
+**Worker Concurrency Settings:**
+```typescript
+// CURRENT (risky)
+concurrency: 5  // Can spike to 500 MB worker memory
+
+// PROPOSED (safe)
+concurrency: 3  // Caps worker memory at 180 MB
+// Dynamic: Reduce to 2 if memory > 80%
+```
+
+---
+
+## 3. Defense-in-Depth Architecture
+
+### 3.1 Layered Defense Model
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    LAYERED DEFENSE SYSTEM                   │
+│                                                             │
+│  Request Flow:                                              │
+│  User → [L1] → [L2] → [L3] → [L4] → [L5] → Process        │
+│                                                             │
+├────────────────────────────────────────────────────────────┤
+│  Layer 1: RATE LIMITER (Existing - PRESERVE)               │
+│  ─────────────────────────────────────────────             │
+│  File: src/middleware/userRateLimiter.ts                   │
+│  • 10 requests/hour per subscriber_id                      │
+│  • Friendly DM on limit exceeded                           │
+│  • Redis-backed counters                                   │
+│  Status: ✅ WORKING - No changes needed                    │
+│                                                             │
+├────────────────────────────────────────────────────────────┤
+│  Layer 2: HEALTH GATE (NEW)                                │
+│  ─────────────────────────────────────────────             │
+│  File: src/middleware/healthGate.ts (CREATE)               │
+│  • Memory check: Reject if heap > 85%                      │
+│  • Queue check: Reject if depth > 150                      │
+│  • Service check: Reject if Redis/Mongo down               │
+│  Status: ❌ NOT IMPLEMENTED                                │
+│                                                             │
+├────────────────────────────────────────────────────────────┤
+│  Layer 3: CIRCUIT BREAKERS (Existing - ENHANCE)            │
+│  ─────────────────────────────────────────────             │
+│  File: src/utils/circuitBreaker.ts                         │
+│  Current: Protects Gemini, ManyChat, ImgBB, S3             │
+│  Add: MongoDB circuit, Redis circuit                       │
+│  Add: In-memory state cache (per Performance PRD)          │
+│  Status: ⚠️ NEEDS ENHANCEMENT                              │
+│                                                             │
+├────────────────────────────────────────────────────────────┤
+│  Layer 4: GRACEFUL DEGRADATION (NEW)                       │
+│  ─────────────────────────────────────────────             │
+│  File: src/services/degradation.service.ts (CREATE)        │
+│  • Redis down → In-memory fallback                         │
+│  • MongoDB slow → Return from cache                        │
+│  • Gemini error → Return template script                   │
+│  Status: ❌ NOT IMPLEMENTED                                │
+│                                                             │
+├────────────────────────────────────────────────────────────┤
+│  Layer 5: MEMORY GOVERNOR (NEW)                            │
+│  ─────────────────────────────────────────────             │
+│  File: src/utils/memoryGovernor.ts (CREATE)                │
+│  • Monitor heap every 10 seconds                           │
+│  • 80%: Pause queue, clear non-essential cache             │
+│  • 90%: Force GC, reject all new requests                  │
+│  • 95%: Emergency shutdown (PM2 auto-restart)              │
+│  Status: ❌ NOT IMPLEMENTED                                │
+│                                                             │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Request Flow with All Layers
+
+```
+User Request
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  Express Middleware Stack           │
+│  ├─ helmet (security headers)       │
+│  ├─ cors (origin validation)        │
+│  ├─ rateLimiter (IP-based)          │  ← Existing
+│  ├─ userRateLimiter (subscriber)    │  ← Existing
+│  ├─ healthGate (system health)      │  ← NEW
+│  └─ betaAccessControl               │  ← Existing
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  Controller (generateScriptV2)      │
+│  ├─ Validate request                │
+│  ├─ Check queue backpressure        │  ← NEW
+│  ├─ Create job in Redis             │
+│  └─ Return jobId immediately        │
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  BullMQ Worker                      │
+│  ├─ Memory check before start       │  ← NEW
+│  ├─ Circuit breaker for each call   │  ← Enhanced
+│  ├─ Timeout protection (5 min)      │  ← Existing
+│  └─ Cleanup on finish/fail          │  ← Existing
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  External Services (with fallback)  │
+│  ├─ Gemini → Template script        │  ← NEW fallback
+│  ├─ Instagram → Cobalt/yt-dlp       │  ← Existing cascade
+│  ├─ ManyChat → Queue for retry      │  ← NEW fallback
+│  └─ ImgBB → Local temp URL          │  ← NEW fallback
+└─────────────────────────────────────┘
+```
+
+---
+
+## 4. Health Gate System
+
+### 4.1 Specification
+
+**Purpose:** Pre-flight check to reject requests early when system is stressed
+
+**File:** `src/middleware/healthGate.ts` (NEW)
+
+**Logic:**
+```typescript
+interface HealthGateConfig {
+  memoryThreshold: number;      // Default: 0.85 (85%)
+  queueDepthThreshold: number;  // Default: 150 jobs
+  checkInterval: number;        // Default: 5000ms
+  gracePeriod: number;          // Default: 30000ms (30s after startup)
+}
+
+interface SystemHealth {
+  canAcceptRequests: boolean;
+  memoryPercent: number;
+  queueDepth: number;
+  redisHealthy: boolean;
+  mongoHealthy: boolean;
+  degradationLevel: 'normal' | 'warning' | 'critical';
+}
+```
+
+### 4.2 Health Gate Middleware
+
+```typescript
+// Pseudocode - actual implementation in src/middleware/healthGate.ts
+
+async function healthGateMiddleware(req, res, next) {
+  const health = await getSystemHealth();
+  
+  // Allow health check endpoints to pass through
+  if (req.path.startsWith('/health')) {
+    return next();
+  }
+  
+  // Check if system can accept new requests
+  if (!health.canAcceptRequests) {
+    logger.warn('Health gate rejecting request', {
+      memory: health.memoryPercent,
+      queue: health.queueDepth,
+      level: health.degradationLevel
+    });
+    
+    return res.status(503).json({
+      status: 'error',
+      code: 'SYSTEM_OVERLOADED',
+      message: '🔄 System is busy! Please try again in 1 minute.',
+      retryAfter: 60,
+      degradationLevel: health.degradationLevel
+    });
+  }
+  
+  // Add health info to request for logging
+  req.systemHealth = health;
+  next();
+}
+```
+
+### 4.3 Health Status Calculation
+
+| Condition | degradationLevel | canAcceptRequests | Action |
+|-----------|-----------------|-------------------|--------|
+| memory < 70% AND queue < 100 | `normal` | ✅ true | Process normally |
+| memory 70-85% OR queue 100-150 | `warning` | ✅ true | Log warning, reduce concurrency |
+| memory > 85% OR queue > 150 | `critical` | ❌ false | Reject new requests |
+| Redis disconnected | `critical` | ❌ false | Reject, return cached response |
+| MongoDB disconnected | `warning` | ✅ true | Partial service (no persistence) |
+
+### 4.4 Integration Points
+
+**Modify `src/server.ts`:**
+```typescript
+// After rateLimiter, before betaAccessControl
+app.use(healthGate);  // NEW - Add health gate middleware
+```
+
+**Modify `src/api/controllers/health.controller.ts`:**
+```typescript
+// Expose health status for external monitoring
+// Add memory percentage, queue depth, degradation level
+```
+
+---
+
+## 5. Circuit Breaker Enhancements
+
+### 5.1 Current State Analysis
+
+**File:** `src/utils/circuitBreaker.ts`
+
+**Existing Circuits:**
+| Circuit | Config | Status |
+|---------|--------|--------|
+| `gemini` | 5 failures, 30s timeout | ✅ Working |
+| `manychat` | 5 failures, 30s timeout | ✅ Working |
+| `imgbb` | 3 failures, 60s timeout | ✅ Working |
+| `s3` | 5 failures, 30s timeout | ✅ Working |
+| `instagram-download` | 3 failures, 60s timeout | ✅ Working |
+
+### 5.2 Enhancements Required
+
+**5.2.1 Add In-Memory State Cache** (Per Performance PRD Section 2.2.2)
+
+```typescript
+// CHANGE: Add state cache to reduce Redis reads
+// Reason: Performance PRD requires 80% reduction in circuit breaker Redis calls
+
+private stateCache: {
+  state: CircuitState;
+  timestamp: number;
+} | null = null;
+
+private readonly cacheTTL = 10000; // 10 seconds
+
+async getState(): Promise<CircuitState> {
+  // Return from cache if fresh
+  if (this.stateCache && Date.now() - this.stateCache.timestamp < this.cacheTTL) {
+    return this.stateCache.state;
+  }
+  
+  // Fetch from Redis and cache
+  const state = await this.fetchStateFromRedis();
+  this.stateCache = { state, timestamp: Date.now() };
+  return state;
+}
+```
+
+**5.2.2 Add New Circuits for Critical Services**
+
+```typescript
+// NEW: Add MongoDB circuit breaker
+// Reason: MongoDB timeouts can cascade to worker blocking
+
+export const DEFAULT_CONFIGS: Record<string, CircuitBreakerConfig> = {
+  // ... existing configs ...
+  
+  mongodb: {
+    name: 'mongodb',
+    failureThreshold: 3,      // Open after 3 failures
+    resetTimeout: 15000,      // 15 seconds (fast recovery)
+    successThreshold: 1,      // 1 success to close
+    failureWindow: 30000,     // 30 second window
+  },
+  
+  redis: {
+    name: 'redis',
+    failureThreshold: 5,      // More tolerant (critical service)
+    resetTimeout: 10000,      // 10 seconds
+    successThreshold: 1,
+    failureWindow: 30000,
+  },
+};
+```
+
+**5.2.3 Fallback Handlers**
+
+```typescript
+// NEW: Define fallback responses per circuit
+// Reason: Graceful degradation requires predefined fallbacks
+
+export const CIRCUIT_FALLBACKS: Record<string, () => any> = {
+  gemini: () => ({
+    scriptText: getTemplateScript(),
+    isTemplate: true,
+    message: 'Generated using template (AI temporarily unavailable)'
+  }),
+  
+  manychat: () => ({
+    success: false,
+    queued: true,
+    message: 'Message queued for retry'
+  }),
+  
+  mongodb: () => ({
+    fromCache: true,
+    stale: true,
+    message: 'Data from cache (database temporarily unavailable)'
+  }),
+};
+```
+
+---
+
+## 6. Memory Governor
+
+### 6.1 Specification
+
+**Purpose:** Real-time memory monitoring with automatic protective actions
+
+**File:** `src/utils/memoryGovernor.ts` (NEW)
+
+### 6.2 Memory Thresholds
+
+| Level | Heap Usage | Actions |
+|-------|-----------|---------|
+| **GREEN** | < 70% | Normal operation |
+| **YELLOW** | 70-80% | Log warning, prepare for degradation |
+| **ORANGE** | 80-85% | Reduce worker concurrency to 2, clear non-essential cache |
+| **RED** | 85-90% | Pause queue, reject new requests, force GC |
+| **CRITICAL** | > 90% | Emergency: kill slow jobs, clear all cache |
+| **FATAL** | > 95% | Controlled shutdown (PM2 auto-restart) |
+
+### 6.3 Memory Governor Implementation
+
+```typescript
+// Pseudocode - actual implementation in src/utils/memoryGovernor.ts
+
+interface MemoryGovernorConfig {
+  checkInterval: number;        // Default: 10000ms
+  yellowThreshold: number;      // Default: 0.70
+  orangeThreshold: number;      // Default: 0.80
+  redThreshold: number;         // Default: 0.85
+  criticalThreshold: number;    // Default: 0.90
+  fatalThreshold: number;       // Default: 0.95
+}
+
+class MemoryGovernor {
+  private currentLevel: 'green' | 'yellow' | 'orange' | 'red' | 'critical' | 'fatal' = 'green';
+  private intervalId: NodeJS.Timer | null = null;
+  private worker: Worker | null = null;
+  
+  start(worker: Worker): void {
+    this.worker = worker;
+    this.intervalId = setInterval(() => this.check(), this.config.checkInterval);
+    logger.info('Memory Governor started');
+  }
+  
+  private async check(): Promise<void> {
+    const usage = process.memoryUsage();
+    const heapPercent = usage.heapUsed / usage.heapTotal;
+    const level = this.calculateLevel(heapPercent);
+    
+    if (level !== this.currentLevel) {
+      logger.warn(`Memory level changed: ${this.currentLevel} → ${level}`, {
+        heapUsed: Math.round(usage.heapUsed / 1024 / 1024),
+        heapPercent: Math.round(heapPercent * 100)
+      });
+      
+      await this.handleLevelChange(level, heapPercent);
+      this.currentLevel = level;
+    }
+  }
+  
+  private async handleLevelChange(level: string, heapPercent: number): Promise<void> {
+    switch (level) {
+      case 'yellow':
+        // Just log, prepare for potential issues
+        break;
+        
+      case 'orange':
+        // Reduce worker concurrency
+        if (this.worker && this.worker.opts.concurrency > 2) {
+          this.worker.opts.concurrency = 2;
+          logger.warn('Reduced worker concurrency to 2');
+        }
+        // Clear non-essential caches
+        await this.clearNonEssentialCache();
+        break;
+        
+      case 'red':
+        // Pause queue
+        await this.pauseQueue();
+        // Force garbage collection if available
+        if (global.gc) {
+          global.gc();
+          logger.info('Forced garbage collection');
+        }
+        break;
+        
+      case 'critical':
+        // Kill slow jobs
+        await this.killSlowJobs();
+        // Clear all cache
+        await this.clearAllCache();
+        break;
+        
+      case 'fatal':
+        // Emergency shutdown
+        logger.error('FATAL: Memory critical, initiating shutdown');
+        process.exit(1); // PM2 will restart
+        break;
+    }
+  }
+}
+
+export const memoryGovernor = new MemoryGovernor();
+```
+
+### 6.4 Integration Points
+
+**Modify `src/index.ts`:**
+```typescript
+// After startWorker(), initialize memory governor
+import { memoryGovernor } from './utils/memoryGovernor';
+
+// In bootstrap():
+const workerInstance = startWorker();
+memoryGovernor.start(workerInstance);
+```
+
+**Modify `src/queue/worker.ts`:**
+```typescript
+// Before processing each job, check memory
+async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult> {
+  // NEW: Memory pre-check
+  const memPercent = process.memoryUsage().heapUsed / process.memoryUsage().heapTotal;
+  if (memPercent > 0.85) {
+    logger.warn(`High memory (${Math.round(memPercent * 100)}%), delaying job`);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+  
+  // ... existing processing logic
+}
+```
+
+---
+
+## 7. Graceful Degradation Strategy
+
+### 7.1 Degradation Modes
+
+**File:** `src/services/degradation.service.ts` (NEW)
+
+| Service | Normal Mode | Degraded Mode | Fallback Response |
+|---------|-------------|---------------|-------------------|
+| **Redis** | BullMQ queue, rate limiting | In-memory Map | Accept requests, skip rate limiting |
+| **MongoDB** | Persist scripts, jobs | Read from cache only | Return cached data, skip persistence |
+| **Gemini API** | AI-generated script | Template script | Pre-made hook/body/CTA template |
+| **ManyChat** | Direct message delivery | Queue for retry | Return success, retry in background |
+| **ImgBB** | Upload script image | Skip image generation | Return text-only script |
+
+### 7.2 Template Script Fallback
+
+```typescript
+// src/services/degradation.service.ts
+
+const TEMPLATE_SCRIPTS = {
+  educational: `[HOOK]
+🎬 VISUAL: Close-up face, eye contact with camera
+💬 SAY: "Here's something most people don't know about {topic}..."
+
+[BODY]
+🎬 VISUAL: B-roll or screen recording showing the concept
+💬 SAY: "The key insight is {main_point}. Let me show you exactly how it works."
+
+[CTA]
+🎬 VISUAL: Back to face, confident expression
+💬 SAY: "Follow for more tips like this!"
+
+---
+⚠️ Template script generated (AI temporarily unavailable)
+💡 Customize the {placeholders} with your specific content`,
+
+  entertaining: `[HOOK]
+🎬 VISUAL: Reaction face or dramatic pause
+💬 SAY: "Wait, you guys are actually doing it like that?!"
+
+[BODY]
+🎬 VISUAL: Demonstration or example
+💬 SAY: "Here's what you should be doing instead..."
+
+[CTA]
+🎬 VISUAL: Engaging expression
+💬 SAY: "Drop a comment if you want part 2!"
+
+---
+⚠️ Template script generated (AI temporarily unavailable)
+💡 Customize based on your content style`,
+};
+
+export function getTemplateScript(type: string = 'educational'): string {
+  return TEMPLATE_SCRIPTS[type] || TEMPLATE_SCRIPTS.educational;
+}
+```
+
+### 7.3 In-Memory Fallback for Redis
+
+```typescript
+// src/services/degradation.service.ts
+
+class InMemoryFallback {
+  private rateLimits: Map<string, { count: number; expiry: number }> = new Map();
+  private sessions: Map<string, any> = new Map();
+  private maxSize = 1000; // Prevent memory leak
+  
+  // Rate limiting fallback
+  checkRateLimit(key: string, limit: number, windowMs: number): boolean {
+    const now = Date.now();
+    const entry = this.rateLimits.get(key);
+    
+    if (!entry || entry.expiry < now) {
+      this.rateLimits.set(key, { count: 1, expiry: now + windowMs });
+      this.cleanup();
+      return true;
+    }
+    
+    if (entry.count >= limit) {
+      return false;
+    }
+    
+    entry.count++;
+    return true;
+  }
+  
+  // Session fallback
+  getSession(key: string): any {
+    return this.sessions.get(key);
+  }
+  
+  setSession(key: string, value: any, ttlMs: number): void {
+    if (this.sessions.size >= this.maxSize) {
+      // Evict oldest entries
+      const firstKey = this.sessions.keys().next().value;
+      this.sessions.delete(firstKey);
+    }
+    this.sessions.set(key, { ...value, expiry: Date.now() + ttlMs });
+  }
+  
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.rateLimits) {
+      if (entry.expiry < now) {
+        this.rateLimits.delete(key);
+      }
+    }
+  }
+}
+
+export const inMemoryFallback = new InMemoryFallback();
+```
+
+### 7.4 Degradation Detection
+
+```typescript
+// src/services/degradation.service.ts
+
+interface DegradationState {
+  redis: 'normal' | 'degraded' | 'down';
+  mongodb: 'normal' | 'degraded' | 'down';
+  gemini: 'normal' | 'degraded' | 'down';
+  manychat: 'normal' | 'degraded' | 'down';
+}
+
+class DegradationService {
+  private state: DegradationState = {
+    redis: 'normal',
+    mongodb: 'normal',
+    gemini: 'normal',
+    manychat: 'normal',
+  };
+  
+  setServiceState(service: keyof DegradationState, state: 'normal' | 'degraded' | 'down'): void {
+    if (this.state[service] !== state) {
+      logger.warn(`Service ${service} state changed: ${this.state[service]} → ${state}`);
+      this.state[service] = state;
+    }
+  }
+  
+  getState(): DegradationState {
+    return { ...this.state };
+  }
+  
+  isFullyOperational(): boolean {
+    return Object.values(this.state).every(s => s === 'normal');
+  }
+}
+
+export const degradationService = new DegradationService();
+```
+
+---
+
+## 8. Queue Backpressure Management
+
+### 8.1 Current Problem
+
+**File:** `src/queue/scriptQueue.ts`
+
+Current behavior:
+- No limit on queue size
+- Jobs keep accumulating during bursts
+- Memory grows with queue size
+- No user feedback when queue is full
+
+### 8.2 Backpressure Implementation
+
+```typescript
+// Modify src/queue/scriptQueue.ts
+
+const QUEUE_CONFIG = {
+  maxQueueDepth: 200,           // Maximum jobs in queue
+  warningQueueDepth: 150,       // Log warning at this level
+  backpressureKey: 'queue:backpressure',
+  checkInterval: 10000,         // Check every 10 seconds
+};
+
+let queueMonitorInterval: NodeJS.Timer | null = null;
+
+/**
+ * Start queue depth monitoring
+ * CHANGE: Added for backpressure management
+ * Reason: Prevent memory exhaustion from unbounded queue growth
+ */
+export function startQueueMonitoring(): void {
+  if (queueMonitorInterval) return;
+  
+  queueMonitorInterval = setInterval(async () => {
+    try {
+      const stats = await getQueueStats();
+      const totalPending = (stats?.waiting || 0) + (stats?.delayed || 0);
+      
+      const redis = getRedis();
+      
+      if (totalPending > QUEUE_CONFIG.maxQueueDepth) {
+        await redis.set(QUEUE_CONFIG.backpressureKey, '1', 'EX', 60);
+        logger.warn(`Queue backpressure ENABLED: ${totalPending} pending jobs`);
+      } else if (totalPending < QUEUE_CONFIG.warningQueueDepth) {
+        await redis.del(QUEUE_CONFIG.backpressureKey);
+      }
+      
+      if (totalPending > QUEUE_CONFIG.warningQueueDepth) {
+        logger.info(`Queue depth warning: ${totalPending} pending jobs`);
+      }
+    } catch (err) {
+      logger.error('Queue monitoring error:', err);
+    }
+  }, QUEUE_CONFIG.checkInterval);
+  
+  logger.info('Queue monitoring started');
+}
+
+/**
+ * Check if queue is accepting new jobs
+ */
+export async function canAcceptJob(): Promise<boolean> {
+  try {
+    const redis = getRedis();
+    const backpressure = await redis.get(QUEUE_CONFIG.backpressureKey);
+    return backpressure !== '1';
+  } catch {
+    return true; // Allow on error (fail open for backpressure)
+  }
+}
+```
+
+### 8.3 Controller Integration
+
+**Modify `src/api/controllers/generateScriptV2.controller.ts`:**
+
+```typescript
+// At the start of generateScriptHandlerV2:
+
+import { canAcceptJob } from '../../queue/scriptQueue';
+
+export const generateScriptHandlerV2 = async (req: Request, res: Response) => {
+  // NEW: Check queue backpressure
+  const canAccept = await canAcceptJob();
+  if (!canAccept) {
+    logger.warn(`Queue full, rejecting request for ${req.body.subscriber_id}`);
+    
+    // Optional: Send friendly message to user
+    try {
+      await sendTextMessage(
+        req.body.subscriber_id,
+        '🚦 High demand! Your request is queued. Please wait 2 minutes.'
+      );
+    } catch (e) { /* ignore */ }
+    
+    return res.status(503).json({
+      status: 'error',
+      code: 'QUEUE_FULL',
+      message: 'System experiencing high demand. Please try again in 2 minutes.',
+      retryAfter: 120
+    });
+  }
+  
+  // ... existing logic
+};
+```
+
+### 8.4 Remove QueueEvents (Performance Optimization)
+
+<!-- CHANGE COMMENT:
+Reason: Per Performance PRD Section 2.2.5, QueueEvents adds 12% Redis overhead.
+Worker events provide sufficient logging. This change aligns with both PRDs.
+-->
+
+```typescript
+// CHANGE: Remove QueueEvents initialization
+// Reason: Performance PRD requires removing QueueEvents for 12% Redis reduction
+// Worker events (worker.on('completed'), etc.) provide equivalent functionality
+
+// In initializeQueue():
+// DELETE these lines:
+// if (!queueEvents) {
+//   queueEvents = new QueueEvents(QUEUE_NAME, { connection });
+//   queueEvents.on('completed', ...);
+//   queueEvents.on('failed', ...);
+//   queueEvents.on('stalled', ...);
+// }
+
+// Worker already has these events in startWorker()
+```
+
+---
+
+## 9. External Service Migration
+
+### 9.1 Migrate to Upstash Redis (Critical)
+
+**Rationale:**
+- Free 10,000 MB storage, ~1M requests/month free tier
+- Removes 50-150 MB from t3.micro memory budget
+- Managed service with 99.99% uptime
+- Automatic persistence (no data loss on restart)
+
+**Implementation:**
+```bash
+# 1. Sign up at upstash.com (2 minutes)
+# 2. Create database (select region close to EC2)
+# 3. Copy connection string
+
+# .env
+REDIS_URL=rediss://:your-password@regional-endpoint.upstash.io:6379
+```
+
+**Code Change:** None required - already uses `REDIS_URL` environment variable.
+
+<!-- CHANGE COMMENT:
+Recommendation: STRONGLY RECOMMENDED for t3.micro deployment
+Reason: Frees 100+ MB memory, improves reliability, no code changes needed
+Cost: Free tier sufficient for 100 users (Performance PRD estimates 1,555 commands/10 requests)
+-->
+
+### 9.2 Confirm MongoDB Atlas (Already External)
+
+**Current Status:** ✅ Already using MongoDB Atlas (based on docker-compose.yml comments)
+
+**Verification:**
+```typescript
+// In config.ts:
+MONGODB_URI: str({ desc: 'MongoDB connection string (Atlas or local)' })
+
+// In docker-compose.yml:
+# In production, use MongoDB Atlas
+```
+
+**Free Tier Limits:**
+- 512 MB storage (sufficient for ~100K scripts)
+- Shared CPU (adequate for 100 users)
+- No code changes needed
+
+### 9.3 Memory Savings Summary
+
+| Service | Before (MB) | After (MB) | Savings |
+|---------|-------------|------------|---------|
+| Redis | 100 | 0 | 100 MB |
+| MongoDB | 0 (Atlas) | 0 | 0 MB |
+| **Total Savings** | | | **100 MB** |
+
+**New Memory Budget:**
+```
+Before:  800 MB budget - 100 MB headroom = 700 MB for app
+After:   800 MB budget + 100 MB savings = 300 MB headroom ✅
+```
+
+---
+
+## 10. Monitoring & Auto-Recovery
+
+### 10.1 Enhanced Health Endpoint
+
+**Modify `src/api/controllers/health.controller.ts`:**
+
+```typescript
+export const detailedHealthHandler = async (req: Request, res: Response) => {
+  try {
+    const mongoStatus = isMongoConnected() ? 'connected' : 'disconnected';
+    const redisStatus = isRedisConnected() ? 'connected' : 'disconnected';
+    
+    let queueStats = null;
+    try {
+      queueStats = await getQueueStats();
+    } catch (err) {
+      logger.warn('Could not fetch queue stats:', err);
+    }
+
+    // NEW: Memory health check
+    const memUsage = process.memoryUsage();
+    const memoryPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+    const isMemoryHealthy = memoryPercent < 85;
+    
+    // NEW: Queue health check
+    const queueDepth = (queueStats?.waiting || 0) + (queueStats?.delayed || 0);
+    const isQueueHealthy = queueDepth < 150;
+    
+    // NEW: Degradation state
+    const degradation = degradationService.getState();
+
+    const healthy = mongoStatus === 'connected' 
+      && redisStatus === 'connected'
+      && isMemoryHealthy
+      && isQueueHealthy;
+
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      services: {
+        mongodb: mongoStatus,
+        redis: redisStatus
+      },
+      queue: {
+        ...queueStats,
+        depth: queueDepth,
+        healthy: isQueueHealthy
+      },
+      memory: {
+        used: Math.round(memUsage.heapUsed / 1024 / 1024) + ' MB',
+        total: Math.round(memUsage.heapTotal / 1024 / 1024) + ' MB',
+        percent: Math.round(memoryPercent) + '%',
+        healthy: isMemoryHealthy
+      },
+      degradation,
+      uptime: process.uptime(),
+      
+      // NEW: Alert flags for monitoring
+      alerts: {
+        memoryWarning: memoryPercent > 70,
+        memoryCritical: memoryPercent > 85,
+        queueWarning: queueDepth > 100,
+        queueCritical: queueDepth > 150,
+        servicesDown: !healthy
+      }
+    });
+  } catch (error) {
+    logger.error('Health check failed:', error);
+    res.status(503).json({
+      status: 'error',
+      message: 'Health check failed'
+    });
+  }
+};
+```
+
+### 10.2 PM2 Configuration for Auto-Restart
+
+**File:** `ecosystem.config.js` (CREATE)
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'scriptflow',
+    script: 'dist/index.js',
+    instances: 1,  // Single instance for t3.micro
+    exec_mode: 'fork',
+    
+    // Memory management
+    max_memory_restart: '900M',  // Restart if memory exceeds 900 MB
+    
+    // Crash recovery
+    autorestart: true,
+    max_restarts: 10,
+    restart_delay: 4000,  // 4 second delay between restarts
+    
+    // Health monitoring
+    watch: false,
+    
+    // Environment
+    env: {
+      NODE_ENV: 'production',
+      NODE_OPTIONS: '--max-old-space-size=512'  // Limit Node.js heap
+    },
+    
+    // Logging
+    error_file: '/var/log/scriptflow/error.log',
+    out_file: '/var/log/scriptflow/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    
+    // Graceful shutdown
+    kill_timeout: 30000,  // 30 seconds to finish jobs
+    wait_ready: true,
+    listen_timeout: 10000
+  }]
+};
+```
+
+### 10.3 External Monitoring Setup
+
+**UptimeRobot (Free Tier):**
+- Monitor: `https://your-domain.com/health`
+- Interval: 5 minutes
+- Alert: Email + Webhook
+
+**Recommended Webhook Action:**
+```bash
+# On downtime detected, SSH and restart
+ssh user@ec2-ip 'pm2 restart scriptflow'
+```
+
+---
+
+## 11. Implementation Roadmap
+
+### Phase 1: Critical Fixes (Week 1) - Zero Cost, Maximum Impact
+
+| Task | File | Effort | Priority | Dependencies |
+|------|------|--------|----------|--------------|
+| Create Health Gate middleware | `src/middleware/healthGate.ts` | 2h | P0 | None |
+| Add Memory Governor | `src/utils/memoryGovernor.ts` | 3h | P0 | None |
+| Implement Queue Backpressure | `src/queue/scriptQueue.ts` | 2h | P0 | None |
+| Remove QueueEvents | `src/queue/scriptQueue.ts` | 0.5h | P0 | None |
+| Reduce worker concurrency to 3 | `src/queue/worker.ts` | 0.5h | P0 | None |
+| Migrate to Upstash Redis | `.env` change only | 0.5h | P0 | Upstash account |
+
+**Week 1 Deliverables:**
+- ✅ System rejects requests at 85% memory
+- ✅ Queue depth limited to 200
+- ✅ Memory monitored every 10 seconds
+- ✅ 100 MB freed from Redis migration
+- ✅ 73% Redis command reduction (combined with Performance PRD)
+
+### Phase 2: Graceful Degradation (Week 2)
+
+| Task | File | Effort | Priority | Dependencies |
+|------|------|--------|----------|--------------|
+| Add Circuit Breaker cache | `src/utils/circuitBreaker.ts` | 2h | P1 | Week 1 |
+| Create Degradation Service | `src/services/degradation.service.ts` | 3h | P1 | Week 1 |
+| In-memory fallback for Redis | `src/services/degradation.service.ts` | 2h | P1 | Week 1 |
+| Template script fallback | `src/services/degradation.service.ts` | 1h | P1 | Week 1 |
+| Enhanced health endpoint | `src/api/controllers/health.controller.ts` | 1h | P1 | Week 1 |
+
+**Week 2 Deliverables:**
+- ✅ System continues operating when services fail
+- ✅ Users get template scripts if AI fails
+- ✅ Rate limiting works without Redis
+- ✅ Full observability via health endpoint
+
+### Phase 3: Monitoring & Hardening (Week 3)
+
+| Task | File | Effort | Priority | Dependencies |
+|------|------|--------|----------|--------------|
+| PM2 ecosystem config | `ecosystem.config.js` | 1h | P1 | None |
+| UptimeRobot setup | External | 0.5h | P1 | Domain |
+| Load testing (100 users) | External | 4h | P0 | Week 1-2 |
+| Documentation update | Various | 2h | P2 | Week 1-2 |
+| Runbook creation | `docs/RUNBOOK.md` | 2h | P2 | All |
+
+**Week 3 Deliverables:**
+- ✅ Auto-restart on crash (< 5 seconds downtime)
+- ✅ External monitoring alerts
+- ✅ Validated for 100 concurrent users
+- ✅ Operations runbook complete
+
+---
+
+## 12. Success Metrics
+
+### Primary KPIs
+
+| Metric | Baseline | Target | Measurement |
+|--------|----------|--------|-------------|
+| **System crashes/week** | 2-3 | 0 | CloudWatch/PM2 logs |
+| **Memory-related restarts** | 5/week | 0 | PM2 restart count |
+| **Uptime** | 95% | 99.9% | UptimeRobot |
+| **P99 response time** | 65s | 30s | Application logs |
+| **Queue overflow events** | 5/day | 0 | Health endpoint |
+| **User-facing errors** | 15% | < 1% | ManyChat analytics |
+
+### Memory KPIs
+
+| Metric | Baseline | Target | Measurement |
+|--------|----------|--------|-------------|
+| **Peak memory usage** | 950 MB | < 750 MB | `/health/detailed` |
+| **Average memory** | 700 MB | < 500 MB | CloudWatch |
+| **Memory-related rejects** | N/A | < 5/day | Health gate logs |
+
+### Capacity KPIs
+
+| Metric | Baseline | Target | Measurement |
+|--------|----------|--------|-------------|
+| **Concurrent users supported** | 50-70 | 100+ | Load testing |
+| **Jobs/hour capacity** | 60 | 100+ | Queue metrics |
+| **Queue depth (avg)** | 50 | < 20 | Health endpoint |
+
+---
+
+## 13. Risk Assessment
+
+### Technical Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|------------|--------|------------|
+| **Health gate too aggressive** | Medium | Medium | Tune thresholds based on load testing |
+| **Memory Governor false positives** | Low | Medium | Add grace period after startup |
+| **Template scripts lower quality** | Low | Low | Pre-test templates, iterate on feedback |
+| **In-memory fallback memory leak** | Medium | High | Implement strict size limits, periodic cleanup |
+| **PM2 restart loop** | Low | High | Max restart limit, alert on 3+ restarts |
+
+### Operational Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|------------|--------|------------|
+| **Upstash Redis outage** | Very Low | High | Graceful degradation to in-memory |
+| **Configuration drift** | Low | Medium | Version control all configs |
+| **Alert fatigue** | Medium | Medium | Only alert on critical issues |
+
+### Rollback Plan
+
+**Trigger Conditions:**
+- Error rate > 10% for > 5 minutes
+- Health check failures > 50% of requests
+- Memory crashes resume after deployment
+
+**Rollback Steps:**
+1. **Immediate:** `pm2 reload ecosystem.config.js --update-env` (with old config)
+2. **Quick:** Revert git commit, rebuild Docker image (< 10 minutes)
+3. **Full:** Restore from last known good tag (< 15 minutes)
+
+---
+
+## 14. Appendix
+
+### A. Environment Variables Reference
+
+```bash
+# Server
+NODE_ENV=production
+PORT=3000
+
+# Memory Optimization
+NODE_OPTIONS="--max-old-space-size=512"
+
+# Queue Settings (REDUCED for t3.micro)
+QUEUE_CONCURRENCY=3             # Changed from 5 → 3
+REDIS_STALLED_INTERVAL=60000    # Per Performance PRD
+REDIS_LOCK_DURATION=60000       # Per Performance PRD
+
+# Rate Limiting
+RATE_LIMIT_MAX=100
+USER_RATE_LIMIT=10
+
+# Health Gate Thresholds
+HEALTH_GATE_MEMORY_THRESHOLD=0.85
+HEALTH_GATE_QUEUE_THRESHOLD=150
+
+# Memory Governor Thresholds
+MEMORY_GOVERNOR_YELLOW=0.70
+MEMORY_GOVERNOR_ORANGE=0.80
+MEMORY_GOVERNOR_RED=0.85
+MEMORY_GOVERNOR_CRITICAL=0.90
+MEMORY_GOVERNOR_FATAL=0.95
+
+# External Services (RECOMMENDED)
+REDIS_URL=rediss://:password@endpoint.upstash.io:6379
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/scriptflow
+```
+
+### B. Compatibility with Performance PRD
+
+| Performance PRD Item | This PRD Item | Status |
+|---------------------|---------------|--------|
+| BullMQ polling intervals | Queue backpressure | ✅ Compatible |
+| Remove QueueEvents | Remove QueueEvents | ✅ Same recommendation |
+| Circuit breaker cache | Circuit breaker enhancements | ✅ Included here |
+| Session conditional TTL | (Not covered) | ✅ No conflict |
+| FSM TTL removal | (Not covered) | ✅ No conflict |
+| Upstash Redis | External service migration | ✅ Strongly recommended |
+
+### C. Files to Create/Modify
+
+**New Files:**
+- `src/middleware/healthGate.ts`
+- `src/utils/memoryGovernor.ts`
+- `src/services/degradation.service.ts`
+- `ecosystem.config.js`
+- `docs/RUNBOOK.md`
+
+**Modified Files:**
+- `src/server.ts` (add healthGate middleware)
+- `src/index.ts` (start memoryGovernor)
+- `src/queue/scriptQueue.ts` (backpressure, remove QueueEvents)
+- `src/queue/worker.ts` (reduce concurrency, memory pre-check)
+- `src/utils/circuitBreaker.ts` (add cache, new circuits)
+- `src/api/controllers/health.controller.ts` (enhanced metrics)
+- `.env` (new thresholds, Upstash URL)
+
+---
+
+## Document History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | Jan 8, 2026 | Engineering Team | Initial PRD for system robustness |
+
+---
+
+## Approval Sign-off
+
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Product Manager | ___________ | ___________ | _____ |
+| Engineering Lead | ___________ | ___________ | _____ |
+| DevOps Lead | ___________ | ___________ | _____ |
+| QA Lead | ___________ | ___________ | _____ |
+
+---
+
+**End of Document**

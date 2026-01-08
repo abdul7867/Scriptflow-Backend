@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { VideoAnalysis } from '../../services/videoAnalyzer';
+import { VideoAnalysis } from '../../services/video/videoAnalyzer.service';
 
 /**
  * ReelDNA Document Interface

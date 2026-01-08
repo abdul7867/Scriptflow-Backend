@@ -1,0 +1,644 @@
+{
+	"info": {
+		"_postman_id": "scriptflow-api-v3",
+		"name": "ScriptFlow API Collection v3.0",
+		"description": "Complete API collection for ScriptFlow Backend - AI Reel Script Generation\n\n## Base URLs\n- **Local**: http://localhost:3000\n- **Production**: {{BASE_URL}}\n\n## Authentication\n- User endpoints use `subscriber_id` (ManyChat User ID)\n- Admin endpoints require `x-api-key` header\n\n## Version History\n- v3.0 (2026-01-08): Added V3 webhook, enhanced health checks, queue monitoring\n- v2.0: Added V2 script generation with hints\n- v1.0: Initial release",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"version": "3.0.0"
+	},
+	"variable": [
+		{
+			"key": "BASE_URL",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "ADMIN_API_KEY",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "SUBSCRIBER_ID",
+			"value": "12345678",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"description": "Health check endpoints for monitoring and load balancers",
+			"item": [
+				{
+					"name": "Basic Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/health",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Basic health check for load balancers. Returns 200 if server is running."
+					},
+					"response": []
+				},
+				{
+					"name": "Detailed Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/health/detailed",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"health",
+								"detailed"
+							]
+						},
+						"description": "Detailed health check including:\n- MongoDB connection status\n- Redis connection status\n- Queue statistics (waiting, active, completed, failed)\n- Memory usage and thresholds\n- Circuit breaker states\n- Degradation level\n- Alert flags for monitoring"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "V3 Webhook (FSM-Based)",
+			"description": "V3 Unified webhook handler with FSM-based state management and intent classification",
+			"item": [
+				{
+					"name": "Process Webhook (New Reel + Idea)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Make a script about productivity tips for morning routines\",\n  \"reel_url\": \"https://www.instagram.com/reel/ABC123/\",\n  \"tone_hint\": \"professional\",\n  \"language_hint\": \"en\",\n  \"mode\": \"full\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "V3 Unified webhook endpoint with FSM-based state management.\n\n**Request Fields:**\n- `subscriber_id` (required): ManyChat subscriber ID\n- `user_idea` (optional): User's script idea or message\n- `reel_url` (optional): Instagram reel URL\n- `tone_hint` (optional): professional | funny | provocative | educational | casual\n- `language_hint` (optional): Language code (e.g., 'en', 'hi')\n- `mode` (optional): full | hook_only\n\n**Intent Detection:**\nThe system automatically detects intent from the message:\n- NEW_REEL: When reel_url contains Instagram link\n- SUBMIT_IDEA: When user sends text after submitting a reel\n- VARIATION: \"another\", \"different\", \"again\"\n- COPY: \"copy\", \"text\", \"script link\"\n- HELP: \"help\", \"hi\", \"hello\"\n- EXTRACT_ORIGINAL: \"exact\", \"original\", \"transcript\""
+					},
+					"response": []
+				},
+				{
+					"name": "Process Webhook (Reel Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"https://www.instagram.com/reel/ABC123/\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Submit only a reel URL. System will prompt for idea."
+					},
+					"response": []
+				},
+				{
+					"name": "Process Webhook (Idea for Existing Reel)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Morning routine tips for entrepreneurs\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Submit idea for a previously submitted reel (2-message flow)."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Variation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Generate another version\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Request a variation of the last generated script."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Copy Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Send me the copy link\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Request the copy-friendly URL for the last script."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Help",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"help\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Request help message explaining how to use the bot."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job Status (V3)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/job/:jobId",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"job",
+								":jobId"
+							],
+							"variable": [
+								{
+									"key": "jobId",
+									"value": "req_1234567890_abc123"
+								}
+							]
+						},
+						"description": "Check the status of a queued job."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "V2 Script Generation",
+			"description": "V2 endpoints with hint support (tone, language, mode)",
+			"item": [
+				{
+					"name": "Generate Script V2 (Full)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"https://www.instagram.com/reel/ABC123/\",\n  \"user_idea\": \"Tech tips for developers\",\n  \"tone_hint\": \"educational\",\n  \"language_hint\": \"en\",\n  \"mode\": \"full\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v2/script/generate",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"script",
+								"generate"
+							]
+						},
+						"description": "V2 script generation with full hint support."
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Script V2 (Hook Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"https://www.instagram.com/reel/ABC123/\",\n  \"user_idea\": \"Quick productivity hack\",\n  \"mode\": \"hook_only\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v2/script/generate",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"script",
+								"generate"
+							]
+						},
+						"description": "Generate only the hook section (faster)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "V1 Script Generation (Legacy)",
+			"description": "V1 legacy endpoints for backward compatibility",
+			"item": [
+				{
+					"name": "Generate Script V1",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"https://www.instagram.com/reel/ABC123/\",\n  \"user_idea\": \"Morning routine tips\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v1/script/generate",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"script",
+								"generate"
+							]
+						},
+						"description": "Legacy V1 script generation endpoint."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job Status (V1)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/v1/job/:jobId",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"job",
+								":jobId"
+							],
+							"variable": [
+								{
+									"key": "jobId",
+									"value": "req_1234567890_abc123"
+								}
+							]
+						},
+						"description": "Check job status (V1)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Script Viewing",
+			"description": "Public script viewing page for copy-friendly access",
+			"item": [
+				{
+					"name": "View Script (Short URL)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/s/:publicId",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"s",
+								":publicId"
+							],
+							"variable": [
+								{
+									"key": "publicId",
+									"value": "abc123xyz"
+								}
+							]
+						},
+						"description": "Public script viewing page. Returns HTML with copy-friendly script text.\n\nRate limited: 60 requests per minute per IP."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Feedback",
+			"description": "Feedback submission and statistics endpoints",
+			"item": [
+				{
+					"name": "Submit Feedback V1",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"abc123xyz\",\n  \"rating\": 5,\n  \"feedback_text\": \"Great script!\",\n  \"was_used\": true\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v1/feedback",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"feedback"
+							]
+						},
+						"description": "Submit feedback for a generated script."
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Feedback V2",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"abc123xyz\",\n  \"rating\": 5,\n  \"feedback_text\": \"Perfect for my niche!\",\n  \"section_feedback\": {\n    \"hook\": { \"rating\": 5 },\n    \"body\": { \"rating\": 4, \"comment\": \"Could be shorter\" },\n    \"cta\": { \"rating\": 5 }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v2/feedback",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback"
+							]
+						},
+						"description": "V2 enhanced feedback with section-level ratings."
+					},
+					"response": []
+				},
+				{
+					"name": "Quick Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"abc123xyz\",\n  \"reaction\": \"thumbs_up\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v2/feedback/quick",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback",
+								"quick"
+							]
+						},
+						"description": "Quick one-tap feedback (thumbs_up / thumbs_down)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Feedback Stats V1 (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{ADMIN_API_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/v1/feedback/stats",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"feedback",
+								"stats"
+							]
+						},
+						"description": "Get feedback statistics (requires admin API key)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Feedback Stats V2 (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{ADMIN_API_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/v2/feedback/stats",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback",
+								"stats"
+							]
+						},
+						"description": "Get V2 enhanced feedback statistics (requires admin API key)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"description": "Protected admin endpoints (require x-api-key header)",
+			"item": [
+				{
+					"name": "Export Dataset",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{ADMIN_API_KEY}}"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/v1/dataset/export?limit=100&format=json",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"dataset",
+								"export"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "format",
+									"value": "json"
+								}
+							]
+						},
+						"description": "Export training dataset for ML purposes.\n\n**Query Parameters:**\n- `limit`: Max records to export (default: 100)\n- `format`: json | csv"
+					},
+					"response": []
+				},
+				{
+					"name": "Prometheus Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/metrics",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"metrics"
+							]
+						},
+						"description": "Prometheus-compatible metrics endpoint for monitoring.\n\nMetrics include:\n- Request counts and latencies\n- Job processing times\n- Gemini API latencies\n- Error counts by type\n- Queue statistics"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

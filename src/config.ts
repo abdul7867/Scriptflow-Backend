@@ -1,5 +1,6 @@
 import { cleanEnv, str, port, num } from 'envalid';
 import dotenv from 'dotenv';
+import path from 'path';
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static').path;
 
@@ -58,6 +59,11 @@ export const config = cleanEnv(process.env, {
   // Image Provider Selection
   IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb'], default: 'imgbb' }),
   
-  // Instagram Cookies Path
-  INSTAGRAM_COOKIES_PATH: str({ desc: 'Path to Instagram cookies file', default: '/app/secrets/instagram_cookies.txt' }),
+  // Instagram Cookies Path (supports both Windows and Linux)
+  INSTAGRAM_COOKIES_PATH: str({ 
+    desc: 'Path to Instagram cookies file', 
+    default: process.env.NODE_ENV === 'production' 
+      ? '/app/secrets/instagram_cookies.txt'  // Docker production path
+      : path.join(process.cwd(), 'secrets', 'instagram_cookies.txt')  // Local development path
+  }),
 });

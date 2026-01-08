@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getRedis } from '../queue/redis';
 import { logger } from '../utils/logger';
-import { sendTextMessage } from '../services/manychat';
+import { sendTextMessage } from '../services/external/manychat.service';
 
 /**
  * User-Based Rate Limiter
@@ -49,12 +49,16 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
       const key = `${keyPrefix}${subscriberId}`;
       const redis = getRedis();
 
-      // Get current count
-      const currentCount = await redis.get(key);
-      const count = currentCount ? parseInt(currentCount, 10) : 0;
+      // Atomic increment - prevents race conditions
+      const count = await redis.incr(key);
+
+      // Set expiry only on first increment
+      if (count === 1) {
+        await redis.expire(key, windowSeconds);
+      }
 
       // Check if over limit
-      if (count >= maxRequests) {
+      if (count > maxRequests) {
         const ttl = await redis.ttl(key);
         const resetTime = new Date(Date.now() + ttl * 1000).toISOString();
         const resetMinutes = Math.ceil(ttl / 60);
@@ -85,18 +89,9 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
         });
       }
 
-      // Increment counter
-      if (count === 0) {
-        // First request in window - set with expiry
-        await redis.setex(key, windowSeconds, '1');
-      } else {
-        // Increment existing counter
-        await redis.incr(key);
-      }
-
       // Add rate limit headers to response
       res.setHeader('X-RateLimit-Limit', maxRequests.toString());
-      res.setHeader('X-RateLimit-Remaining', (maxRequests - count - 1).toString());
+      res.setHeader('X-RateLimit-Remaining', (maxRequests - count).toString());
       res.setHeader('X-RateLimit-User', subscriberId);
 
       next();

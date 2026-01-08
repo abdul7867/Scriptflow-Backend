@@ -27,16 +27,16 @@ export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 export interface CircuitBreakerConfig {
   /** Service name for logging/metrics */
   name: string;
-  
+
   /** Number of failures before opening circuit */
   failureThreshold: number;
-  
+
   /** Milliseconds to wait before testing again */
   resetTimeout: number;
-  
+
   /** Number of successful calls in HALF_OPEN to close circuit */
   successThreshold: number;
-  
+
   /** Window in ms to count failures */
   failureWindow: number;
 }
@@ -91,6 +91,24 @@ export const DEFAULT_CONFIGS: Record<string, CircuitBreakerConfig> = {
     successThreshold: 1,      // 1 success to close circuit
     failureWindow: 120000,    // 2 minute window for counting failures
   },
+  // NEW: MongoDB circuit breaker
+  // @see PRD_System_Robustness_t3micro.txt Section 5.2.2
+  mongodb: {
+    name: 'mongodb',
+    failureThreshold: 3,      // Open after 3 failures
+    resetTimeout: 15000,      // 15 seconds (fast recovery for critical service)
+    successThreshold: 1,      // 1 success to close
+    failureWindow: 30000,     // 30 second window
+  },
+  // NEW: Redis circuit breaker  
+  // @see PRD_System_Robustness_t3micro.txt Section 5.2.2
+  redis: {
+    name: 'redis',
+    failureThreshold: 5,      // More tolerant (critical service)
+    resetTimeout: 10000,      // 10 seconds
+    successThreshold: 1,
+    failureWindow: 30000,
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -106,7 +124,7 @@ export class CircuitBreaker {
   private lastStateChange: number = Date.now();
   private totalRequests: number = 0;
   private totalFailures: number = 0;
-  
+
   constructor(config: CircuitBreakerConfig) {
     this.config = config;
     logger.info(`CircuitBreaker initialized for ${config.name}`, {
@@ -114,22 +132,22 @@ export class CircuitBreaker {
       resetTimeout: config.resetTimeout,
     });
   }
-  
+
   /**
    * Execute a function with circuit breaker protection
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     this.totalRequests++;
-    
+
     // Check if circuit should transition
     this.checkStateTransition();
-    
+
     // Fail fast if circuit is open
     if (this.state === 'OPEN') {
       logger.warn(`Circuit OPEN for ${this.config.name}, failing fast`);
       throw new CircuitOpenError(this.config.name, this.getTimeUntilReset());
     }
-    
+
     try {
       const result = await fn();
       this.onSuccess();
@@ -139,7 +157,7 @@ export class CircuitBreaker {
       throw error;
     }
   }
-  
+
   /**
    * Check if we should allow a request (for manual checking)
    */
@@ -147,7 +165,7 @@ export class CircuitBreaker {
     this.checkStateTransition();
     return this.state !== 'OPEN';
   }
-  
+
   /**
    * Get current circuit stats
    */
@@ -162,7 +180,7 @@ export class CircuitBreaker {
       totalFailures: this.totalFailures,
     };
   }
-  
+
   /**
    * Get current state
    */
@@ -170,7 +188,7 @@ export class CircuitBreaker {
     this.checkStateTransition();
     return this.state;
   }
-  
+
   /**
    * Force reset the circuit (for admin/testing)
    */
@@ -180,17 +198,17 @@ export class CircuitBreaker {
     this.successes = 0;
     this.lastFailureTime = 0;
     this.lastStateChange = Date.now();
-    
+
     logger.info(`Circuit RESET for ${this.config.name}`);
   }
-  
+
   /**
    * Handle successful call
    */
   private onSuccess(): void {
     if (this.state === 'HALF_OPEN') {
       this.successes++;
-      
+
       if (this.successes >= this.config.successThreshold) {
         this.transitionTo('CLOSED');
         this.failures = 0;
@@ -201,39 +219,39 @@ export class CircuitBreaker {
       this.failures = 0;
     }
   }
-  
+
   /**
    * Handle failed call
    */
   private onFailure(error: any): void {
     this.totalFailures++;
     this.lastFailureTime = Date.now();
-    
+
     if (this.state === 'HALF_OPEN') {
       // Any failure in HALF_OPEN opens the circuit again
       this.transitionTo('OPEN');
       this.successes = 0;
     } else if (this.state === 'CLOSED') {
       this.failures++;
-      
+
       if (this.failures >= this.config.failureThreshold) {
         this.transitionTo('OPEN');
       }
     }
-    
+
     logger.warn(`Circuit ${this.config.name} failure`, {
       state: this.state,
       failures: this.failures,
       error: error.message,
     });
   }
-  
+
   /**
    * Check if state should transition
    */
   private checkStateTransition(): void {
     const now = Date.now();
-    
+
     if (this.state === 'OPEN') {
       // Check if reset timeout has passed
       if (now - this.lastStateChange >= this.config.resetTimeout) {
@@ -247,7 +265,7 @@ export class CircuitBreaker {
       }
     }
   }
-  
+
   /**
    * Transition to new state
    */
@@ -255,9 +273,9 @@ export class CircuitBreaker {
     const oldState = this.state;
     this.state = newState;
     this.lastStateChange = Date.now();
-    
+
     logger.info(`Circuit ${this.config.name} state change: ${oldState} → ${newState}`);
-    
+
     // Emit event for metrics
     circuitEvents.emit('stateChange', {
       name: this.config.name,
@@ -266,7 +284,7 @@ export class CircuitBreaker {
       timestamp: this.lastStateChange,
     });
   }
-  
+
   /**
    * Get time until circuit might reset (for error messages)
    */
@@ -284,7 +302,7 @@ export class CircuitBreaker {
 export class CircuitOpenError extends Error {
   public readonly serviceName: string;
   public readonly retryAfterMs: number;
-  
+
   constructor(serviceName: string, retryAfterMs: number) {
     super(`Circuit breaker OPEN for ${serviceName}. Retry after ${Math.ceil(retryAfterMs / 1000)}s`);
     this.name = 'CircuitOpenError';
@@ -319,10 +337,10 @@ export function getCircuitBreaker(serviceName: string): CircuitBreaker {
       successThreshold: 2,
       failureWindow: 60000,
     };
-    
+
     circuits.set(serviceName, new CircuitBreaker(config));
   }
-  
+
   return circuits.get(serviceName)!;
 }
 
@@ -331,11 +349,11 @@ export function getCircuitBreaker(serviceName: string): CircuitBreaker {
  */
 export function getAllCircuitStats(): Record<string, CircuitStats> {
   const stats: Record<string, CircuitStats> = {};
-  
+
   for (const [name, breaker] of circuits) {
     stats[name] = breaker.getStats();
   }
-  
+
   return stats;
 }
 
@@ -384,7 +402,7 @@ export function protectFunction<T extends any[], R>(
   fn: (...args: T) => Promise<R>
 ): (...args: T) => Promise<R> {
   const breaker = getCircuitBreaker(serviceName);
-  
+
   return async (...args: T): Promise<R> => {
     return breaker.execute(() => fn(...args));
   };
@@ -397,27 +415,38 @@ export function protectFunction<T extends any[], R>(
 /**
  * Distributed circuit breaker for multi-instance deployments
  * Uses Redis to share state across instances
+ * 
+ * Performance Optimization PRD Section 2.2.2:
+ * Added in-memory cache with 10s TTL to reduce Redis reads by 80%
  */
 export class DistributedCircuitBreaker {
   private config: CircuitBreakerConfig;
   private redisKeyPrefix: string;
-  
+
+  // Performance Optimization: In-memory state cache (10s TTL)
+  // Reduces Redis reads by 80% per PRD Section 2.2.2
+  private stateCache: {
+    state: CircuitState;
+    timestamp: number;
+  } | null = null;
+  private readonly stateCacheTTL = 10000; // 10 seconds
+
   constructor(config: CircuitBreakerConfig) {
     this.config = config;
     this.redisKeyPrefix = `circuit:${config.name}`;
   }
-  
+
   /**
    * Execute with distributed circuit breaker
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     const state = await this.getState();
-    
+
     if (state === 'OPEN') {
       const ttl = await this.getTimeUntilReset();
       throw new CircuitOpenError(this.config.name, ttl * 1000);
     }
-    
+
     try {
       const result = await fn();
       await this.recordSuccess();
@@ -427,17 +456,27 @@ export class DistributedCircuitBreaker {
       throw error;
     }
   }
-  
+
   /**
-   * Get current state from Redis
+   * Get current state from Redis (with in-memory cache)
+   * Performance Optimization: Returns cached state if within 10s TTL
    */
   async getState(): Promise<CircuitState> {
+    // Check cache first (Performance Optimization PRD Section 2.2.2)
+    const now = Date.now();
+    if (this.stateCache && now - this.stateCache.timestamp < this.stateCacheTTL) {
+      return this.stateCache.state;
+    }
+
     try {
       const redis = getRedis();
       const state = await redis.get(`${this.redisKeyPrefix}:state`);
-      
-      if (!state) return 'CLOSED';
-      
+
+      if (!state) {
+        this.stateCache = { state: 'CLOSED', timestamp: now };
+        return 'CLOSED';
+      }
+
       // Check if OPEN state should transition to HALF_OPEN
       if (state === 'OPEN') {
         const openTime = await redis.get(`${this.redisKeyPrefix}:openTime`);
@@ -449,14 +488,16 @@ export class DistributedCircuitBreaker {
           }
         }
       }
-      
+
+      // Cache the fetched state
+      this.stateCache = { state: state as CircuitState, timestamp: now };
       return state as CircuitState;
     } catch (error) {
       logger.error('Failed to get circuit state from Redis', { error });
       return 'CLOSED'; // Fail open
     }
   }
-  
+
   /**
    * Set state in Redis
    */
@@ -464,7 +505,10 @@ export class DistributedCircuitBreaker {
     try {
       const redis = getRedis();
       await redis.set(`${this.redisKeyPrefix}:state`, state);
-      
+
+      // Invalidate cache on state change (Performance Optimization)
+      this.stateCache = { state, timestamp: Date.now() };
+
       if (state === 'OPEN') {
         await redis.set(`${this.redisKeyPrefix}:openTime`, Date.now().toString());
       }
@@ -472,7 +516,7 @@ export class DistributedCircuitBreaker {
       logger.error('Failed to set circuit state in Redis', { error });
     }
   }
-  
+
   /**
    * Record successful call
    */
@@ -480,10 +524,10 @@ export class DistributedCircuitBreaker {
     try {
       const redis = getRedis();
       const state = await this.getState();
-      
+
       if (state === 'HALF_OPEN') {
         const successes = await redis.incr(`${this.redisKeyPrefix}:halfOpenSuccesses`);
-        
+
         if (successes >= this.config.successThreshold) {
           await this.setState('CLOSED');
           await redis.del(`${this.redisKeyPrefix}:failures`);
@@ -496,7 +540,7 @@ export class DistributedCircuitBreaker {
       logger.error('Failed to record success in Redis', { error });
     }
   }
-  
+
   /**
    * Record failed call
    */
@@ -504,14 +548,14 @@ export class DistributedCircuitBreaker {
     try {
       const redis = getRedis();
       const state = await this.getState();
-      
+
       if (state === 'HALF_OPEN') {
         await this.setState('OPEN');
         await redis.del(`${this.redisKeyPrefix}:halfOpenSuccesses`);
       } else if (state === 'CLOSED') {
         const failures = await redis.incr(`${this.redisKeyPrefix}:failures`);
         await redis.expire(`${this.redisKeyPrefix}:failures`, Math.ceil(this.config.failureWindow / 1000));
-        
+
         if (failures >= this.config.failureThreshold) {
           await this.setState('OPEN');
         }
@@ -520,7 +564,7 @@ export class DistributedCircuitBreaker {
       logger.error('Failed to record failure in Redis', { error });
     }
   }
-  
+
   /**
    * Get TTL until reset (in seconds)
    */
@@ -528,9 +572,9 @@ export class DistributedCircuitBreaker {
     try {
       const redis = getRedis();
       const openTime = await redis.get(`${this.redisKeyPrefix}:openTime`);
-      
+
       if (!openTime) return 0;
-      
+
       const elapsed = Date.now() - parseInt(openTime, 10);
       return Math.max(0, Math.ceil((this.config.resetTimeout - elapsed) / 1000));
     } catch (error) {

@@ -5,29 +5,33 @@ import { ScriptJobData, ScriptJobResult, CopyJobData, CopyJobResult, QUEUE_NAME 
 import { logger } from '../utils/logger';
 
 // Services
-import { downloadReel } from '../services/reelDownloader';
-import { extractAudio } from '../services/audioExtractor';
-import { extractFrames, cleanupFrames } from '../services/frameExtractor';
-import { analyzeVideo, VideoAnalysis } from '../services/videoAnalyzer';
-import { generateScript, generateScriptFromVideo } from '../services/scriptGenerator';
-import { cleanupFiles } from '../services/cleanup';
-import { sendToManyChat, sendTextMessage } from '../services/manychat';
+import { downloadReel } from '../services/video/reelDownloader.service';
+import { extractAudio } from '../services/video/audioExtractor.service';
+import { extractFrames, cleanupFrames } from '../services/video/frameExtractor.service';
+import { analyzeVideo, VideoAnalysis } from '../services/video/videoAnalyzer.service';
+import { generateScript, generateScriptFromVideo } from '../services/ai/scriptGenerator.service';
+import { cleanupFiles } from '../services/cleanup.service';
+import { sendToManyChat, sendTextMessage } from '../services/external/manychat.service';
 import { generateScriptImage } from '../utils/imageGenerator';
-import { generateUniquePublicId, buildScriptUrl } from '../api/viewScript';
+import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
-import { uploadVideoToS3 } from '../services/s3Service';
+import { uploadVideoToS3 } from '../services/external/s3.service';
+
+// FSM for state updates
+import { chatbotFSM, ChatbotEvent } from '../services/chatbot/chatbotStateMachine.service';
 
 // Production hardening
 import { withCircuitBreaker, CircuitOpenError } from '../utils/circuitBreaker';
-import { recordJobDuration, recordError, recordGeminiDuration, recordVideoAnalysisDuration } from '../api/metrics';
+import { memoryGovernor } from '../utils/memoryGovernor';
+import { recordJobDuration, recordError, recordGeminiDuration, recordVideoAnalysisDuration } from '../api/routes/metrics.routes';
 
 // Database
 import { Script, Job, ReelDNA } from '../db/models';
-import { 
-  DatasetEntry, 
-  parseScriptSections, 
-  extractVisualLines, 
-  extractDialogueLines, 
+import {
+  DatasetEntry,
+  parseScriptSections,
+  extractVisualLines,
+  extractDialogueLines,
   estimateSpokenDuration,
   countWords
 } from '../db/models/Dataset';
@@ -38,6 +42,10 @@ const ANALYSIS_MODE: AnalysisMode = (process.env.ANALYSIS_MODE as AnalysisMode) 
 
 // Job timeout configuration (5 minutes default)
 const JOB_TIMEOUT_MS = parseInt(process.env.JOB_TIMEOUT_MS || '300000', 10);
+
+// Memory threshold for job processing (85%)
+const MEMORY_THRESHOLD = 0.85;
+const MEMORY_DELAY_MS = 5000;
 
 let worker: Worker<any, any> | null = null;
 
@@ -70,7 +78,7 @@ function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnal
     // No speech detected - create a visual-only script
     const visualCues = analysis?.visualCues || [];
     const sceneDescriptions = analysis?.sceneDescriptions || [];
-    
+
     return `[HOOK]
 🎬 VISUAL: ${sceneDescriptions[0] || visualCues[0] || 'Opening shot as shown in video'}
 💬 SAY: (No speech - this is a visual-only reel)
@@ -88,20 +96,20 @@ function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnal
 🎯 Hook Type: ${analysis?.hookType || 'Visual'}
 🎭 Tone: ${analysis?.tone || 'Unknown'}`;
   }
-  
+
   // Split transcript into sentences for better formatting
   const sentences = transcript
     .replace(/([.!?])\s+/g, '$1|')
     .split('|')
     .filter(s => s.trim());
-  
+
   const totalSentences = sentences.length;
-  
+
   // Distribute sentences across hook, body, cta
   let hookSentences: string[];
   let bodySentences: string[];
   let ctaSentences: string[];
-  
+
   if (totalSentences <= 3) {
     hookSentences = sentences.slice(0, 1);
     bodySentences = sentences.slice(1, totalSentences - 1) || [];
@@ -110,22 +118,22 @@ function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnal
     // First ~20% for hook, last ~20% for CTA, rest for body
     const hookCount = Math.max(1, Math.ceil(totalSentences * 0.2));
     const ctaCount = Math.max(1, Math.ceil(totalSentences * 0.2));
-    
+
     hookSentences = sentences.slice(0, hookCount);
     ctaSentences = sentences.slice(-ctaCount);
     bodySentences = sentences.slice(hookCount, -ctaCount);
   }
-  
+
   // Build visual descriptions from analysis
   const sceneDescriptions = analysis?.sceneDescriptions || [];
   const visualCues = analysis?.visualCues || [];
-  
+
   const hookVisual = sceneDescriptions[0] || visualCues[0] || 'Opening shot';
-  const bodyVisual = sceneDescriptions.length > 2 
-    ? sceneDescriptions.slice(1, -1).join(' → ') 
+  const bodyVisual = sceneDescriptions.length > 2
+    ? sceneDescriptions.slice(1, -1).join(' → ')
     : visualCues.slice(1, -1).join(', ') || 'Main content visuals';
   const ctaVisual = sceneDescriptions[sceneDescriptions.length - 1] || visualCues[visualCues.length - 1] || 'Closing shot';
-  
+
   return `[HOOK]
 🎬 VISUAL: ${hookVisual}
 💬 SAY: "${hookSentences.join(' ')}"
@@ -151,9 +159,9 @@ function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnal
  */
 async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult> {
   const { requestId, subscriberId, reelUrl } = job.data;
-  
+
   logger.info(`[${requestId}] Starting copy job - downloading and analyzing video`);
-  
+
   let videoPath: string | null = null;
   let audioPath: string | null = null;
   let frameDir: string | null = null;
@@ -165,12 +173,12 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
     // Normalize URL
     const normalizedUrl = normalizeInstagramUrl(reelUrl);
     const reelHash = generateReelHash(normalizedUrl);
-    
+
     // Check if already downloaded AND analyzed (has transcript)
     const existingDNA = await ReelDNA.findOne({ reelUrlHash: reelHash }).lean();
     if (existingDNA?.analysis?.transcript) {
       logger.info(`[${requestId}] ✅ Video already analyzed with transcript`);
-      
+
       // Send success message with analysis info
       const analysisInfo = existingDNA.analysis;
       await sendTextMessage(
@@ -181,7 +189,7 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
         `📝 Transcript: ${analysisInfo.transcript ? 'Available (' + analysisInfo.transcript.slice(0, 50) + '...)' : 'None'}\n\n` +
         `Say "generate" to create a script from it!`
       );
-      
+
       return {
         success: true,
         videoUrl: existingDNA.videoUrl,
@@ -197,11 +205,9 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
     await job.updateProgress(30);
 
     // Extract Frames & Audio for analysis
+    // Performance Optimization PRD Section 3.2.1-3.2.2: Using optimized defaults (360p, quality=8, max 8 frames)
     logger.info(`[${requestId}] Extracting frames & audio for analysis...`);
-    const framePromise = extractFrames(videoPath, requestId, {
-      quality: 5,
-      width: 480
-    });
+    const framePromise = extractFrames(videoPath, requestId);
     const audioPromise = extractAudio(videoPath, requestId);
 
     const [frameResult, audioResult] = await Promise.all([
@@ -224,7 +230,7 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
         includeAudio: true
       });
     });
-    
+
     await job.updateProgress(75);
 
     // Save ReelDNA with complete analysis + transcript
@@ -238,7 +244,7 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
       },
       { upsert: true, new: true }
     );
-    
+
     logger.info(`[${requestId}] ✅ ReelDNA cached with full analysis`);
     await job.updateProgress(90);
 
@@ -296,7 +302,7 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
 async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult> {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), JOB_TIMEOUT_MS);
-  
+
   try {
     return await processJobWithTimeout(job, abortController.signal);
   } finally {
@@ -308,14 +314,14 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
  * Actual job processing logic with abort signal support
  */
 async function processJobWithTimeout(
-  job: BullJob<ScriptJobData>, 
+  job: BullJob<ScriptJobData>,
   signal: AbortSignal
 ): Promise<ScriptJobResult> {
-  const { 
-    requestId, 
-    requestHash, 
-    subscriberId, 
-    reelUrl, 
+  const {
+    requestId,
+    requestHash,
+    subscriberId,
+    reelUrl,
     userIdea,
     // NEW: Optional hints
     toneHint,
@@ -323,13 +329,13 @@ async function processJobWithTimeout(
     mode,
     isCopyMode // When true, output transcript as-is formatted as script
   } = job.data;
-  
+
   logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}`);
-  
+
   // Update job status in MongoDB
   await Job.findOneAndUpdate(
     { jobId: requestId },
-    { 
+    {
       status: 'processing',
       startedAt: new Date(),
       attempts: job.attemptsMade + 1
@@ -344,14 +350,26 @@ async function processJobWithTimeout(
   try {
     // Check abort signal periodically
     checkAborted(signal, requestId);
-    
+
+    // Memory pre-check: Delay job if memory is high
+    // See PRD_System_Robustness_t3micro.txt Section 6.4
+    const memUsage = process.memoryUsage();
+    const memPercent = memUsage.heapUsed / memUsage.heapTotal;
+    if (memPercent > MEMORY_THRESHOLD) {
+      logger.warn(`[${requestId}] High memory (${Math.round(memPercent * 100)}%), delaying job for ${MEMORY_DELAY_MS}ms`);
+      await new Promise(resolve => setTimeout(resolve, MEMORY_DELAY_MS));
+
+      // Check abort after delay
+      checkAborted(signal, requestId);
+    }
+
     // Report progress
     await job.updateProgress(10);
 
     // ==== TIER 1 CACHE CHECK: Reuse video analysis if available ====
     const reelHash = generateReelHash(reelUrl);
     const cachedDNA = await ReelDNA.findOne({ reelUrlHash: reelHash }).lean();
-    
+
     let videoAnalysis: VideoAnalysis | null = null;
     let transcript: string | null = null;
     let frames: string[] = [];
@@ -365,23 +383,23 @@ async function processJobWithTimeout(
     let previousScriptSummaries: { idea: string; hookSummary: string; angleSummary: string; isSameIdea: boolean }[] = [];
     try {
       const normalizedUrl = normalizeInstagramUrl(reelUrl);
-      
+
       // Expert Lookup: Find scripts sharing the same normalized URL
-      const previousScriptsRaw = await Script.find({ 
-        reelUrl: normalizedUrl 
+      const previousScriptsRaw = await Script.find({
+        reelUrl: normalizedUrl
       })
         .sort({ createdAt: -1 })
         .limit(5)
         .lean();
-      
+
       // Separate same-idea (for variation avoidance) and different-idea (for context)
-      const sameIdeaScripts = previousScriptsRaw.filter(ps => 
+      const sameIdeaScripts = previousScriptsRaw.filter(ps =>
         ps.userIdea?.toLowerCase().trim() === userIdea?.toLowerCase().trim()
       );
-      const differentIdeaScripts = previousScriptsRaw.filter(ps => 
+      const differentIdeaScripts = previousScriptsRaw.filter(ps =>
         ps.userIdea?.toLowerCase().trim() !== userIdea?.toLowerCase().trim()
       );
-      
+
       // For same-idea scripts (regeneration), extract SUMMARIES to help AI create distinct content
       // We don't pass full scripts - just key hooks/angles to avoid repetition
       previousScriptSummaries = sameIdeaScripts.slice(0, 3).map(ps => {
@@ -392,7 +410,7 @@ async function processJobWithTimeout(
         // Extract angle/approach summary
         const bodyMatch = scriptText.match(/\[BODY\][\s\S]*?💬\s*SAY:\s*["']?([^"'\n]+)/i);
         const angleSummary = bodyMatch?.[1]?.substring(0, 80) || 'Unknown angle';
-        
+
         return {
           idea: ps.userIdea,
           hookSummary,
@@ -400,14 +418,14 @@ async function processJobWithTimeout(
           isSameIdea: true
         };
       });
-      
+
       // For different-idea scripts (context learning), keep full scripts
       previousScripts = differentIdeaScripts.slice(0, 2).map(ps => ({
         idea: ps.userIdea,
         script: ps.scriptText,
         isSameIdea: false
       }));
-      
+
       if (previousScriptSummaries.length > 0) {
         logger.info(`[${requestId}] Found ${previousScriptSummaries.length} previous variations (will avoid similar hooks/angles)`);
       }
@@ -424,7 +442,7 @@ async function processJobWithTimeout(
     // ============================================
     if (isCopyMode) {
       logger.info(`[${requestId}] COPY MODE - Will format transcript as script`);
-      
+
       // We need the transcript, either from cache or by analyzing
       if (cachedDNA?.analysis?.transcript) {
         transcript = cachedDNA.analysis.transcript;
@@ -434,27 +452,28 @@ async function processJobWithTimeout(
       } else {
         // Need to download and analyze to get transcript
         logger.info(`[${requestId}] No cached transcript - downloading video for analysis...`);
-        
+
         videoPath = await downloadReel(reelUrl, requestId);
         await job.updateProgress(25);
-        
-        const framePromise = extractFrames(videoPath, requestId, { quality: 5, width: 480 });
+
+        // Performance Optimization PRD: Using optimized defaults (360p, max 8 frames)
+        const framePromise = extractFrames(videoPath, requestId);
         const audioPromise = extractAudio(videoPath, requestId);
-        
+
         const [frameResult, audioResult] = await Promise.all([framePromise, audioPromise]);
         frames = frameResult.frames;
         audioPath = audioResult;
         if (frames.length > 0) frameDir = path.dirname(frames[0]);
-        
+
         await job.updateProgress(40);
-        
+
         // Analyze to get transcript
         videoAnalysis = await withCircuitBreaker('gemini', async () => {
           return analyzeVideo({ frames, audioPath, includeAudio: true });
         });
-        
+
         transcript = videoAnalysis.transcript;
-        
+
         // Cache the analysis for future use
         await ReelDNA.findOneAndUpdate(
           { reelUrlHash: reelHash },
@@ -467,15 +486,15 @@ async function processJobWithTimeout(
           { upsert: true }
         );
       }
-      
+
       await job.updateProgress(60);
-      
+
       // Format transcript as a proper script (COPY mode output)
       scriptText = formatTranscriptAsScript(transcript, videoAnalysis);
       scriptGenStartTime = Date.now();
-      
+
       logger.info(`[${requestId}] Copy mode script generated from transcript`);
-      
+
     } else if (cachedDNA) {
       // ============================================
       // PATH 1: TIER 1 CACHE HIT (Text-Only Mode)
@@ -485,14 +504,14 @@ async function processJobWithTimeout(
       videoAnalysis = cachedDNA.analysis;
       transcript = videoAnalysis.transcript;
       usedTier1Cache = true;
-      await job.updateProgress(60); 
+      await job.updateProgress(60);
 
       // Check abort signal before AI call
       checkAborted(signal, requestId);
 
       logger.info(`[${requestId}] Generating script (Text Mode)...`);
       scriptGenStartTime = Date.now();
-      
+
       // Use circuit breaker for Gemini API
       scriptText = await withCircuitBreaker('gemini', async () => {
         return generateScript({
@@ -506,7 +525,7 @@ async function processJobWithTimeout(
           previousVariationSummaries: previousScriptSummaries
         });
       });
-      
+
       recordGeminiDuration(Date.now() - scriptGenStartTime);
 
     } else {
@@ -515,7 +534,7 @@ async function processJobWithTimeout(
       // ============================================
       // No analysis? Download video and do One-Shot Gen (1 Call)
       // We also do FULL analysis and save to ReelDNA cache
-      
+
       logger.info(`[${requestId}] Tier 1 Cache MISS - Starting One-Shot Generation...`);
 
       // Check abort signal before download
@@ -532,11 +551,9 @@ async function processJobWithTimeout(
       // B. Extract Frames & Audio
       logger.info(`[${requestId}] Extracting frames & audio...`);
       const extractionStartTime = Date.now();
-      
-      const framePromise = extractFrames(videoPath, requestId, {
-        quality: 5,
-        width: 480
-      });
+
+      // Performance Optimization PRD Section 3.2.1-3.2.2: Using optimized defaults
+      const framePromise = extractFrames(videoPath, requestId);
 
       let audioPromise: Promise<string | null> | null = null;
       audioPromise = extractAudio(videoPath, requestId);
@@ -548,7 +565,7 @@ async function processJobWithTimeout(
 
       frames = frameResult.frames;
       audioPath = audioResult;
-      
+
       if (frames.length > 0) frameDir = path.dirname(frames[0]);
 
       logger.info(`[${requestId}] Frames extracted in ${frameResult.extractionTimeMs}ms`);
@@ -561,7 +578,7 @@ async function processJobWithTimeout(
       // C. Generate Script Directly (One-Shot)
       logger.info(`[${requestId}] Generating script (One-Shot Video Mode)...`);
       scriptGenStartTime = Date.now();
-      
+
       scriptText = await withCircuitBreaker('gemini', async () => {
         return generateScriptFromVideo({
           userIdea,
@@ -575,14 +592,14 @@ async function processJobWithTimeout(
           previousVariationSummaries: previousScriptSummaries
         });
       });
-      
+
       recordGeminiDuration(Date.now() - scriptGenStartTime);
-      
+
       // D. IMPORTANT: Do full analysis and save to ReelDNA cache
       // This ensures future requests can use cached analysis with transcript
       logger.info(`[${requestId}] Analyzing video for ReelDNA cache...`);
       const analysisStartTime = Date.now();
-      
+
       videoAnalysis = await withCircuitBreaker('gemini', async () => {
         return analyzeVideo({
           frames,
@@ -590,10 +607,10 @@ async function processJobWithTimeout(
           includeAudio: true
         });
       });
-      
+
       transcript = videoAnalysis.transcript;
       recordVideoAnalysisDuration(Date.now() - analysisStartTime);
-      
+
       // E. Save ReelDNA for future requests (with complete analysis + transcript!)
       await ReelDNA.findOneAndUpdate(
         { reelUrlHash: reelHash },
@@ -605,7 +622,7 @@ async function processJobWithTimeout(
         },
         { upsert: true, new: true }
       );
-      
+
       logger.info(`[${requestId}] ✅ ReelDNA cached with transcript for future use`);
     }
 
@@ -651,19 +668,19 @@ async function processJobWithTimeout(
     // For One-Shot, analysis fields will be empty/undefined.
     const scriptSections = parseScriptSections(scriptText);
     const analysisTimeMs = usedTier1Cache ? 0 : 0; // Effectively 0 separate analysis time
-    
+
     await DatasetEntry.create({
       // INPUT FEATURES
       input: {
         videoUrl: reelUrl,
         userIdea,
         requestHash,
-        
+
         // User preferences (hints)
         toneHint,
         languageHint,
         mode: mode || 'full',
-        
+
         // Video analysis results (May be empty for One-Shot)
         transcript: transcript || undefined,
         transcriptWordCount: countWords(transcript || undefined),
@@ -673,7 +690,7 @@ async function processJobWithTimeout(
         sceneDescriptions: videoAnalysis?.sceneDescriptions || [],
         frameCount: frames?.length || 0
       },
-      
+
       // OUTPUT FEATURES
       output: {
         generatedScript: scriptText,
@@ -686,7 +703,7 @@ async function processJobWithTimeout(
         bodyLengthChars: scriptSections.body?.length || 0,
         ctaLengthChars: scriptSections.cta?.length || 0
       },
-      
+
       // FEEDBACK (defaults, updated later via feedback API)
       feedback: {
         wasAccepted: true,
@@ -696,7 +713,7 @@ async function processJobWithTimeout(
           cta: { wasRegenerated: false }
         }
       },
-      
+
       // GENERATION METADATA
       generation: {
         analysisModel: usedTier1Cache ? 'gemini-2.5-flash' : 'none',
@@ -708,7 +725,7 @@ async function processJobWithTimeout(
         generationAttempts: 1,
         promptVersion: 'steal-artist-one-shot-v1.0'
       },
-      
+
       // TRAINING FLAGS
       training: {
         isValidated: false,
@@ -733,7 +750,7 @@ async function processJobWithTimeout(
       });
     });
 
-    // G. Update job status
+    // H. Update job status in MongoDB
     await Job.findOneAndUpdate(
       { jobId: requestId },
       {
@@ -743,6 +760,33 @@ async function processJobWithTimeout(
         result: { scriptText, imageUrl }
       }
     );
+
+    // I. CRITICAL: Update FSM state to AWAITING_FEEDBACK and store script metadata
+    // This enables COPY and VARIATION intents to work properly
+    try {
+      await chatbotFSM.transition(subscriberId, ChatbotEvent.PROCESSING_COMPLETE, {
+        scriptUrl,
+        imageUrl,
+      });
+
+      // Store script metadata for COPY/VARIATION intents
+      await chatbotFSM.updateMetadata(subscriberId, {
+        lastScriptUrl: scriptUrl,
+        lastScriptId: publicId,
+        lastImageUrl: imageUrl,
+        lastReelUrl: reelUrl,
+        lastUserIdea: userIdea,
+      });
+      
+      logger.info(`[${requestId}] FSM successfully transitioned to AWAITING_FEEDBACK`);
+    } catch (fsmError: any) {
+      // Non-fatal - script was delivered, but user state is wrong
+      // This is CRITICAL - user will be stuck in PROCESSING state
+      logger.error(`[${requestId}] CRITICAL: FSM update failed - user may be stuck in PROCESSING state`, { 
+        error: fsmError.message,
+        subscriberId 
+      });
+    }
 
     const totalDuration = Date.now() - startTime;
     recordJobDuration(totalDuration, { status: 'success' });
@@ -757,22 +801,50 @@ async function processJobWithTimeout(
 
   } catch (error: any) {
     const totalDuration = Date.now() - startTime;
-    
-    // Determine error type for metrics
+
+    // Determine error type for metrics and better error messages
     let errorType = 'unknown';
+    let userMessage = '❌ Something went wrong. Please try again!';
+    
     if (error instanceof JobTimeoutError) {
       errorType = 'timeout';
+      userMessage = '⏰ The request took too long. Please try again with a shorter reel!';
     } else if (error instanceof CircuitOpenError) {
       errorType = 'circuit_open';
-    } else if (error.message?.includes('download')) {
+      userMessage = '🔌 Service temporarily unavailable. Our AI is recovering. Please wait 30 seconds and try again!';
+      logger.error(`[${requestId}] Circuit breaker OPEN for: ${error.serviceName}. Service is failing.`);
+    } else if (error.message?.includes('download') || error.message?.includes('Instagram')) {
       errorType = 'download';
-    } else if (error.message?.includes('Gemini') || error.message?.includes('API')) {
+      userMessage = '❌ Couldn\'t download that reel. The link may be invalid, private, or expired. Try another link!';
+    } else if (error.message?.includes('yt-dlp') || error.message?.includes('ENOENT')) {
+      errorType = 'download_tool';
+      userMessage = '🔧 Download tool unavailable. Please contact support or try again later.';
+      logger.error(`[${requestId}] CRITICAL: yt-dlp or download tool missing. Check installation!`);
+    } else if (error.message?.includes('Gemini') || error.message?.includes('Vertex AI') || error.message?.includes('429')) {
       errorType = 'api';
+      userMessage = '🤖 AI service temporarily overloaded. Please wait 30 seconds and try again!';
+      logger.error(`[${requestId}] Gemini/Vertex AI error: ${error.message}`);
+    } else if (error.message?.includes('ImgBB') || error.message?.includes('upload')) {
+      errorType = 'upload';
+      userMessage = '📷 Image upload failed. Please try again!';
+    } else if (error.message?.includes('GOOGLE_APPLICATION_CREDENTIALS') || error.message?.includes('credentials')) {
+      errorType = 'auth';
+      userMessage = '🔐 Authentication error. Please contact support.';
+      logger.error(`[${requestId}] CRITICAL: GCP credentials issue. Check GOOGLE_APPLICATION_CREDENTIALS!`);
+    } else if (error.message?.includes('MongoDB') || error.message?.includes('database')) {
+      errorType = 'database';
+      userMessage = '💾 Database error. Please try again in a moment!';
+      logger.error(`[${requestId}] Database error: ${error.message}`);
     }
-    
+
     recordError(errorType);
     recordJobDuration(totalDuration, { status: 'failed' });
-    logger.error(`[${requestId}] Job failed (${errorType}):`, error);
+    logger.error(`[${requestId}] Job failed (${errorType}): ${error.message}`);
+    
+    // Log full stack trace for debugging (only in logs, not sent to DB in production)
+    if (process.env.NODE_ENV === 'development') {
+      logger.error(`[${requestId}] Stack trace:`, error.stack);
+    }
 
     // Update job status to failed
     // SECURITY: Don't store full stack traces in production (exposes internal paths)
@@ -786,28 +858,43 @@ async function processJobWithTimeout(
       }
     );
 
-    // Send fallback script on final attempt
-    if (job.attemptsMade >= 2) {
-      const fallbackScript = `I couldn't watch that specific reel, but here is a script based on your idea:
-      
-[HOOK]
-(Start with a strong statement about ${userIdea})
+    // On final attempt, update FSM state and send error message
+    // BullMQ attemptsMade starts at 0, so attempt 2 = attemptsMade 1
+    // Job has 3 total attempts (0, 1, 2), so check if attemptsMade >= 1 (second attempt)
+    if (job.attemptsMade >= 1) {
+      logger.info(`[${requestId}] Final attempt failed (${job.attemptsMade + 1}/3), transitioning to ERROR state`);
 
-[BODY]
-(Explain your main point about ${userIdea})
-
-[CTA]
-(Tell them to comment or follow)`;
-
+      // Send error message to user
       try {
-        await sendToManyChat({
-          subscriber_id: subscriberId,
-          field_name: 'AI_Script_Result',
-          field_value: fallbackScript
-        });
-      } catch (manyChatError) {
-        logger.error(`[${requestId}] Failed to send fallback:`, manyChatError);
+        await sendTextMessage(subscriberId, userMessage);
+        logger.info(`[${requestId}] Error message sent to user: ${userMessage}`);
+      } catch (manyChatError: any) {
+        logger.error(`[${requestId}] Failed to send error message: ${manyChatError.message}`);
       }
+
+      // CRITICAL: Update FSM state to ERROR so user can start fresh
+      try {
+        await chatbotFSM.transition(subscriberId, ChatbotEvent.ERROR_OCCURRED, {
+          error: error.message,
+          errorType,
+        });
+
+        // Store error info in metadata
+        await chatbotFSM.updateMetadata(subscriberId, {
+          lastError: error.message,
+          lastErrorType: errorType,
+          lastErrorTime: new Date().toISOString()
+        });
+
+        logger.info(`[${requestId}] ✅ FSM transitioned to ERROR state - user can retry`);
+      } catch (fsmError: any) {
+        logger.error(`[${requestId}] CRITICAL: FSM error transition failed - user stuck!`, { 
+          error: fsmError.message,
+          subscriberId
+        });
+      }
+    } else {
+      logger.info(`[${requestId}] Job will retry (attempt ${job.attemptsMade + 2}/3)`);
     }
 
     throw error; // Re-throw to trigger BullMQ retry
@@ -828,8 +915,15 @@ async function processJobWithTimeout(
  * This is key for handling 100 concurrent users
  */
 export function startWorker(): Worker<any, any> {
-  const concurrency = parseInt(process.env.QUEUE_CONCURRENCY || '5', 10);
-  
+  if (worker) {
+    logger.info('Worker already started, reusing existing instance');
+    return worker;
+  }
+
+  // Worker concurrency reduced from 5 to 3 for t3.micro memory safety
+  // See PRD_System_Robustness_t3micro.txt Section 2.3
+  const concurrency = parseInt(process.env.QUEUE_CONCURRENCY || '2', 10);
+
   worker = new Worker<any, any>(QUEUE_NAME, async (job) => {
     // Route to appropriate processor based on job name
     if (job.name === 'copy') {
@@ -843,19 +937,33 @@ export function startWorker(): Worker<any, any> {
     limiter: {
       max: 10,        // Max 10 jobs
       duration: 60000 // Per minute (prevent API rate limits)
-    }
+    },
+    // Performance Optimization PRD Section 2.2.1: BullMQ Configuration
+    // Increased intervals reduce Redis polling by 60% (3000 commands saved per 10 requests)
+    // Jobs are still picked up instantly via Pub/Sub - only stalled job checks are affected
+    stalledInterval: 120000,  // Default 30000 -> 120000 (4x slower polling, reduces Upstash load)
+    lockDuration: 90000,      // Default 30000 -> 90000 (longer locks reduce Redis writes)
+    lockRenewTime: 45000,     // Optimized lock renewal (half of lockDuration)
+    maxStalledCount: 3,       // Allow jobs to be stalled 3 times before failing
+    drainDelay: 10,           // Small delay when draining to prevent busy loops
+    skipStalledCheck: false,  // Enable stalled job recovery
   });
+  
+  // Log when worker is waiting for jobs (helps debug idle state)
+  let idleLogged = false;
 
   worker.on('ready', () => {
     logger.info(`✅ BullMQ Worker ready (concurrency: ${concurrency})`);
+    idleLogged = false;
   });
 
   worker.on('active', (job) => {
     logger.info(`Worker: Job ${job.id} started processing`);
+    idleLogged = false;
   });
 
   worker.on('progress', (job, progress) => {
-    logger.info(`Worker: Job ${job.id} progress: ${progress}%`);
+    logger.debug(`Worker: Job ${job.id} progress: ${progress}%`);
   });
 
   worker.on('completed', (job) => {
@@ -863,15 +971,39 @@ export function startWorker(): Worker<any, any> {
   });
 
   worker.on('failed', (job, error) => {
+    // Don't log timeout errors as critical - they're expected during idle
+    if (error.message && error.message.includes('Command timed out')) {
+      if (!idleLogged) {
+        logger.debug('Worker: Idle (Redis poll timeout - this is normal)');
+        idleLogged = true;
+      }
+      return;
+    }
     logger.error(`Worker: Job ${job?.id} failed:`, error.message);
     logger.error(`Worker: Full error:`, error);
   });
 
   worker.on('error', (error) => {
-    logger.error('Worker error:', error);
+    // Suppress timeout errors during idle polling
+    if (error.message && error.message.includes('Command timed out')) {
+      if (!idleLogged) {
+        logger.debug('Worker: Connection timeout during idle poll (normal)');
+        idleLogged = true;
+      }
+      return;
+    }
+    logger.error('Worker error:', error.message);
+  });
+
+  worker.on('stalled', (jobId) => {
+    logger.warn(`Worker: Job ${jobId} stalled (will be retried)`);
   });
 
   logger.info(`Worker created for queue: ${QUEUE_NAME}`);
+
+  // Register worker with Memory Governor for dynamic concurrency control
+  memoryGovernor.setWorker(worker);
+
   return worker;
 }
 
@@ -883,6 +1015,8 @@ export async function stopWorker(): Promise<void> {
     await worker.close();
     worker = null;
     logger.info('BullMQ Worker stopped');
+  } else {
+    logger.info('Worker already stopped or not started');
   }
 }
 

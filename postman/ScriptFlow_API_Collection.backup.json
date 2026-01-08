@@ -1,0 +1,708 @@
+{
+	"info": {
+		"_postman_id": "scriptflow-api-2024",
+		"name": "ScriptFlow Backend API",
+		"description": "Complete API testing collection for ScriptFlow - AI Reel Script Generator\n\n**Quick Start:**\n1. Set environment variables (base_url, admin_api_key)\n2. Test health endpoint\n3. Run script generation flows\n4. Submit feedback\n\n**API Versions:**\n- V1: Legacy endpoint with basic functionality\n- V2: New unified handler with smart flow detection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Monitoring",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Basic health check endpoint. Returns 200 OK if server is running.\n\nNo authentication required."
+					},
+					"response": []
+				},
+				{
+					"name": "Detailed Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/detailed",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"detailed"
+							]
+						},
+						"description": "Detailed health check with component status:\n- MongoDB connection\n- Redis connection\n- Queue status\n- System uptime\n\nNo authentication required."
+					},
+					"response": []
+				}
+			],
+			"description": "Health check and monitoring endpoints"
+		},
+		{
+			"name": "Script Generation - V1",
+			"item": [
+				{
+					"name": "Generate Script (Full)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save job_id for status checking",
+									"if (pm.response.code === 202) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('job_id', jsonData.data.job_id);",
+									"    console.log('Job ID saved:', jsonData.data.job_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Create a motivational script about overcoming challenges\",\n  \"tone_hint\": \"professional\",\n  \"language_hint\": \"English\",\n  \"mode\": \"full\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/script/generate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"script",
+								"generate"
+							]
+						},
+						"description": "Generate a full script (HOOK + BODY + CTA) from an Instagram Reel.\n\n**Required Fields:**\n- `subscriber_id`: ManyChat user ID (numeric string)\n- `reel_url`: Instagram Reel URL (must be https://instagram.com/reel/...)\n- `user_idea`: User's content idea (4-500 characters)\n\n**Optional Hints:**\n- `tone_hint`: professional | funny | provocative | educational | casual\n- `language_hint`: Preferred language (e.g., \"English\", \"Spanish\")\n- `mode`: full | hook_only (default: full)\n\n**Rate Limits:**\n- Beta Access: First 100 users only\n- User Rate Limit: 10 requests per hour per subscriber_id\n- IP Rate Limit: 100 requests per 15 minutes\n\n**Response:**\n- 202 Accepted: Job queued, returns job_id\n- 429 Too Many Requests: Rate limit exceeded\n- 403 Forbidden: Waitlist (not in first 100 users)"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Script (Hook Only)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('job_id', jsonData.data.job_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Quick hook about productivity hacks\",\n  \"mode\": \"hook_only\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/script/generate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"script",
+								"generate"
+							]
+						},
+						"description": "Generate only the HOOK section for quick testing.\n\nFaster processing (~15-20 seconds vs 30-40 seconds for full script).\n\nUse this for:\n- Quick idea validation\n- A/B testing hooks\n- Rapid iteration"
+					},
+					"response": []
+				},
+				{
+					"name": "Check Job Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/job/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"job",
+								"{{job_id}}"
+							]
+						},
+						"description": "Check the status of a queued script generation job.\n\n**Job States:**\n- `queued`: Waiting to be processed\n- `processing`: Currently being processed\n- `completed`: Successfully completed (result available)\n- `failed`: Failed (error details provided)\n\n**Polling Recommendations:**\n- Poll every 2-3 seconds for first 30 seconds\n- Poll every 5 seconds thereafter\n- Stop polling after 2 minutes (timeout)\n\n**Response Fields:**\n- `status`: Job state\n- `result`: Script data (only when completed)\n- `error`: Error message (only when failed)\n- `progress`: Processing progress percentage\n- `created_at`: Job creation timestamp\n- `completed_at`: Job completion timestamp"
+					},
+					"response": []
+				}
+			],
+			"description": "Legacy V1 script generation endpoint"
+		},
+		{
+			"name": "Script Generation - V2",
+			"item": [
+				{
+					"name": "Generate Script V2 (Unified)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('job_id', jsonData.data.job_id);",
+									"    console.log('Job ID saved:', jsonData.data.job_id);",
+									"}",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    if (jsonData.data.public_id) {",
+									"        pm.environment.set('public_id', jsonData.data.public_id);",
+									"        console.log('Public ID saved:', jsonData.data.public_id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Create a script about time management tips for entrepreneurs\",\n  \"tone_hint\": \"professional\",\n  \"language_hint\": \"English\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v2/script/generate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"script",
+								"generate"
+							]
+						},
+						"description": "**NEW V2 Unified Handler** - Smart flow detection with intelligent caching\n\n**Smart Flow Detection:**\n1. **New Request**: Returns job_id (202 Accepted) → Poll /api/v1/job/:jobId\n2. **Duplicate Request**: Returns cached result instantly (200 OK)\n3. **Variation Request**: Generates new variation with anti-repetition\n\n**Duplicate Detection:**\nAutomatically detects if same user submitted same reel_url + user_idea in last 24 hours.\n\n**Variation System:**\nWhen generating variations (same idea, same reel):\n- AI avoids repeating hooks from previous variations\n- Generates fresh angles and perspectives\n- Maintains video's original DNA\n\n**Benefits over V1:**\n- Instant responses for duplicate requests (no re-processing)\n- Smarter variation generation (no repetition)\n- Better user experience\n- Lower API costs\n\n**Same rate limits as V1**"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Variation (Same Idea)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('job_id', jsonData.data.job_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Create a script about time management tips for entrepreneurs\",\n  \"tone_hint\": \"casual\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v2/script/generate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"script",
+								"generate"
+							]
+						},
+						"description": "Generate a VARIATION of the same idea.\n\n**Use Case:**\n- User didn't like first version\n- Wants different hook angle\n- Trying different tone\n\n**How it works:**\n1. Detects this is a variation (same reel + idea)\n2. Loads previous attempts to avoid repetition\n3. Instructs AI to create fresh angles\n4. Generates new script with different hooks\n\n**Tips:**\n- Change tone_hint to get different style\n- Can request multiple variations\n- Each variation avoids repeating previous ones"
+					},
+					"response": []
+				}
+			],
+			"description": "New V2 unified handler with smart flow detection and caching"
+		},
+		{
+			"name": "Feedback - V1",
+			"item": [
+				{
+					"name": "Submit Detailed Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"request_hash\": \"abc123def456\",\n  \"overall_rating\": 5,\n  \"section_feedback\": {\n    \"hook\": {\n      \"rating\": 5,\n      \"regeneration_reason\": \"Perfect hook, very engaging\"\n    },\n    \"body\": {\n      \"rating\": 4,\n      \"regeneration_reason\": \"Good content, could be more concise\"\n    },\n    \"cta\": {\n      \"rating\": 5\n    }\n  },\n  \"feedback_text\": \"Great script overall! The hook grabbed attention immediately. Body was informative but slightly long. CTA was clear and actionable.\",\n  \"video_performance\": {\n    \"views\": 10000,\n    \"likes\": 850,\n    \"comments\": 42,\n    \"shares\": 15\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/feedback",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"feedback"
+							]
+						},
+						"description": "Submit detailed feedback for a generated script.\n\n**Required:**\n- `subscriber_id`: User ID\n- `request_hash`: Hash from job result\n\n**Optional:**\n- `overall_rating`: 1-5 stars\n- `section_feedback`: Per-section ratings and comments\n- `feedback_text`: Free text feedback\n- `video_performance`: Actual video metrics\n\n**Use for:**\n- Training data collection\n- Quality monitoring\n- A/B testing insights"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Feedback Stats (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/feedback/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"feedback",
+								"stats"
+							]
+						},
+						"description": "Get aggregated feedback statistics.\n\n**Requires:** Admin API key in `x-api-key` header\n\n**Returns:**\n- Total feedback count\n- Average ratings by section\n- Common regeneration reasons\n- Performance metrics"
+					},
+					"response": []
+				}
+			],
+			"description": "V1 feedback submission"
+		},
+		{
+			"name": "Feedback - V2",
+			"item": [
+				{
+					"name": "Submit Enhanced Feedback V2",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"request_hash\": \"abc123def456\",\n  \"overall_rating\": 5,\n  \"section_feedback\": {\n    \"hook\": {\n      \"rating\": 5,\n      \"regeneration_reason\": \"Excellent attention-grabbing opening\"\n    },\n    \"body\": {\n      \"rating\": 4\n    },\n    \"cta\": {\n      \"rating\": 5\n    }\n  },\n  \"feedback_text\": \"Very satisfied with the output!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v2/feedback",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback"
+							]
+						},
+						"description": "Enhanced V2 feedback with improved tracking.\n\nSame schema as V1 but with:\n- Better analytics\n- Variation tracking\n- Flow detection insights"
+					},
+					"response": []
+				},
+				{
+					"name": "Quick Feedback (Thumbs Up/Down)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"request_hash\": \"abc123def456\",\n  \"sentiment\": \"positive\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v2/feedback/quick",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback",
+								"quick"
+							]
+						},
+						"description": "Quick thumbs up/down feedback.\n\n**Required:**\n- `subscriber_id`: User ID\n- `request_hash`: Job hash\n- `sentiment`: \"positive\" | \"negative\" | \"neutral\"\n\n**Use for:**\n- Simple user feedback\n- Quick satisfaction tracking\n- Low-friction feedback collection"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Enhanced Feedback Stats (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v2/feedback/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v2",
+								"feedback",
+								"stats"
+							]
+						},
+						"description": "Enhanced V2 feedback statistics with flow insights.\n\n**Requires:** Admin API key\n\n**Additional Insights:**\n- Variation success rates\n- Flow detection accuracy\n- User satisfaction trends"
+					},
+					"response": []
+				}
+			],
+			"description": "V2 enhanced feedback with quick sentiment tracking"
+		},
+		{
+			"name": "Public Script Viewing",
+			"item": [
+				{
+					"name": "View Script (Copy Page)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/s/{{public_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"s",
+								"{{public_id}}"
+							]
+						},
+						"description": "Public script viewing page.\n\n**Features:**\n- Copy-friendly formatted script\n- No authentication required\n- Short shareable URL\n- Rate limited: 60 req/min per IP\n\n**Use Cases:**\n- Share scripts with team members\n- Copy to video editing software\n- Review scripts on mobile\n\nSaved to environment variable after V2 generation."
+					},
+					"response": []
+				}
+			],
+			"description": "Public script viewing and sharing"
+		},
+		{
+			"name": "Admin Endpoints",
+			"item": [
+				{
+					"name": "Export Dataset (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dataset/export",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"dataset",
+								"export"
+							]
+						},
+						"description": "Export complete dataset for training/analysis.\n\n**Requires:** Admin API key in `x-api-key` header\n\n**Returns:**\n- All script generations\n- User feedback\n- Performance metrics\n- Anonymized data\n\n**Format:** JSON or CSV (based on Accept header)"
+					},
+					"response": []
+				},
+				{
+					"name": "Prometheus Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metrics"
+							]
+						},
+						"description": "Prometheus metrics endpoint for monitoring.\n\n**Metrics include:**\n- Request rates\n- Response times\n- Error rates\n- Queue depth\n- Cache hit rates\n- Job processing times\n\n**Format:** Prometheus text format\n\n**Use with:**\n- Prometheus\n- Grafana\n- DataDog\n- New Relic"
+					},
+					"response": []
+				}
+			],
+			"description": "Admin-only endpoints requiring API key authentication"
+		},
+		{
+			"name": "Test Flows",
+			"item": [
+				{
+					"name": "Complete Flow: Generate + Poll + Feedback",
+					"item": [
+						{
+							"name": "1. Generate Script",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test('Status code is 202 or 200', function () {",
+											"    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+											"});",
+											"",
+											"if (pm.response.code === 202) {",
+											"    const jsonData = pm.response.json();",
+											"    pm.environment.set('job_id', jsonData.data.job_id);",
+											"    pm.environment.set('request_hash', jsonData.data.request_hash);",
+											"    console.log('Job queued:', jsonData.data.job_id);",
+											"} else if (pm.response.code === 200) {",
+											"    const jsonData = pm.response.json();",
+											"    pm.environment.set('request_hash', jsonData.data.request_hash);",
+											"    pm.environment.set('public_id', jsonData.data.public_id);",
+											"    console.log('Cached result returned');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"subscriber_id\": \"{{$randomInt}}\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Test flow script about {{$randomJobTitle}}\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v2/script/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v2",
+										"script",
+										"generate"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "2. Check Job Status",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = pm.response.json();",
+											"",
+											"pm.test('Job exists', function () {",
+											"    pm.expect(jsonData.status).to.equal('success');",
+											"});",
+											"",
+											"if (jsonData.data.status === 'completed') {",
+											"    console.log('Job completed!');",
+											"    pm.environment.set('public_id', jsonData.data.result.public_id);",
+											"} else {",
+											"    console.log('Job status:', jsonData.data.status);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/job/{{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"job",
+										"{{job_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "3. Submit Positive Feedback",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test('Feedback submitted', function () {",
+											"    pm.response.to.have.status(200);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"request_hash\": \"{{request_hash}}\",\n  \"sentiment\": \"positive\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v2/feedback/quick",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v2",
+										"feedback",
+										"quick"
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "Complete end-to-end test flow"
+				}
+			],
+			"description": "Pre-configured test flows for common scenarios"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"// Add request timing",
+					"pm.environment.set('request_start', Date.now());"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"// Log response time",
+					"const start = pm.environment.get('request_start');",
+					"if (start) {",
+					"    const duration = Date.now() - start;",
+					"    console.log(`Response time: ${duration}ms`);",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "admin_api_key",
+			"value": "your-admin-api-key-here",
+			"type": "string"
+		},
+		{
+			"key": "job_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "public_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "request_hash",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

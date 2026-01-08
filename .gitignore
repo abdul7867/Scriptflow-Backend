@@ -38,6 +38,7 @@ gcp-service-account.json
 !package.json
 !package-lock.json
 !tsconfig.json
+!postman/*.json
 
 # AWS Credentials
 .aws/
@@ -111,6 +112,8 @@ jest.config.js
 jest.setup.js
 *.test.ts
 *.spec.ts
+__tests__/
+__mocks__/
 
 # ==============================================
 # SCRATCH & DEBUG FILES
@@ -125,7 +128,29 @@ debug/
 render.yaml
 
 # ==============================================
-# DOCUMENTATION (Keep locally, don't commit)
+# DOCUMENTATION
+# Keep important docs, ignore generated reports
 # ==============================================
 *.md
 !README.md
+!MANYCHAT_INTEGRATION_GUIDE.md
+!CHATBOT_ARCHITECTURE.md
+!MANYCHAT_SETUP_GUIDE.md
+!QUICK_REFERENCE.md
+!QUICK_START_PRODUCTION.md
+
+# ==============================================
+# MEDIA FILES (generated at runtime)
+# ==============================================
+*.mp4
+*.webm
+*.mp3
+*.wav
+temp/**/*.png
+temp/**/*.jpg
+
+# ==============================================
+# FONTS (keep in repo for image generation)
+# ==============================================
+!fonts/
+!fonts/**

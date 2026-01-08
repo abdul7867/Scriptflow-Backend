@@ -31,3 +31,7 @@ export {
   getWaitlist,
   promoteNextFromWaitlist
 } from './betaAccess';
+
+// Health Gate - System overload protection (Layer 2 of Defense-in-Depth)
+export { healthGate, getSystemHealth } from './healthGate';
+export type { SystemHealth, DegradationLevel, HealthGateConfig } from './healthGate';

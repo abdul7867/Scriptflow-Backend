@@ -8,10 +8,12 @@ declare module 'ffprobe-static' {
 }
 
 // Extend Express Request to include requestId for tracing
-import { Request } from 'express';
+import 'express';
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    requestId?: string;
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+    }
   }
 }

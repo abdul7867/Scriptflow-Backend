@@ -1,0 +1,593 @@
+{
+	"info": {
+		"_postman_id": "scriptflow-v3-webhook-2024",
+		"name": "ScriptFlow V3 - Webhook API (FSM)",
+		"description": "V3 Webhook API with Finite State Machine and Intent Classification\n\n**Architecture:**\n- Intent Classifier: Detects user intent from messages\n- FSM (Finite State Machine): Manages conversation states\n- Loop Prevention: Prevents infinite loops from ManyChat\n- Smart Flow Detection: Automatically routes to appropriate flow\n\n**States:**\n- IDLE: Waiting for user input\n- AWAITING_IDEA: Waiting for content idea\n- AWAITING_REEL: Waiting for Instagram Reel URL\n- PROCESSING: Job queued/processing\n- COMPLETED: Script delivered\n\n**Intents:**\n- SCRIPT_REQUEST: User wants to generate script\n- PROVIDE_IDEA: User provides content idea\n- PROVIDE_REEL: User provides Reel URL\n- REGENERATE: User wants variation\n- HELP: User needs assistance",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "V3 Webhook Flow",
+			"item": [
+				{
+					"name": "1. Start Conversation (No URL)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('Action is prompted', function () {",
+									"    pm.expect(jsonData.action).to.eql('prompted');",
+									"});",
+									"",
+									"pm.test('State is AWAITING_REEL', function () {",
+									"    pm.expect(jsonData.state).to.eql('AWAITING_REEL');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"I want to create a script\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "User starts conversation without providing a Reel URL.\n\n**Expected Flow:**\n1. Intent Classifier detects: SCRIPT_REQUEST\n2. FSM: IDLE → AWAITING_REEL\n3. Response: Prompt user for Reel URL\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"prompted\",\n  \"message\": \"Please send me an Instagram Reel URL!\",\n  \"state\": \"AWAITING_REEL\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "2. Provide Reel URL",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('Action is prompted', function () {",
+									"    pm.expect(jsonData.action).to.eql('prompted');",
+									"});",
+									"",
+									"pm.test('State is AWAITING_IDEA', function () {",
+									"    pm.expect(jsonData.state).to.eql('AWAITING_IDEA');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"https://www.instagram.com/reel/C1234567890/\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "User provides Instagram Reel URL.\n\n**Expected Flow:**\n1. Intent Classifier detects: PROVIDE_REEL\n2. FSM: AWAITING_REEL → AWAITING_IDEA\n3. Reel URL extracted and saved\n4. Response: Prompt user for content idea\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"prompted\",\n  \"message\": \"Got it! What content idea should I use for your script?\",\n  \"state\": \"AWAITING_IDEA\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "3. Provide Content Idea (Job Queued)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('Action is queued', function () {",
+									"    pm.expect(jsonData.action).to.eql('queued');",
+									"});",
+									"",
+									"pm.test('Job ID exists', function () {",
+									"    pm.expect(jsonData.jobId).to.exist;",
+									"    pm.environment.set('v3_job_id', jsonData.jobId);",
+									"});",
+									"",
+									"pm.test('State is PROCESSING', function () {",
+									"    pm.expect(jsonData.state).to.eql('PROCESSING');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"Create a motivational script about overcoming challenges\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "User provides content idea after providing Reel URL.\n\n**Expected Flow:**\n1. Intent Classifier detects: PROVIDE_IDEA\n2. FSM: AWAITING_IDEA → PROCESSING\n3. Job queued in BullMQ\n4. Response: Job queued confirmation\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"queued\",\n  \"message\": \"🎬 Analyzing your reel... I'll send the script shortly!\",\n  \"jobId\": \"req_1234567890_abc123\",\n  \"state\": \"PROCESSING\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "4. Complete Flow (Reel + Idea Together)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('Job queued directly', function () {",
+									"    pm.expect(jsonData.action).to.be.oneOf(['queued', 'cached']);",
+									"});",
+									"",
+									"if (jsonData.jobId) {",
+									"    pm.environment.set('v3_job_id', jsonData.jobId);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Create a script about productivity hacks for entrepreneurs\",\n  \"tone_hint\": \"professional\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "**Smart Flow:** User provides both Reel URL and idea in single message.\n\n**Expected Flow:**\n1. Intent Classifier detects: SCRIPT_REQUEST (with full context)\n2. FSM: IDLE → PROCESSING (skip prompts)\n3. Job queued immediately\n4. Response: Job queued\n\n**This is the recommended ManyChat integration flow:**\n- Collect reel_url via URL button\n- Collect user_idea via text input\n- Send both in webhook payload\n- Skip multi-step conversation\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"queued\",\n  \"message\": \"🎬 Analyzing your reel... I'll send the script shortly!\",\n  \"jobId\": \"req_1234567890_def456\",\n  \"state\": \"PROCESSING\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "5. Request Variation (Regenerate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('New job queued', function () {",
+									"    pm.expect(jsonData.action).to.eql('queued');",
+									"});",
+									"",
+									"pm.test('Different job ID', function () {",
+									"    const previousJobId = pm.environment.get('v3_job_id');",
+									"    pm.expect(jsonData.jobId).to.not.equal(previousJobId);",
+									"    pm.environment.set('v3_job_id', jsonData.jobId);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"another one\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "User requests variation of previous script.\n\n**Trigger Words:** \"another\", \"again\", \"redo\", \"remix\", \"🔄\"\n\n**Expected Flow:**\n1. Intent Classifier detects: REGENERATE\n2. FSM: COMPLETED → PROCESSING\n3. Loads previous context (reel + idea)\n4. Generates variation with anti-repetition\n5. Response: New job queued\n\n**AI Behavior:**\n- Avoids repeating previous hooks\n- Generates fresh angles\n- Maintains video DNA\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"queued\",\n  \"message\": \"🔄 Creating a fresh version for you!\",\n  \"jobId\": \"req_1234567890_xyz789\",\n  \"state\": \"PROCESSING\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "6. Check V3 Job Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const jsonData = pm.response.json();",
+									"",
+									"pm.test('Job exists', function () {",
+									"    pm.expect(jsonData.status).to.eql('success');",
+									"    pm.expect(jsonData.job).to.exist;",
+									"});",
+									"",
+									"pm.test('Job has valid status', function () {",
+									"    pm.expect(jsonData.job.status).to.be.oneOf(['queued', 'processing', 'completed', 'failed']);",
+									"});",
+									"",
+									"console.log('Job Status:', jsonData.job.status);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v3/job/{{v3_job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"job",
+								"{{v3_job_id}}"
+							]
+						},
+						"description": "Check status of V3 webhook job.\n\n**Job Lifecycle:**\n1. `queued` - Waiting in queue\n2. `processing` - Currently being processed\n3. `completed` - Success (script delivered)\n4. `failed` - Error occurred\n\n**Poll every 3-5 seconds until completed.**\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"job\": {\n    \"id\": \"req_1234567890_abc123\",\n    \"status\": \"completed\",\n    \"attempts\": 1,\n    \"createdAt\": \"2026-01-08T10:00:00.000Z\",\n    \"completedAt\": \"2026-01-08T10:00:35.123Z\",\n    \"processingTimeMs\": 35123\n  }\n}\n```"
+					},
+					"response": []
+				}
+			],
+			"description": "Complete V3 webhook conversation flows with FSM state management"
+		},
+		{
+			"name": "Edge Cases & Error Handling",
+			"item": [
+				{
+					"name": "Rate Limit Exceeded",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Test rate limit\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Test rate limiting (10 requests/hour).\n\n**Response (429):**\n```json\n{\n  \"status\": \"error\",\n  \"action\": \"rate_limited\",\n  \"message\": \"You've reached your hourly limit (10 requests). Please try again later!\",\n  \"code\": \"USER_RATE_LIMIT_EXCEEDED\",\n  \"rateLimit\": {\n    \"remaining\": 0,\n    \"limit\": 10,\n    \"resetInSeconds\": 3456\n  }\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "User Blocked",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"blocked_user_123\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Test\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Test blocked user detection.\n\n**Response (403):**\n```json\n{\n  \"status\": \"error\",\n  \"action\": \"blocked\",\n  \"message\": \"Access denied. Contact support if you believe this is an error.\",\n  \"code\": \"USER_BLOCKED\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Invalid State Transition",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"regenerate\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Test invalid FSM transition (e.g., REGENERATE from IDLE).\n\n**Response (400):**\n```json\n{\n  \"status\": \"error\",\n  \"action\": \"invalid_transition\",\n  \"message\": \"Cannot perform this action in current state\",\n  \"code\": \"INVALID_TRANSITION\",\n  \"currentState\": \"IDLE\",\n  \"validEvents\": [\"SCRIPT_REQUEST\"]\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Loop Prevention (Ignored)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"user_idea\": \"Test\",\n  \"source\": \"automation\",\n  \"message_source\": \"custom_field_changed\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Test loop prevention system.\n\nIf ManyChat sends automated messages (e.g., from Custom Field Changed trigger), the system detects and ignores them to prevent infinite loops.\n\n**Response (200):**\n```json\n{\n  \"status\": \"ignored\",\n  \"action\": \"ignored\",\n  \"message\": \"Request ignored (loop prevention)\",\n  \"code\": \"LOOP_DETECTED\"\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Cached Result (Duplicate)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\",\n  \"reel_url\": \"https://www.instagram.com/reel/C1234567890/\",\n  \"user_idea\": \"Create a script about productivity hacks for entrepreneurs\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/webhook",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Submit same request again to test caching.\n\n**Expected:** System detects duplicate and returns cached result instantly.\n\n**Response (200):**\n```json\n{\n  \"status\": \"success\",\n  \"action\": \"cached\",\n  \"message\": \"Found your previous script! ✨\",\n  \"cached\": true\n}\n```\n\nScript is re-delivered via ManyChat without re-processing."
+					},
+					"response": []
+				}
+			],
+			"description": "Error scenarios and edge case handling"
+		},
+		{
+			"name": "FSM State Management",
+			"item": [
+				{
+					"name": "Get Current User State",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v3/state/{{subscriber_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"state",
+								"{{subscriber_id}}"
+							]
+						},
+						"description": "Get current FSM state for a user.\n\n**Note:** This endpoint might not be implemented yet. It's for debugging purposes.\n\n**Expected Response:**\n```json\n{\n  \"status\": \"success\",\n  \"state\": {\n    \"current\": \"AWAITING_IDEA\",\n    \"context\": {\n      \"reelUrl\": \"https://www.instagram.com/reel/...\",\n      \"userIdea\": null,\n      \"jobId\": null\n    },\n    \"history\": [\n      { \"from\": \"IDLE\", \"to\": \"AWAITING_REEL\", \"timestamp\": \"...\" },\n      { \"from\": \"AWAITING_REEL\", \"to\": \"AWAITING_IDEA\", \"timestamp\": \"...\" }\n    ]\n  }\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Reset User State (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{admin_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v3/admin/reset-state",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"admin",
+								"reset-state"
+							]
+						},
+						"description": "Reset user FSM state to IDLE (admin only).\n\n**Use when:**\n- User stuck in invalid state\n- Testing FSM transitions\n- Debugging conversation flow\n\n**Requires:** Admin API key\n\n**Response:**\n```json\n{\n  \"status\": \"success\",\n  \"message\": \"User state reset to IDLE\"\n}\n```"
+					},
+					"response": []
+				}
+			],
+			"description": "FSM state inspection and management (mostly for debugging)"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"pm.environment.set('request_start', Date.now());"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"const start = pm.environment.get('request_start');",
+					"if (start) {",
+					"    const duration = Date.now() - start;",
+					"    console.log(`⏱️ Response time: ${duration}ms`);",
+					"    ",
+					"    if (duration > 5000) {",
+					"        console.warn('⚠️ Slow response (>5s)');",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "admin_api_key",
+			"value": "your-admin-api-key-here",
+			"type": "string"
+		},
+		{
+			"key": "subscriber_id",
+			"value": "1234567890",
+			"type": "string"
+		},
+		{
+			"key": "v3_job_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
