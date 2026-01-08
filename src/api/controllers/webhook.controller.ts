@@ -29,10 +29,18 @@ import { z } from 'zod';
 
 /**
  * Webhook request validation schema
+ * 
+ * Supports multiple ManyChat variable formats:
+ * - subscriber_id OR contact_id (for subscriber identification)
+ * - user_idea OR last_text_input (for user message)
  */
 const webhookRequestSchema = z.object({
-    subscriber_id: z.string().min(1, 'subscriber_id is required'),
-    user_idea: z.string().optional().default(''),
+    // Accept either subscriber_id or contact_id
+    subscriber_id: z.string().optional(),
+    contact_id: z.string().optional(),
+    // Accept either user_idea or last_text_input
+    user_idea: z.string().optional(),
+    last_text_input: z.string().optional(),
     reel_url: z.string().url().optional(),
     // Transform empty strings to undefined for optional enum fields
     tone_hint: z.preprocess(
@@ -50,7 +58,10 @@ const webhookRequestSchema = z.object({
     // Loop prevention fields
     source: z.string().optional(), // e.g., 'automation', 'user', 'broadcast'
     message_source: z.string().optional(), // ManyChat message source
-});
+}).refine(
+    (data) => data.subscriber_id || data.contact_id,
+    { message: 'Either subscriber_id or contact_id is required', path: ['subscriber_id'] }
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RESPONSE HELPERS
@@ -196,7 +207,9 @@ export const webhookHandler = async (req: Request, res: Response): Promise<void>
 
         const {
             subscriber_id,
+            contact_id,
             user_idea,
+            last_text_input,
             reel_url,
             tone_hint,
             language_hint,
@@ -205,12 +218,17 @@ export const webhookHandler = async (req: Request, res: Response): Promise<void>
             message_source
         } = parseResult.data;
 
+        // Use whichever field was provided (subscriber_id or contact_id)
+        const subscriberId = subscriber_id || contact_id || '';
+        // Use whichever field was provided (user_idea or last_text_input)
+        const rawMessage = user_idea || last_text_input || '';
+
         // ─────────────────────────────────────────────────────────────────────────
         // 2. DELEGATE TO SERVICE
         // ─────────────────────────────────────────────────────────────────────────
         const result: WebhookResult = await webhookService.processWebhook({
-            subscriberId: subscriber_id,
-            rawMessage: user_idea || '',
+            subscriberId,
+            rawMessage,
             reelUrl: reel_url,
             toneHint: tone_hint,
             languageHint: language_hint,

@@ -98,13 +98,16 @@ Since we're not creating keyword triggers, it catches EVERYTHING!
 │  Headers:                                                       │
 │    Content-Type: application/json                               │
 │                                                                 │
-│  Body (paste this exactly):                                     │
+│  Body (use Variable Picker to insert fields):                   │
 │  {                                                              │
-│    "subscriber_id": "{{psid}}",                                │
-│    "user_idea": "{{last_input_text}}",                         │
-│    "language_hint": "{{locale}}",                              │
+│    "subscriber_id": "[Contact Id]",                            │
+│    "user_idea": "[Last Text Input]",                           │
 │    "source": "user"                                            │
 │  }                                                              │
+│                                                                 │
+│  NOTE: Use ManyChat's {x} Variable Picker to insert fields!    │
+│  - Click {x} → System Fields → Contact Id                      │
+│  - Click {x} → System Fields → Last Text Input                 │
 │                                                                 │
 │  Response Mapping: None (backend sends responses directly)      │
 │                                                                 │
@@ -124,25 +127,33 @@ The backend handles all the logic - no keyword triggers needed in ManyChat!
 
 ## 📤 WEBHOOK REQUEST BODY
 
-Copy this exact JSON for the External Request body:
+**IMPORTANT:** Do NOT type variables manually! Use ManyChat's **{x} Variable Picker**.
+
+### Step-by-Step to Build the Body:
+
+1. Type: `{"subscriber_id": "`
+2. Click **{x}** → System Fields → **Contact Id**
+3. Type: `", "user_idea": "`
+4. Click **{x}** → System Fields → **Last Text Input**
+5. Type: `", "source": "user"}`
+
+### Final Result (what ManyChat generates):
 
 ```json
 {
-  "subscriber_id": "{{psid}}",
-  "user_idea": "{{last_input_text}}",
-  "language_hint": "{{locale}}",
+  "subscriber_id": "{{contact_id}}",
+  "user_idea": "{{last_text_input}}",
   "source": "user"
 }
 ```
 
 ### Field Descriptions
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `subscriber_id` | ✅ YES | ManyChat subscriber ID (`{{psid}}`) |
-| `user_idea` | ✅ YES | The user's message (`{{last_input_text}}`) |
-| `language_hint` | ❌ No | User's language (`{{locale}}`) |
-| `source` | ❌ No | Always "user" for loop prevention |
+| Field | Required | ManyChat System Field | Description |
+|-------|----------|----------------------|-------------|
+| `subscriber_id` | ✅ YES | **Contact Id** | ManyChat subscriber ID |
+| `user_idea` | ✅ YES | **Last Text Input** | The user's message |
+| `source` | ❌ No | (hardcoded) | Always "user" for loop prevention |
 
 ---
 
