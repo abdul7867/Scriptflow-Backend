@@ -56,7 +56,8 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
 const DEFAULT_CONFIG: HealthGateConfig = {
     // In development, disable memory-based rejection (set to 1.0 = 100%)
     // ts-node uses ~430MB which would always trigger rejection
-    memoryThreshold: parseFloat(process.env.HEALTH_GATE_MEMORY_THRESHOLD || (isDevelopment ? '1.0' : '0.85')),
+    // In production with increased heap (1536MB), use 90% threshold
+    memoryThreshold: parseFloat(process.env.HEALTH_GATE_MEMORY_THRESHOLD || (isDevelopment ? '1.0' : '0.90')),
     queueDepthThreshold: parseInt(process.env.HEALTH_GATE_QUEUE_THRESHOLD || '150', 10),
     cacheInterval: 5000,  // Check every 5 seconds
     gracePeriod: 30000,   // 30 seconds after startup
@@ -165,7 +166,7 @@ function isInGracePeriod(): boolean {
  * Health Gate Middleware
  * 
  * Rejects requests early when system is under stress to prevent crashes.
- * Allows health check endpoints to pass through.
+ * Allows health check endpoints and critical webhook endpoints to pass through.
  */
 export async function healthGate(
     req: Request,
@@ -174,6 +175,12 @@ export async function healthGate(
 ): Promise<void> {
     // Always allow health check endpoints to pass through
     if (req.path.startsWith('/health')) {
+        return next();
+    }
+
+    // Always allow webhook endpoint to pass through - ManyChat needs a response
+    // The webhook service has its own rate limiting and will queue jobs appropriately
+    if (req.path === '/api/v3/webhook') {
         return next();
     }
 

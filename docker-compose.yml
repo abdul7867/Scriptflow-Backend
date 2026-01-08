@@ -9,6 +9,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Increase Node.js heap size to use available container memory
+      - NODE_OPTIONS=--max-old-space-size=1536
       # yt-dlp filesystem configuration (prevents read-only errors)
       - HOME=/app/temp
       - XDG_CACHE_HOME=/app/temp/.cache
