@@ -369,10 +369,17 @@ class ManyChatFlowService {
         retryCount: number = 0
     ): Promise<boolean> {
         try {
+            // Validate subscriber ID is numeric (ManyChat requirement)
+            const subscriberIdNum = parseInt(subscriberId, 10);
+            if (isNaN(subscriberIdNum)) {
+                logger.warn('[ManyChatFlow] Invalid subscriber ID (not numeric)', { subscriberId });
+                return false;
+            }
+
             const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
 
             await axios.post(sendContentUrl, {
-                subscriber_id: subscriberId,
+                subscriber_id: subscriberIdNum,
                 data: {
                     version: "v2",
                     content: {
@@ -382,7 +389,7 @@ class ManyChatFlowService {
                         }]
                     }
                 },
-                message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+                message_tag: "POST_PURCHASE_UPDATE"
             }, {
                 headers: {
                     'Authorization': `Bearer ${this.apiKey}`,
@@ -393,7 +400,22 @@ class ManyChatFlowService {
 
             return true;
         } catch (error: any) {
-            // Retry logic
+            // Log detailed error info for 400 errors
+            if (error.response?.status === 400) {
+                logger.error('[ManyChatFlow] API returned 400 Bad Request', {
+                    subscriberId,
+                    responseData: error.response?.data,
+                    requestPayload: {
+                        subscriber_id: subscriberId,
+                        message_tag: 'POST_PURCHASE_UPDATE'
+                    }
+                });
+
+                // Don't retry 400 errors - they're usually permanent (invalid subscriber, etc.)
+                return false;
+            }
+
+            // Retry logic for transient errors (5xx, network issues)
             if (retryCount < MAX_RETRIES) {
                 logger.warn(`[ManyChatFlow] Retrying message send (attempt ${retryCount + 1})`, {
                     subscriberId,
@@ -429,6 +451,13 @@ class ManyChatFlowService {
         }
 
         try {
+            // Validate subscriber ID is numeric
+            const subscriberIdNum = parseInt(subscriberId, 10);
+            if (isNaN(subscriberIdNum)) {
+                logger.warn('[ManyChatFlow] Invalid subscriber ID (not numeric)', { subscriberId });
+                return false;
+            }
+
             const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
 
             const elements = [
@@ -456,7 +485,7 @@ class ManyChatFlowService {
             ];
 
             await axios.post(sendContentUrl, {
-                subscriber_id: subscriberId,
+                subscriber_id: subscriberIdNum,
                 data: {
                     version: "v2",
                     content: {
@@ -465,7 +494,7 @@ class ManyChatFlowService {
                         image_aspect_ratio: "square"
                     }
                 },
-                message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+                message_tag: "POST_PURCHASE_UPDATE"
             }, {
                 headers: {
                     'Authorization': `Bearer ${this.apiKey}`,

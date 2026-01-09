@@ -123,6 +123,22 @@ if docker-compose --env-file "$SECRETS_DIR/.env" ps 2>/dev/null | grep -q "app";
 fi
 
 # =============================================================================
+# Prepare Directories
+# =============================================================================
+echo ""
+echo "Preparing directories..."
+
+# Ensure temp directory exists with proper permissions for Docker container
+mkdir -p "$PROJECT_DIR/temp/.cache" "$PROJECT_DIR/temp/.config"
+
+# Make temp writable by Docker container (scriptflow user UID 1000)
+# This is CRITICAL - Docker volume mounts use host permissions
+chmod -R 777 "$PROJECT_DIR/temp"
+chown -R 1000:1000 "$PROJECT_DIR/temp" 2>/dev/null || sudo chown -R 1000:1000 "$PROJECT_DIR/temp" 2>/dev/null || true
+
+print_status "Directories prepared with proper permissions"
+
+# =============================================================================
 # Deploy
 # =============================================================================
 echo ""

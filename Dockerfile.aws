@@ -37,7 +37,8 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
     && chmod a+rx /usr/local/bin/yt-dlp
 
 # Create non-root user for security
-RUN groupadd -r scriptflow && useradd -r -g scriptflow scriptflow
+# Use UID/GID 1000 to match default ubuntu user on EC2 (ensures mounted volumes are writable)
+RUN groupadd -g 1000 scriptflow && useradd -u 1000 -g scriptflow scriptflow
 
 # Copy built artifacts and production deps
 COPY --from=builder /app/dist ./dist

@@ -143,6 +143,7 @@ render.yaml
 !QUICK_REFERENCE.md
 !QUICK_START_PRODUCTION.md
 !DEPLOYMENT_SETUP.md
+!DEPLOYMENT_FIX.md
 
 # ==============================================
 # MEDIA FILES (generated at runtime)

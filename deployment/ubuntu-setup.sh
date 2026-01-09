@@ -212,13 +212,18 @@ fi
 
 # Create secrets directory
 mkdir -p "$PROJECT_DIR/secrets"
-mkdir -p "$PROJECT_DIR/temp"
+mkdir -p "$PROJECT_DIR/temp/.cache"
+mkdir -p "$PROJECT_DIR/temp/.config"
 mkdir -p "$PROJECT_DIR/fonts"
 
 # Set proper permissions
 chmod 700 "$PROJECT_DIR/secrets"
+# IMPORTANT: Make temp directory writable by Docker container (scriptflow user UID 1000)
+# This is required because Docker mounts override container permissions
+chmod -R 777 "$PROJECT_DIR/temp"
+chown -R 1000:1000 "$PROJECT_DIR/temp" 2>/dev/null || true
 
-print_status "Project directories created"
+print_status "Project directories created with proper permissions"
 
 # =============================================================================
 # Summary
