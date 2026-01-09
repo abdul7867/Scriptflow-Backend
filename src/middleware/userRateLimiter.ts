@@ -37,12 +37,12 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Get subscriber_id from request body
-      const subscriberId = req.body?.subscriber_id;
+      // Get subscriber_id from request body (accept either subscriber_id or contact_id)
+      const subscriberId = req.body?.subscriber_id || req.body?.contact_id;
 
       if (!subscriberId) {
         // If no subscriber_id, fall back to IP-based limiting
-        logger.warn('No subscriber_id in request, falling back to IP');
+        logger.warn('No subscriber_id/contact_id in request, falling back to IP');
         return next();
       }
 
@@ -66,11 +66,11 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
         logger.warn(`User rate limit exceeded: ${subscriberId} (${count}/${maxRequests})`);
 
         // Send friendly DM to user via ManyChat with upgrade prompt
-        const rateLimitMessage = 
+        const rateLimitMessage =
           `⏰ You've used all ${maxRequests} scripts this hour!\n\n` +
           `🔄 Reset in ${resetMinutes} minute${resetMinutes !== 1 ? 's' : ''}.\n\n` +
           `💡 Want more? Reply UPGRADE to unlock 50 scripts/hour!`;
-        
+
         try {
           await sendTextMessage(subscriberId, rateLimitMessage);
           logger.info(`Rate limit DM sent to user: ${subscriberId}`);
@@ -165,7 +165,8 @@ export async function unblockUser(subscriberId: string) {
  * Middleware to check if user is blocked
  */
 export const checkUserBlocked = async (req: Request, res: Response, next: NextFunction) => {
-  const subscriberId = req.body?.subscriber_id;
+  // Accept either subscriber_id or contact_id (ManyChat uses both)
+  const subscriberId = req.body?.subscriber_id || req.body?.contact_id;
 
   if (!subscriberId) {
     return next();

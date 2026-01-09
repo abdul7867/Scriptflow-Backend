@@ -35,6 +35,18 @@ export function createServer() {
   // 1 = trust first proxy hop (appropriate when behind single proxy like AWS ALB, Nginx)
   app.set('trust proxy', 1);
 
+  // ===== REQUEST LOGGING (First middleware - logs ALL incoming requests) =====
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Log every incoming request for debugging
+    // This runs BEFORE any other middleware, so we can see if requests are reaching the server
+    logger.info(`[Incoming] ${req.method} ${req.path}`, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent']?.substring(0, 50),
+      contentLength: req.headers['content-length'],
+    });
+    next();
+  });
+
   // ===== SECURITY MIDDLEWARE (Order matters!) =====
 
   // 1. Security headers (Helmet)
@@ -47,12 +59,18 @@ export function createServer() {
   app.use(securityLogger);
 
   // 4. CORS - Configure properly
+  // Allow ManyChat, our own domain, and subdomains in production
   app.use(cors({
     origin: config.NODE_ENV === 'production'
-      ? ['https://manychat.com', /\.manychat\.com$/]
+      ? [
+        'https://manychat.com',
+        /\.manychat\.com$/,
+        'https://scriptflow.app',
+        /\.scriptflow\.app$/
+      ]
       : '*',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-request-id'],
     credentials: true
   }));
 

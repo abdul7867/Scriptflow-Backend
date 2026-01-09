@@ -16,13 +16,18 @@ const MAX_USERS = parseInt(process.env.MAX_BETA_USERS || '100', 10);
  */
 export const betaAccessControl = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const subscriberId = req.body?.subscriber_id;
+    // Accept either subscriber_id or contact_id (ManyChat uses both)
+    const subscriberId = req.body?.subscriber_id || req.body?.contact_id;
 
     if (!subscriberId) {
+      logger.warn('[BetaAccess] Missing subscriber_id/contact_id in request', {
+        path: req.path,
+        body: JSON.stringify(req.body).substring(0, 200),
+      });
       return res.status(400).json({
         status: 'error',
         code: 'MISSING_SUBSCRIBER_ID',
-        message: 'subscriber_id is required'
+        message: 'subscriber_id or contact_id is required'
       });
     }
 
@@ -42,7 +47,7 @@ export const betaAccessControl = async (req: Request, res: Response, next: NextF
       if (user.accessStatus === 'waitlist') {
         // Check if slots opened up (user might have been on waitlist but now has a slot)
         const activeCount = await User.countDocuments({ accessStatus: 'active' });
-        
+
         if (activeCount < MAX_USERS) {
           // Promote from waitlist!
           user.accessStatus = 'active';
@@ -95,7 +100,7 @@ export const betaAccessControl = async (req: Request, res: Response, next: NextF
 
     // No capacity - add to waitlist
     const waitlistCount = await User.countDocuments({ accessStatus: 'waitlist' });
-    
+
     user = await User.create({
       subscriberId,
       accessStatus: 'waitlist',
@@ -146,13 +151,13 @@ export async function getBetaStats() {
  */
 export async function grantAccess(subscriberId: string): Promise<boolean> {
   const user = await User.findOne({ subscriberId, accessStatus: 'waitlist' });
-  
+
   if (!user) {
     return false;
   }
 
   const activeCount = await User.countDocuments({ accessStatus: 'active' });
-  
+
   user.accessStatus = 'active';
   user.registrationNumber = activeCount + 1;
   await user.save();
@@ -166,7 +171,7 @@ export async function grantAccess(subscriberId: string): Promise<boolean> {
  */
 export async function removeUser(subscriberId: string): Promise<boolean> {
   const result = await User.deleteOne({ subscriberId });
-  
+
   if (result.deletedCount > 0) {
     logger.info(`User removed: ${subscriberId}`);
     return true;
@@ -189,20 +194,20 @@ export async function getWaitlist(limit: number = 50) {
  */
 export async function promoteNextFromWaitlist(): Promise<IUser | null> {
   const activeCount = await User.countDocuments({ accessStatus: 'active' });
-  
+
   if (activeCount >= MAX_USERS) {
     return null; // No slots available
   }
 
   const nextUser = await User.findOneAndUpdate(
     { accessStatus: 'waitlist' },
-    { 
-      accessStatus: 'active', 
-      registrationNumber: activeCount + 1 
+    {
+      accessStatus: 'active',
+      registrationNumber: activeCount + 1
     },
-    { 
+    {
       sort: { createdAt: 1 }, // Oldest waitlist entry first
-      new: true 
+      new: true
     }
   );
 
