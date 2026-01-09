@@ -36,9 +36,8 @@ RUN apt-get update && apt-get install -y \
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# Create non-root user for security
-# Use UID/GID 1000 to match default ubuntu user on EC2 (ensures mounted volumes are writable)
-RUN groupadd -g 1000 scriptflow && useradd -u 1000 -g scriptflow scriptflow
+# Use the built-in 'node' user (UID/GID 1000) from node:20-slim
+# This matches the default ubuntu user on EC2, ensuring mounted volumes are writable
 
 # Copy built artifacts and production deps
 COPY --from=builder /app/dist ./dist
@@ -52,13 +51,13 @@ COPY fonts ./fonts
 
 # Create temp directory with cache/config subdirectories for yt-dlp
 RUN mkdir -p temp/.cache temp/.config \
-    && chown -R scriptflow:scriptflow /app
+    && chown -R node:node /app
 
 # Create secrets directory for sensitive files (mounted at runtime)
 # Contains: gcp-service-account.json, instagram_cookies.txt, etc.
 RUN mkdir -p secrets \
     && touch secrets/gcp-service-account.json secrets/instagram_cookies.txt \
-    && chown -R scriptflow:scriptflow /app/secrets
+    && chown -R node:node /app/secrets
 
 # Environment Setup
 ENV NODE_ENV=production
@@ -70,8 +69,8 @@ ENV XDG_CONFIG_HOME=/app/temp/.config
 # GCP credentials path (mounted at runtime from ./secrets volume)
 ENV GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-service-account.json
 
-# Switch to non-root user
-USER scriptflow
+# Switch to non-root user (node user has UID/GID 1000)
+USER node
 
 # Expose port
 EXPOSE 3000
