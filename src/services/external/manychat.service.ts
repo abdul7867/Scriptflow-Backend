@@ -5,6 +5,12 @@ import { config } from '../../config';
 // SECURITY: Request timeout to prevent hung connections
 const API_TIMEOUT_MS = 30000;
 
+// Helper to get API base URL based on channel config
+function getApiBaseUrl(): string {
+  const channel = config.MANYCHAT_CHANNEL || 'ig';
+  return `https://api.manychat.com/${channel}`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -57,15 +63,15 @@ export async function sendTextMessage(
   messageTag: string = 'NON_PROMOTIONAL_SUBSCRIPTION'
 ): Promise<boolean> {
   const apiKey = config.MANYCHAT_API_KEY;
-  
+
   if (!apiKey) {
     logger.warn('Skipping text message send: No MANYCHAT_API_KEY');
     return false;
   }
-  
+
   try {
-    const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
-    
+    const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
+
     await axios.post(sendContentUrl, {
       subscriber_id: subscriberId,
       data: {
@@ -85,7 +91,7 @@ export async function sendTextMessage(
       },
       timeout: API_TIMEOUT_MS
     });
-    
+
     logger.info(`Text message sent to ${subscriberId}`);
     return true;
   } catch (error: any) {
@@ -111,28 +117,28 @@ export async function sendTextMessage(
  */
 export async function sendCarousel(payload: CarouselPayload): Promise<SendCarouselResult> {
   const apiKey = config.MANYCHAT_API_KEY;
-  
+
   if (!apiKey) {
     logger.warn('Skipping carousel send: No MANYCHAT_API_KEY');
     return { success: false, method: 'failed', error: 'No API key' };
   }
-  
+
   const subscriberIdInt = parseInt(payload.subscriberId, 10);
   if (isNaN(subscriberIdInt)) {
     logger.error(`Invalid subscriber_id: ${payload.subscriberId}`);
     return { success: false, method: 'failed', error: 'Invalid subscriber ID' };
   }
-  
-  const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
-  const headers = { 
-    'Authorization': `Bearer ${apiKey}`, 
-    'Content-Type': 'application/json' 
+
+  const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
   };
-  
+
   // Strategy 1: Try carousel (cards)
   try {
     logger.info(`Attempting carousel send for ${payload.subscriberId}`);
-    
+
     // Build carousel elements
     const elements = payload.cards.map(card => ({
       title: card.title,
@@ -146,7 +152,7 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
         payload: btn.payload,
       })),
     }));
-    
+
     await axios.post(sendContentUrl, {
       subscriber_id: payload.subscriberId,
       data: {
@@ -162,19 +168,19 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
       headers,
       timeout: API_TIMEOUT_MS
     });
-    
+
     logger.info(`Carousel sent successfully to ${payload.subscriberId}`);
-    
+
     // Send copy link as follow-up
     if (payload.copyUrl) {
       await sendCopyLinkMessage(payload.subscriberId, payload.copyUrl, headers);
     }
-    
+
     return { success: true, method: 'carousel' };
-    
+
   } catch (carouselError: any) {
     logger.warn(`Carousel send failed, trying sequential: ${carouselError.message}`);
-    
+
     // Strategy 2: Try sequential images
     try {
       for (const card of payload.cards) {
@@ -193,26 +199,26 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
           headers,
           timeout: API_TIMEOUT_MS
         });
-        
+
         // Small delay between images to maintain order
         await new Promise(resolve => setTimeout(resolve, 300));
       }
-      
+
       logger.info(`Sequential images sent to ${payload.subscriberId}`);
-      
+
       // Send copy link
       if (payload.copyUrl) {
         await sendCopyLinkMessage(payload.subscriberId, payload.copyUrl, headers);
       }
-      
+
       return { success: true, method: 'sequential' };
-      
+
     } catch (sequentialError: any) {
       logger.error(`Sequential send also failed: ${sequentialError.message}`);
-      return { 
-        success: false, 
-        method: 'failed', 
-        error: `Carousel: ${carouselError.message}, Sequential: ${sequentialError.message}` 
+      return {
+        success: false,
+        method: 'failed',
+        error: `Carousel: ${carouselError.message}, Sequential: ${sequentialError.message}`
       };
     }
   }
@@ -222,21 +228,21 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
  * Send copy link message
  */
 async function sendCopyLinkMessage(
-  subscriberId: string, 
-  copyUrl: string, 
+  subscriberId: string,
+  copyUrl: string,
   headers: Record<string, string>
 ): Promise<void> {
   try {
-    const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
-    
+    const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
+
     await axios.post(sendContentUrl, {
       subscriber_id: subscriberId,
       data: {
         version: "v2",
         content: {
-          messages: [{ 
-            type: "text", 
-            text: `📋 Tap to copy your script:\n${copyUrl}` 
+          messages: [{
+            type: "text",
+            text: `📋 Tap to copy your script:\n${copyUrl}`
           }]
         }
       },
@@ -245,7 +251,7 @@ async function sendCopyLinkMessage(
       headers,
       timeout: API_TIMEOUT_MS
     });
-    
+
     logger.info(`Copy link sent to ${subscriberId}`);
   } catch (error: any) {
     logger.warn(`Failed to send copy link: ${error.message}`);
@@ -300,14 +306,14 @@ export function buildScriptCarouselCards(
 export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
   const apiKey = config.MANYCHAT_API_KEY;
   const enableDirect = config.MANYCHAT_ENABLE_DIRECT_MESSAGING === 'true';
-  
+
   if (!apiKey) {
     logger.warn('Skipping ManyChat send: No MANYCHAT_API_KEY provided.');
     return;
   }
 
   const subscriberIdInt = parseInt(payload.subscriber_id, 10);
-  
+
   if (isNaN(subscriberIdInt)) {
     logger.error(`Invalid subscriber_id: ${payload.subscriber_id}`);
     return;
@@ -317,8 +323,8 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
     logger.info(`Sending to ManyChat. Subscriber: ${payload.subscriber_id}`);
 
     // 1. Update Custom Fields
-    const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
-    
+    const setFieldUrl = `${getApiBaseUrl()}/subscriber/setCustomField`;
+
     // [OPTIMIZATION] Update Copy URL Field FIRST
     // We do this before the image trigger so the link is ready when the automation starts.
     if (payload.scriptUrl && config.MANYCHAT_COPY_FIELD_ID) {
@@ -349,8 +355,8 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
 
     // 2. Direct Messaging (CONTROLLABLE BY CONFIG)
     if (enableDirect && payload.field_name === 'script_image_url') {
-      const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
-      
+      const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
+
       // Send Image
       try {
         await axios.post(sendContentUrl, {

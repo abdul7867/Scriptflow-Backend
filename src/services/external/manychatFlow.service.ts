@@ -304,9 +304,19 @@ const RETRY_DELAY_MS = 1000;
 class ManyChatFlowService {
 
     private apiKey: string | null;
+    private channel: string; // 'fb' for Facebook Messenger, 'ig' for Instagram
+    private apiBaseUrl: string;
 
     constructor() {
         this.apiKey = config.MANYCHAT_API_KEY || null;
+        this.channel = config.MANYCHAT_CHANNEL || 'ig';
+        this.apiBaseUrl = `https://api.manychat.com/${this.channel}`;
+
+        logger.info('[ManyChatFlow] Initialized', {
+            channel: this.channel,
+            apiBaseUrl: this.apiBaseUrl,
+            hasApiKey: !!this.apiKey
+        });
     }
 
     /**
@@ -376,7 +386,7 @@ class ManyChatFlowService {
                 return false;
             }
 
-            const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
+            const sendContentUrl = `${this.apiBaseUrl}/sending/sendContent`;
 
             await axios.post(sendContentUrl, {
                 subscriber_id: subscriberIdNum,
@@ -458,7 +468,7 @@ class ManyChatFlowService {
                 return false;
             }
 
-            const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
+            const sendContentUrl = `${this.apiBaseUrl}/sending/sendContent`;
 
             const elements = [
                 {
@@ -532,7 +542,7 @@ class ManyChatFlowService {
         }
 
         try {
-            const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
+            const setFieldUrl = `${this.apiBaseUrl}/subscriber/setCustomField`;
 
             const subscriberIdInt = parseInt(subscriberId, 10);
             const fieldIdInt = parseInt(fieldId, 10);
