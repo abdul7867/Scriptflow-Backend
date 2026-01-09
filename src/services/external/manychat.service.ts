@@ -7,7 +7,7 @@ const API_TIMEOUT_MS = 30000;
 
 // Helper to get API base URL based on channel config
 function getApiBaseUrl(): string {
-  const channel = config.MANYCHAT_CHANNEL || 'ig';
+  const channel = config.MANYCHAT_CHANNEL || 'fb';
   return `https://api.manychat.com/${channel}`;
 }
 

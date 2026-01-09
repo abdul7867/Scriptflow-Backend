@@ -33,7 +33,7 @@ export const config = cleanEnv(process.env, {
 
   // ManyChat
   MANYCHAT_API_KEY: str({ desc: 'API Key for ManyChat (Optional in dev)', default: '' }),
-  MANYCHAT_CHANNEL: str({ choices: ['fb', 'ig'], desc: 'ManyChat channel: fb (Facebook Messenger) or ig (Instagram)', default: 'ig' }),
+  MANYCHAT_CHANNEL: str({ choices: ['fb', 'ig'], desc: 'ManyChat channel: fb (default - works for both FB and Instagram)', default: 'fb' }),
   MANYCHAT_SCRIPT_FIELD_ID: str({ desc: 'Field ID for script image URL', default: '' }),
   MANYCHAT_COPY_FIELD_ID: str({ desc: 'Field ID for script copy URL', default: '' }),
   MANYCHAT_ENABLE_DIRECT_MESSAGING: str({ desc: 'Enable direct message sending', default: 'false' }),

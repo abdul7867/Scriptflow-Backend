@@ -309,7 +309,7 @@ class ManyChatFlowService {
 
     constructor() {
         this.apiKey = config.MANYCHAT_API_KEY || null;
-        this.channel = config.MANYCHAT_CHANNEL || 'ig';
+        this.channel = config.MANYCHAT_CHANNEL || 'fb';
         this.apiBaseUrl = `https://api.manychat.com/${this.channel}`;
 
         logger.info('[ManyChatFlow] Initialized', {
