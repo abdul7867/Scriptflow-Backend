@@ -185,7 +185,49 @@ export const webhookHandler = async (req: Request, res: Response): Promise<void>
 
     try {
         // ─────────────────────────────────────────────────────────────────────────
-        // 1. VALIDATE REQUEST
+        // 0. EARLY VALIDATION: Check subscriber_id FIRST before any processing
+        // This prevents wasting resources on invalid requests
+        // ─────────────────────────────────────────────────────────────────────────
+        const rawSubscriberId = req.body?.subscriber_id || req.body?.contact_id;
+        
+        if (!rawSubscriberId || rawSubscriberId === '' || rawSubscriberId === 'null' || rawSubscriberId === 'undefined') {
+            logger.warn(`[Controller:${requestId}] Invalid Subscriber ID`, {
+                subscriber_id: rawSubscriberId,
+                body: Object.keys(req.body || {}),
+            });
+
+            recordRequest({ flow: 'invalid_subscriber', status: 'error' });
+
+            res.status(400).json({
+                status: 'error',
+                code: 'INVALID_SUBSCRIBER_ID',
+                message: 'Invalid Subscriber ID: subscriber_id is null or missing',
+                requestId,
+            });
+            return;
+        }
+
+        // Validate subscriber_id is a valid number/string for ManyChat
+        const subscriberIdNum = parseInt(rawSubscriberId, 10);
+        if (isNaN(subscriberIdNum) || subscriberIdNum <= 0) {
+            logger.warn(`[Controller:${requestId}] Invalid Subscriber ID format`, {
+                subscriber_id: rawSubscriberId,
+                parsed: subscriberIdNum,
+            });
+
+            recordRequest({ flow: 'invalid_subscriber', status: 'error' });
+
+            res.status(400).json({
+                status: 'error',
+                code: 'INVALID_SUBSCRIBER_ID',
+                message: 'Invalid Subscriber ID: must be a valid positive number',
+                requestId,
+            });
+            return;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // 1. VALIDATE REQUEST (Full schema validation)
         // ─────────────────────────────────────────────────────────────────────────
         const parseResult = webhookRequestSchema.safeParse(req.body);
 
@@ -224,7 +266,8 @@ export const webhookHandler = async (req: Request, res: Response): Promise<void>
         const rawMessage = user_idea || last_text_input || '';
 
         // ─────────────────────────────────────────────────────────────────────────
-        // 2. DELEGATE TO SERVICE
+        // 2. DELEGATE TO SERVICE (Late-execution: heavy processing starts here)
+        // At this point, we've validated the subscriber_id and input
         // ─────────────────────────────────────────────────────────────────────────
         const result: WebhookResult = await webhookService.processWebhook({
             subscriberId,

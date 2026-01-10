@@ -159,6 +159,55 @@ function isInGracePeriod(): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BOT SCAN DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * List of suspicious paths commonly used by vulnerability scanners and bots.
+ * These requests should be dropped immediately to save resources.
+ */
+const BOT_SCAN_PATTERNS = [
+    // PHP exploits
+    '.php',
+    '.asp',
+    '.aspx',
+    // WordPress/CMS scans
+    '/wp-admin',
+    '/wp-login',
+    '/wp-content',
+    '/wp-includes',
+    '/xmlrpc',
+    '/wordpress',
+    // Common vulnerability scans
+    '/admin',
+    '/phpmyadmin',
+    '/mysql',
+    '/cgi-bin',
+    '/config',
+    '/.env',
+    '/.git',
+    '/backup',
+    '/shell',
+    '/cmd',
+    // SQL injection probes
+    '/union',
+    '/select',
+    // Other common attack vectors
+    '/etc/passwd',
+    '/proc/',
+    '../',
+    '..%2f',
+];
+
+/**
+ * Check if a path matches bot scan patterns
+ */
+function isBotScanPath(path: string): boolean {
+    const lowerPath = path.toLowerCase();
+    return BOT_SCAN_PATTERNS.some(pattern => lowerPath.includes(pattern));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MIDDLEWARE
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -166,6 +215,7 @@ function isInGracePeriod(): boolean {
  * Health Gate Middleware
  * 
  * Rejects requests early when system is under stress to prevent crashes.
+ * Also drops bot scans immediately to save memory and processing.
  * Allows health check endpoints and critical webhook endpoints to pass through.
  */
 export async function healthGate(
@@ -173,6 +223,17 @@ export async function healthGate(
     res: Response,
     next: NextFunction
 ): Promise<void> {
+    // ─────────────────────────────────────────────────────────────────────────
+    // STEP 0: Drop bot scans IMMEDIATELY - before any processing
+    // This saves memory and prevents wasting CPU on malicious requests
+    // ─────────────────────────────────────────────────────────────────────────
+    if (isBotScanPath(req.path)) {
+        // Silent drop - don't even log extensively to save resources
+        logger.debug('Health gate: Dropped bot scan', { path: req.path.substring(0, 50) });
+        res.status(404).end();
+        return;
+    }
+
     // Always allow health check endpoints to pass through
     if (req.path.startsWith('/health')) {
         return next();

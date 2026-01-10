@@ -40,6 +40,7 @@ export interface CarouselPayload {
   subscriberId: string;
   cards: CarouselCard[];
   copyUrl?: string;
+  /** @deprecated No longer used - responses to active users don't need message_tag */
   messageTag?: string;
 }
 
@@ -57,10 +58,17 @@ export interface SendCarouselResult {
  * Send a simple text message to a subscriber
  * Used for prompts, error messages, and acknowledgments
  */
+/**
+ * Send a simple text message to a subscriber
+ * Used for prompts, error messages, and acknowledgments
+ * 
+ * NOTE: No message_tag is sent by default.
+ * When responding to user-initiated messages within the 24-hour window,
+ * sending a message_tag causes "Channel is disabled" error.
+ */
 export async function sendTextMessage(
   subscriberId: string,
-  text: string,
-  messageTag: string = 'NON_PROMOTIONAL_SUBSCRIPTION'
+  text: string
 ): Promise<boolean> {
   const apiKey = config.MANYCHAT_API_KEY;
 
@@ -72,6 +80,7 @@ export async function sendTextMessage(
   try {
     const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
 
+    // No message_tag - responses to active users don't need it
     await axios.post(sendContentUrl, {
       subscriber_id: subscriberId,
       data: {
@@ -82,8 +91,7 @@ export async function sendTextMessage(
             text: text
           }]
         }
-      },
-      message_tag: messageTag
+      }
     }, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -153,6 +161,7 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
       })),
     }));
 
+    // No message_tag - responses to active users don't need it
     await axios.post(sendContentUrl, {
       subscriber_id: payload.subscriberId,
       data: {
@@ -162,8 +171,7 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
           elements,
           image_aspect_ratio: "square"  // 1:1 for our carousel cards
         }
-      },
-      message_tag: payload.messageTag || "NON_PROMOTIONAL_SUBSCRIPTION"
+      }
     }, {
       headers,
       timeout: API_TIMEOUT_MS
@@ -184,6 +192,7 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
     // Strategy 2: Try sequential images
     try {
       for (const card of payload.cards) {
+        // No message_tag - responses to active users don't need it
         await axios.post(sendContentUrl, {
           subscriber_id: payload.subscriberId,
           data: {
@@ -193,8 +202,7 @@ export async function sendCarousel(payload: CarouselPayload): Promise<SendCarous
               url: card.imageUrl,
               action: { type: "open_url", url: card.actionUrl || card.imageUrl }
             }
-          },
-          message_tag: payload.messageTag || "NON_PROMOTIONAL_SUBSCRIPTION"
+          }
         }, {
           headers,
           timeout: API_TIMEOUT_MS
@@ -235,6 +243,7 @@ async function sendCopyLinkMessage(
   try {
     const sendContentUrl = `${getApiBaseUrl()}/sending/sendContent`;
 
+    // No message_tag - responses to active users don't need it
     await axios.post(sendContentUrl, {
       subscriber_id: subscriberId,
       data: {
@@ -245,8 +254,7 @@ async function sendCopyLinkMessage(
             text: `📋 Tap to copy your script:\n${copyUrl}`
           }]
         }
-      },
-      message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+      }
     }, {
       headers,
       timeout: API_TIMEOUT_MS
@@ -359,6 +367,7 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
 
       // Send Image
       try {
+        // No message_tag - responses to active users don't need it
         await axios.post(sendContentUrl, {
           subscriber_id: payload.subscriber_id,
           data: {
@@ -368,8 +377,7 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
               url: payload.field_value,
               action: { type: "open_url", url: payload.field_value }
             }
-          },
-          message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+          }
         }, {
           headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           timeout: API_TIMEOUT_MS
@@ -381,6 +389,7 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
       // Send Copy Link text
       if (payload.scriptUrl) {
         try {
+          // No message_tag - responses to active users don't need it
           await axios.post(sendContentUrl, {
             subscriber_id: payload.subscriber_id,
             data: {
@@ -388,8 +397,7 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
               content: {
                 messages: [{ type: "text", text: `📋 Tap to copy script text:\n${payload.scriptUrl}` }]
               }
-            },
-            message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+            }
           }, {
             headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
             timeout: API_TIMEOUT_MS

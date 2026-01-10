@@ -388,6 +388,10 @@ class ManyChatFlowService {
 
             const sendContentUrl = `${this.apiBaseUrl}/sending/sendContent`;
 
+            // NOTE: No message_tag is sent.
+            // When responding to user-initiated messages within the 24-hour window,
+            // sending a message_tag causes "Channel is disabled" error (API error 3041).
+            // Since our webhook source is 'user', we are within the 24-hour window.
             await axios.post(sendContentUrl, {
                 subscriber_id: subscriberIdNum,
                 data: {
@@ -398,8 +402,8 @@ class ManyChatFlowService {
                             text: text
                         }]
                     }
-                },
-                message_tag: "POST_PURCHASE_UPDATE"
+                }
+                // message_tag removed - not needed for responses to active users
             }, {
                 headers: {
                     'Authorization': `Bearer ${this.apiKey}`,
@@ -494,6 +498,9 @@ class ManyChatFlowService {
                 }
             ];
 
+            // NOTE: No message_tag is sent.
+            // When responding to user-initiated messages within the 24-hour window,
+            // sending a message_tag causes "Channel is disabled" error (API error 3041).
             await axios.post(sendContentUrl, {
                 subscriber_id: subscriberIdNum,
                 data: {
@@ -503,8 +510,8 @@ class ManyChatFlowService {
                         elements,
                         image_aspect_ratio: "square"
                     }
-                },
-                message_tag: "POST_PURCHASE_UPDATE"
+                }
+                // message_tag removed - not needed for responses to active users
             }, {
                 headers: {
                     'Authorization': `Bearer ${this.apiKey}`,
