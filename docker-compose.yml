@@ -9,15 +9,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Increase Node.js heap size to use available container memory
-      - NODE_OPTIONS=--max-old-space-size=1536
+      # Memory optimized for t3.micro (1GB RAM) - heap 640MB, expose GC for memory governor
+      - NODE_OPTIONS=--max-old-space-size=640 --expose-gc
+      - MEMORY_HEAP_LIMIT_MB=640
       # yt-dlp filesystem configuration (prevents read-only errors)
       - HOME=/app/temp
       - XDG_CACHE_HOME=/app/temp/.cache
       - XDG_CONFIG_HOME=/app/temp/.config
       - MONGODB_URI=${MONGODB_URI}
       - REDIS_URL=${REDIS_URL}
-      - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-5}
+      - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-2}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
       # Vertex AI (replaces GEMINI_API_KEY)
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
@@ -47,9 +48,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          # Reduced for t3.micro (1GB RAM) - leave room for OS/FFmpeg/yt-dlp
+          memory: 800M
         reservations:
-          memory: 512M
+          memory: 256M
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
