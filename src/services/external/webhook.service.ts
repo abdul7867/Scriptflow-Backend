@@ -431,6 +431,9 @@ class WebhookService {
                 userIdea: null, // Will be provided in next message
             });
 
+            // Set ManyChat status to AwaitingIdea so automation can prompt user
+            await manychatStateService.setAwaitingIdeaState(subscriberId, normalizedUrl);
+
             await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.PROMPT_IDEA, {
                 reelUrl: normalizedUrl,
             });

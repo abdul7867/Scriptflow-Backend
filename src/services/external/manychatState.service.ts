@@ -34,6 +34,7 @@ export enum ScriptStatus {
     READY = 'Ready',
     ERROR = 'Error',
     BUSY = 'Busy',  // Rate limited - user should try again later
+    AWAITING_IDEA = 'AwaitingIdea',  // Waiting for user to provide their idea
 }
 
 /**
@@ -325,6 +326,64 @@ class ManyChatStateService {
         }
 
         return await setCustomFieldsSequential(subscriberId, fields);
+    }
+
+    /**
+     * Set awaiting idea state - Called when user sends reel without idea
+     * 
+     * Updates sc_status = "AwaitingIdea" so ManyChat can prompt for idea.
+     * 
+     * @param subscriberId - The subscriber's ManyChat ID
+     * @param reelUrl - The reel URL that was received
+     * @returns true if successful, false otherwise
+     */
+    async setAwaitingIdeaState(
+        subscriberId: string,
+        reelUrl?: string
+    ): Promise<boolean> {
+        logger.info('[ManyChatState] Setting awaiting idea state', {
+            subscriberId,
+            reelUrl: reelUrl?.substring(0, 50)
+        });
+
+        // Build fields array
+        const fields: Array<{ field_id: number; field_value: string }> = [];
+
+        // sc_status = "AwaitingIdea"
+        if (FIELD_IDS.SC_STATUS) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
+                field_value: ScriptStatus.AWAITING_IDEA
+            });
+        }
+
+        // Clear old script data
+        if (FIELD_IDS.SC_LAST_SCRIPT) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
+                field_value: '-'
+            });
+        }
+
+        if (FIELD_IDS.SC_LAST_IMAGE) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
+                field_value: '-'
+            });
+        }
+
+        if (fields.length === 0) {
+            logger.warn('[ManyChatState] No field IDs configured, skipping awaiting idea state update');
+            return false;
+        }
+
+        const success = await setCustomFieldsSequential(subscriberId, fields);
+
+        if (success) {
+            logger.info('[ManyChatState] ✅ Awaiting idea state set successfully', { subscriberId });
+        }
+
+        return success;
     }
 
     /**
