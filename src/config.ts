@@ -37,10 +37,14 @@ export const config = cleanEnv(process.env, {
 
   // Pull-based delivery model fields (avoids Meta 24-hour window restrictions)
   // Create Text-type custom fields in ManyChat and enter their IDs here
-  // User types "Hi" to pull their script (ManyChat Rule reads these fields)
-  MANYCHAT_SC_STATUS_FIELD_ID: str({ desc: 'Field ID for sc_status (Processing/Ready/Error)', default: '' }),
+  // ManyChat automation reads these fields and displays content accordingly
+  MANYCHAT_SC_STATUS_FIELD_ID: str({ desc: 'Field ID for sc_status (AwaitingIdea/Processing/Ready/Error)', default: '' }),
   MANYCHAT_SC_LAST_SCRIPT_FIELD_ID: str({ desc: 'Field ID for sc_last_script (text content)', default: '' }),
   MANYCHAT_SC_LAST_IMAGE_FIELD_ID: str({ desc: 'Field ID for sc_last_image (ImgBB URL)', default: '' }),
+  MANYCHAT_SC_REEL_URL_FIELD_ID: str({ desc: 'Field ID for sc_reel_url (current reel being processed)', default: '' }),
+  MANYCHAT_SC_PROMPT_MESSAGE_FIELD_ID: str({ desc: 'Field ID for sc_prompt_message (contextual user message)', default: '' }),
+  MANYCHAT_SC_COPY_URL_FIELD_ID: str({ desc: 'Field ID for sc_copy_url (copy link for script)', default: '' }),
+
 
   // Image Services
   IMGBB_API_KEY: str({ desc: 'API Key for ImgBB' }),

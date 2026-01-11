@@ -324,9 +324,12 @@ async function processJobWithTimeout(
     }
   );
 
-  // Initialize ManyChat state (set status="Processing")
+  // Initialize ManyChat state (set status="Processing" with contextual message)
+  // Also passes variation info for custom "Creating version #X..." messages
+  const isVariation = job.data.isVariation || false;
+  const variationIndex = job.data.variationIndex || 0;
   try {
-    await manychatStateService.initializeProcessing(subscriberId);
+    await manychatStateService.initializeProcessing(subscriberId, isVariation, variationIndex);
   } catch (initError: any) {
     logger.warn(`[${requestId}] Failed to initialize ManyChat state: ${initError.message}`);
   }
@@ -777,10 +780,11 @@ async function processJobWithTimeout(
     // User can "pull" this data by typing "Hi" (avoids Meta 24hr window)
     // ──────────────────────────────────────────────────────────────────
     try {
-      await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl);
+      // Pass all data needed for ManyChat automation to deliver the script
+      await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl, scriptUrl);
       logger.info(`[${requestId}] ✅ ManyChat state set to Ready - user can pull data`);
     } catch (stateError: any) {
-      // Non-fatal - legacy delivery already happened via sendToManyChat
+      // Non-fatal - ManyChat automation will still work with the fields that were set
       logger.warn(`[${requestId}] Failed to set ManyChat ready state`, {
         error: stateError.message
       });

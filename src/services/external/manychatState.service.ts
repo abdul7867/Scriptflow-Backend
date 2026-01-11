@@ -54,6 +54,27 @@ const FIELD_IDS = {
     SC_STATUS: config.MANYCHAT_SC_STATUS_FIELD_ID || '',
     SC_LAST_SCRIPT: config.MANYCHAT_SC_LAST_SCRIPT_FIELD_ID || '',
     SC_LAST_IMAGE: config.MANYCHAT_SC_LAST_IMAGE_FIELD_ID || '',
+    SC_REEL_URL: config.MANYCHAT_SC_REEL_URL_FIELD_ID || '',
+    SC_PROMPT_MESSAGE: config.MANYCHAT_SC_PROMPT_MESSAGE_FIELD_ID || '',
+    SC_COPY_URL: config.MANYCHAT_SC_COPY_URL_FIELD_ID || '',
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMPT MESSAGES (ManyChat automation displays these)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PROMPT_MESSAGES = {
+    AWAITING_IDEA: "🎬 Got the reel! Now what's your idea?\n\nTell me the vibe you want - or just say \"generate\" and I'll pick something fire 🔥",
+    PROCESSING: "⚡ Creating your script... This takes about 30 seconds!",
+    PROCESSING_VARIATION: (num: number) => `🔄 Creating version #${num}... Taking a fresh angle! ✨`,
+    READY: "🎉 Your script is ready! Tap the image to view or use the copy link below.",
+    ERROR_GENERIC: "😔 Something went wrong. Please try again!",
+    ERROR_PRIVATE_REEL: "⚠️ Oops! I couldn't access that Reel. Please make sure it's public and try again.",
+    ERROR_TOO_LONG: "⚠️ That Reel is too long (over 90 seconds). Please try a shorter one!",
+    ERROR_DOWNLOAD: "⚠️ Couldn't download that Reel. Please check the link and try again.",
+    ERROR_API: "⚠️ Our AI is taking a quick break. Please try again in 30 seconds!",
+    RATE_LIMITED: (minutes: number) => `⏳ You've hit the limit! Please wait ${minutes} minute${minutes > 1 ? 's' : ''} before trying again.`,
+    WELCOME: "👋 Welcome to ScriptFlow! Send me any Instagram reel link to get started! 🚀",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -163,16 +184,22 @@ async function setCustomFieldsSequential(
 class ManyChatStateService {
 
     /**
-     * Initialize processing state - Called when webhook is received
+     * Initialize processing state - Called when webhook queues a job
      * 
-     * Sets sc_status to "Processing" and clears old script/image data.
-     * This ensures a fresh slate for each new request.
+     * Sets sc_status to "Processing", prompt message, and clears old data.
+     * ManyChat automation reads sc_prompt_message to show "Creating..." message.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
+     * @param isVariation - Whether this is a variation (for custom message)
+     * @param variationNumber - The variation number (for custom message)
      * @returns true if successful, false otherwise
      */
-    async initializeProcessing(subscriberId: string): Promise<boolean> {
-        logger.info('[ManyChatState] Initializing processing state', { subscriberId });
+    async initializeProcessing(
+        subscriberId: string,
+        isVariation: boolean = false,
+        variationNumber: number = 0
+    ): Promise<boolean> {
+        logger.info('[ManyChatState] Initializing processing state', { subscriberId, isVariation, variationNumber });
 
         // Build fields array with available field IDs
         const fields: Array<{ field_id: number; field_value: string }> = [];
@@ -182,6 +209,17 @@ class ManyChatStateService {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
                 field_value: ScriptStatus.PROCESSING
+            });
+        }
+
+        // sc_prompt_message = contextual message
+        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
+            const message = isVariation && variationNumber > 0
+                ? PROMPT_MESSAGES.PROCESSING_VARIATION(variationNumber)
+                : PROMPT_MESSAGES.PROCESSING;
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_PROMPT_MESSAGE, 10),
+                field_value: message
             });
         }
 
@@ -201,10 +239,18 @@ class ManyChatStateService {
             });
         }
 
+        // sc_copy_url = "-" (clear old copy URL)
+        if (FIELD_IDS.SC_COPY_URL) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
+                field_value: '-'
+            });
+        }
+
         if (fields.length === 0) {
             logger.warn('[ManyChatState] No field IDs configured, skipping initialization', {
                 subscriberId,
-                hint: 'Set MANYCHAT_SC_STATUS_FIELD_ID, MANYCHAT_SC_LAST_SCRIPT_FIELD_ID, MANYCHAT_SC_LAST_IMAGE_FIELD_ID environment variables'
+                hint: 'Set MANYCHAT_SC_STATUS_FIELD_ID, MANYCHAT_SC_LAST_SCRIPT_FIELD_ID, etc.'
             });
             return false;
         }
@@ -215,27 +261,46 @@ class ManyChatStateService {
     /**
      * Set ready state with script data - Called when worker completes
      * 
-     * Updates sc_last_script, sc_last_image, and sc_status = "Ready".
-     * User can then "pull" this data by typing "Hi".
+     * Updates all fields: sc_status = "Ready", script, image, copy URL, prompt.
+     * ManyChat automation reads these fields and delivers the script to user.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param scriptText - The generated script text content
      * @param imageUrl - The ImgBB URL to the script image
+     * @param copyUrl - The URL for copying the script
      * @returns true if successful, false otherwise
      */
     async setReadyState(
         subscriberId: string,
         scriptText: string,
-        imageUrl: string
+        imageUrl: string,
+        copyUrl?: string
     ): Promise<boolean> {
         logger.info('[ManyChatState] Setting ready state', {
             subscriberId,
             scriptLength: scriptText.length,
-            hasImage: !!imageUrl
+            hasImage: !!imageUrl,
+            hasCopyUrl: !!copyUrl
         });
 
         // Build fields array
         const fields: Array<{ field_id: number; field_value: string }> = [];
+
+        // sc_status = "Ready" (set first for faster detection)
+        if (FIELD_IDS.SC_STATUS) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
+                field_value: ScriptStatus.READY
+            });
+        }
+
+        // sc_prompt_message = ready message
+        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_PROMPT_MESSAGE, 10),
+                field_value: PROMPT_MESSAGES.READY
+            });
+        }
 
         // sc_last_script = scriptText
         if (FIELD_IDS.SC_LAST_SCRIPT) {
@@ -253,11 +318,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_status = "Ready"
-        if (FIELD_IDS.SC_STATUS) {
+        // sc_copy_url = copyUrl
+        if (FIELD_IDS.SC_COPY_URL && copyUrl) {
             fields.push({
-                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
-                field_value: ScriptStatus.READY
+                field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
+                field_value: copyUrl
             });
         }
 
@@ -331,7 +396,8 @@ class ManyChatStateService {
     /**
      * Set awaiting idea state - Called when user sends reel without idea
      * 
-     * Updates sc_status = "AwaitingIdea" so ManyChat can prompt for idea.
+     * Updates sc_status = "AwaitingIdea", stores reel URL, and sets prompt message.
+     * ManyChat automation reads these fields and displays the prompt.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param reelUrl - The reel URL that was received
@@ -357,6 +423,22 @@ class ManyChatStateService {
             });
         }
 
+        // sc_prompt_message = prompt for idea
+        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_PROMPT_MESSAGE, 10),
+                field_value: PROMPT_MESSAGES.AWAITING_IDEA
+            });
+        }
+
+        // sc_reel_url = the reel being processed
+        if (FIELD_IDS.SC_REEL_URL && reelUrl) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_REEL_URL, 10),
+                field_value: reelUrl
+            });
+        }
+
         // Clear old script data
         if (FIELD_IDS.SC_LAST_SCRIPT) {
             fields.push({
@@ -368,6 +450,14 @@ class ManyChatStateService {
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
+                field_value: '-'
+            });
+        }
+
+        // Clear old copy URL
+        if (FIELD_IDS.SC_COPY_URL) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
                 field_value: '-'
             });
         }

@@ -30,6 +30,10 @@ export interface ScriptJobData {
 
   // Copy mode: output transcript as-is formatted as script
   isCopyMode?: boolean;
+
+  // Variation tracking (for regeneration requests)
+  isVariation?: boolean;
+  variationIndex?: number;
 }
 
 /**
