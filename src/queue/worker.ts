@@ -10,7 +10,7 @@ import { extractAudio } from '../services/video/audioExtractor.service';
 import { extractFrames, cleanupFrames } from '../services/video/frameExtractor.service';
 import { analyzeVideo, VideoAnalysis } from '../services/video/videoAnalyzer.service';
 import { generateScript, generateScriptFromVideo } from '../services/ai/scriptGenerator.service';
-import { cleanupFiles } from '../services/cleanup.service';
+import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
 import { sendToManyChat, sendTextMessage } from '../services/external/manychat.service';
 import { generateScriptImage } from '../utils/imageGenerator';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
@@ -777,14 +777,14 @@ async function processJobWithTimeout(
         lastReelUrl: reelUrl,
         lastUserIdea: userIdea,
       });
-      
+
       logger.info(`[${requestId}] FSM successfully transitioned to AWAITING_FEEDBACK`);
     } catch (fsmError: any) {
       // Non-fatal - script was delivered, but user state is wrong
       // This is CRITICAL - user will be stuck in PROCESSING state
-      logger.error(`[${requestId}] CRITICAL: FSM update failed - user may be stuck in PROCESSING state`, { 
+      logger.error(`[${requestId}] CRITICAL: FSM update failed - user may be stuck in PROCESSING state`, {
         error: fsmError.message,
-        subscriberId 
+        subscriberId
       });
     }
 
@@ -805,7 +805,7 @@ async function processJobWithTimeout(
     // Determine error type for metrics and better error messages
     let errorType = 'unknown';
     let userMessage = '❌ Something went wrong. Please try again!';
-    
+
     if (error instanceof JobTimeoutError) {
       errorType = 'timeout';
       userMessage = '⏰ The request took too long. Please try again with a shorter reel!';
@@ -840,7 +840,7 @@ async function processJobWithTimeout(
     recordError(errorType);
     recordJobDuration(totalDuration, { status: 'failed' });
     logger.error(`[${requestId}] Job failed (${errorType}): ${error.message}`);
-    
+
     // Log full stack trace for debugging (only in logs, not sent to DB in production)
     if (process.env.NODE_ENV === 'development') {
       logger.error(`[${requestId}] Stack trace:`, error.stack);
@@ -888,7 +888,7 @@ async function processJobWithTimeout(
 
         logger.info(`[${requestId}] ✅ FSM transitioned to ERROR state - user can retry`);
       } catch (fsmError: any) {
-        logger.error(`[${requestId}] CRITICAL: FSM error transition failed - user stuck!`, { 
+        logger.error(`[${requestId}] CRITICAL: FSM error transition failed - user stuck!`, {
           error: fsmError.message,
           subscriberId
         });
@@ -900,11 +900,16 @@ async function processJobWithTimeout(
     throw error; // Re-throw to trigger BullMQ retry
 
   } finally {
-    // Cleanup files
+    // Cleanup files from this specific job
     cleanupFiles([videoPath, audioPath]);
     if (frameDir) {
       cleanupFrames(frameDir);
     }
+
+    // CRITICAL: Force cleanup of entire temp directory
+    // This catches any orphaned files and prevents memory leaks
+    // Only deletes files older than 5 minutes to avoid interfering with other jobs
+    forceCleanupTempDir();
   }
 }
 
@@ -948,7 +953,7 @@ export function startWorker(): Worker<any, any> {
     drainDelay: 10,           // Small delay when draining to prevent busy loops
     skipStalledCheck: false,  // Enable stalled job recovery
   });
-  
+
   // Log when worker is waiting for jobs (helps debug idle state)
   let idleLogged = false;
 

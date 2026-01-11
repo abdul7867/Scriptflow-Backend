@@ -291,6 +291,12 @@ const API_TIMEOUT_MS = 30000;
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 
+// Meta Platform error codes that indicate messaging window expired
+// 3011 = Message tag does not match the required format
+// 3041 = Channel is disabled (often 24-hour window expired)
+// These errors should NOT be retried - they're policy blocks
+const META_WINDOW_ERROR_CODES = [3011, 3041];
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MANYCHAT FLOW SERVICE CLASS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -350,16 +356,51 @@ class ManyChatFlowService {
             // Generate message content
             const message = getFlowMessage(flow, context);
 
-            // Send text message
+            // Attempt to send text message
             const success = await this.sendTextMessage(subscriberId, message);
 
             if (success) {
                 logger.info('[ManyChatFlow] Flow triggered successfully', { flow, subscriberId });
-            } else {
-                logger.warn('[ManyChatFlow] Flow trigger failed', { flow, subscriberId });
+                return true;
             }
 
-            return success;
+            // Message failed - try silent custom field update as fallback
+            // This is especially important for COPY_SCRIPT and JOB_COMPLETED flows
+            // where we need to deliver the script URL even if outside 24-hour window
+            logger.warn('[ManyChatFlow] Text message failed, attempting silent field update', {
+                flow,
+                subscriberId
+            });
+
+            // If we have a scriptUrl in context, update the copy field
+            if (context.scriptUrl && config.MANYCHAT_COPY_FIELD_ID) {
+                const fieldSuccess = await this.setCustomField(
+                    subscriberId,
+                    config.MANYCHAT_COPY_FIELD_ID,
+                    context.scriptUrl
+                );
+
+                if (fieldSuccess) {
+                    logger.info('[ManyChatFlow] Fallback: Script URL saved to custom field', {
+                        flow,
+                        subscriberId,
+                        fieldId: config.MANYCHAT_COPY_FIELD_ID
+                    });
+                    // Return true as we successfully delivered the content
+                    return true;
+                }
+            }
+
+            // If we have an imageUrl and image field ID, update that too
+            if (context.imageUrl && config.MANYCHAT_SCRIPT_FIELD_ID) {
+                await this.setCustomField(
+                    subscriberId,
+                    config.MANYCHAT_SCRIPT_FIELD_ID,
+                    context.imageUrl
+                );
+            }
+
+            return false;
         } catch (error) {
             logger.error('[ManyChatFlow] Error triggering flow', {
                 flow,
@@ -414,18 +455,36 @@ class ManyChatFlowService {
 
             return true;
         } catch (error: any) {
-            // Log detailed error info for 400 errors
+            // Extract Meta error code from response
+            const metaErrorCode = error.response?.data?.details?.err_code ||
+                error.response?.data?.code ||
+                null;
+
+            // Check for Meta Window Block (3011, 3041)
+            // These are policy errors meaning user is outside 24-hour window
+            // Do NOT retry - this is expected behavior for inactive users
+            if (error.response?.status === 400 && META_WINDOW_ERROR_CODES.includes(metaErrorCode)) {
+                logger.warn('[ManyChatFlow] Meta Window Block detected', {
+                    subscriberId,
+                    errorCode: metaErrorCode,
+                    message: 'User outside 24-hour messaging window - message will not be delivered',
+                    responseData: error.response?.data
+                });
+
+                // Return false but don't log as error - this is expected
+                // The caller can choose to update a custom field instead
+                return false;
+            }
+
+            // Log other 400 errors (invalid subscriber, etc.)
             if (error.response?.status === 400) {
                 logger.error('[ManyChatFlow] API returned 400 Bad Request', {
                     subscriberId,
-                    responseData: error.response?.data,
-                    requestPayload: {
-                        subscriber_id: subscriberId,
-                        message_tag: 'POST_PURCHASE_UPDATE'
-                    }
+                    errorCode: metaErrorCode,
+                    responseData: error.response?.data
                 });
 
-                // Don't retry 400 errors - they're usually permanent (invalid subscriber, etc.)
+                // Don't retry 400 errors - they're usually permanent
                 return false;
             }
 

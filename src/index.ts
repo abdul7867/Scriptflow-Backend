@@ -5,6 +5,7 @@ import { initRateLimiter } from './middleware';
 import { logger } from './utils/logger';
 import { config } from './config';
 import { memoryGovernor } from './utils/memoryGovernor';
+import { startPeriodicCleanup, stopPeriodicCleanup, forceCleanupTempDir } from './services/cleanup.service';
 import fs from 'fs';
 import path from 'path';
 
@@ -85,6 +86,10 @@ async function bootstrap() {
     logger.info('Starting Queue Monitoring...');
     startQueueMonitoring();
 
+    // Periodic Temp Cleanup - prevents memory leaks from orphaned files
+    logger.info('Starting Periodic Temp Cleanup...');
+    startPeriodicCleanup(2 * 60 * 1000); // Every 2 minutes
+
     // 6. Create and start Express server
     const app = createServer();
     const PORT = config.PORT;
@@ -120,6 +125,11 @@ async function bootstrap() {
         // Stop Queue Monitoring
         logger.info('Stopping Queue Monitoring...');
         stopQueueMonitoring();
+
+        // Stop Periodic Cleanup and do final cleanup
+        logger.info('Stopping Periodic Cleanup and running final cleanup...');
+        stopPeriodicCleanup();
+        forceCleanupTempDir(undefined, 0); // Delete ALL temp files on shutdown
 
         // Stop the worker (finish current jobs)
         logger.info('Stopping worker...');

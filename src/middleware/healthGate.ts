@@ -178,6 +178,8 @@ const BOT_SCAN_PATTERNS = [
     '/wp-includes',
     '/xmlrpc',
     '/wordpress',
+    '/setup-config',  // WordPress setup wizard scan
+    'setup-config',   // Setup config anywhere in path
     // Common vulnerability scans
     '/admin',
     '/phpmyadmin',
