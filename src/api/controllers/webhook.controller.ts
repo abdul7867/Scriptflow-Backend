@@ -30,18 +30,23 @@ import { z } from 'zod';
 /**
  * Webhook request validation schema
  * 
- * Supports multiple ManyChat variable formats:
+ * Supports ManyChat payload structure:
  * - subscriber_id OR contact_id (for subscriber identification)
- * - user_idea OR last_text_input (for user message)
+ * - user_idea OR last_text_input (for user message, from cuf_14126358)
+ * - reel_url (from cuf_14126356)
+ * - platform (e.g., "instagram")
  */
 const webhookRequestSchema = z.object({
     // Accept either subscriber_id or contact_id
     subscriber_id: z.string().optional(),
     contact_id: z.string().optional(),
-    // Accept either user_idea or last_text_input
+    // Accept either user_idea or last_text_input (from ManyChat custom field cuf_14126358)
     user_idea: z.string().optional(),
     last_text_input: z.string().optional(),
+    // Reel URL (from ManyChat custom field cuf_14126356)
     reel_url: z.string().url().optional(),
+    // Platform identifier (e.g., "instagram")
+    platform: z.string().optional(),
     // Transform empty strings to undefined for optional enum fields
     tone_hint: z.preprocess(
         (val) => val === '' ? undefined : val,
@@ -189,7 +194,7 @@ export const webhookHandler = async (req: Request, res: Response): Promise<void>
         // This prevents wasting resources on invalid requests
         // ─────────────────────────────────────────────────────────────────────────
         const rawSubscriberId = req.body?.subscriber_id || req.body?.contact_id;
-        
+
         if (!rawSubscriberId || rawSubscriberId === '' || rawSubscriberId === 'null' || rawSubscriberId === 'undefined') {
             logger.warn(`[Controller:${requestId}] Invalid Subscriber ID`, {
                 subscriber_id: rawSubscriberId,

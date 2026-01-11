@@ -48,6 +48,7 @@ import { Job, UserMemory } from '../../db/models';
 
 // Services
 import { manychatFlowService, ManyChatFlow } from './manychatFlow.service';
+import { manychatStateService } from './manychatState.service';
 import { loopPrevention } from '../chatbot/loopPrevention.service';
 import { normalizeInstagramUrl, generateRequestHashV2, generateReelHash } from '../../utils/hash';
 
@@ -382,7 +383,33 @@ class WebhookService {
         }
 
         if (userIdea) {
-            // User provided reel + idea - queue job immediately
+            // ─────────────────────────────────────────────────────────────────────────
+            // SCENARIO C: Check if userIdea is "Extract" (case insensitive)
+            // This triggers transcript extraction without creative rewriting
+            // ─────────────────────────────────────────────────────────────────────────
+            const normalizedIdea = userIdea.toLowerCase().trim();
+            const isExtractMode = normalizedIdea === 'extract' ||
+                normalizedIdea === 'transcript' ||
+                normalizedIdea === 'original';
+
+            if (isExtractMode) {
+                logger.info(`[Webhook:${requestId}] EXTRACT MODE detected - will transcribe without rewriting`);
+                return this.queueScriptJob(requestId, {
+                    subscriberId,
+                    reelUrl: normalizedUrl,
+                    userIdea: '[EXTRACT ORIGINAL TRANSCRIPT]',
+                    toneHint,
+                    languageHint,
+                    mode,
+                    isVariation: false,
+                    variationIndex: 0,
+                    isCopyMode: true, // Enables transcript extraction only
+                }, transitionResult.newState, rateLimitStatus);
+            }
+
+            // ─────────────────────────────────────────────────────────────────────────
+            // SCENARIO A: Combined - user provided reel + idea (creative rewriting)
+            // ─────────────────────────────────────────────────────────────────────────
             logger.info(`[Webhook:${requestId}] Queueing job with reel + idea (single-message flow)`);
             return this.queueScriptJob(requestId, {
                 subscriberId,
@@ -466,7 +493,31 @@ class WebhookService {
             userIdea: userIdea.substring(0, 50),
         });
 
-        // Queue the script job with stored reel + new idea
+        // ─────────────────────────────────────────────────────────────────────────
+        // SCENARIO C: Check if userIdea is "Extract" (case insensitive)
+        // This triggers transcript extraction without creative rewriting
+        // ─────────────────────────────────────────────────────────────────────────
+        const normalizedIdea = userIdea.toLowerCase().trim();
+        const isExtractMode = normalizedIdea === 'extract' ||
+            normalizedIdea === 'transcript' ||
+            normalizedIdea === 'original';
+
+        if (isExtractMode) {
+            logger.info(`[Webhook:${requestId}] EXTRACT MODE detected in SUBMIT_IDEA flow`);
+            return this.queueScriptJob(requestId, {
+                subscriberId,
+                reelUrl: storedReelUrl,
+                userIdea: '[EXTRACT ORIGINAL TRANSCRIPT]',
+                toneHint,
+                languageHint,
+                mode,
+                isVariation: false,
+                variationIndex: 0,
+                isCopyMode: true, // Enables transcript extraction only
+            }, currentState, rateLimitStatus);
+        }
+
+        // Queue the script job with stored reel + new idea (creative rewriting)
         return this.queueScriptJob(requestId, {
             subscriberId,
             reelUrl: storedReelUrl,
@@ -924,6 +975,21 @@ class WebhookService {
             variationCount: variationIndex,
         });
 
+        // ──────────────────────────────────────────────────────────────────
+        // PULL-BASED DELIVERY: Initialize ManyChat state
+        // Sets sc_status = "Processing" and clears old sc_last_script/sc_last_image
+        // This ensures a fresh slate for each new request
+        // ──────────────────────────────────────────────────────────────────
+        try {
+            await manychatStateService.initializeProcessing(subscriberId);
+            logger.info(`[Webhook:${requestId}] ManyChat state initialized to Processing`);
+        } catch (stateError: any) {
+            // Non-fatal - job will still process, but user won't see "Processing" status
+            logger.warn(`[Webhook:${requestId}] Failed to initialize ManyChat state`, {
+                error: stateError.message
+            });
+        }
+
         // Add to queue
         const jobData: ScriptJobData = {
             requestId,
@@ -954,12 +1020,12 @@ class WebhookService {
             const redis = getRedis();
             const rateLimitKey = `user_rl:${subscriberId}`;
             const count = await redis.incr(rateLimitKey);
-            
+
             // Set expiry only on first increment (1 hour window)
             if (count === 1) {
                 await redis.expire(rateLimitKey, 3600); // 1 hour
             }
-            
+
             logger.debug(`[Webhook:${requestId}] Rate limit incremented`, {
                 subscriberId,
                 count,

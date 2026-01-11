@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getRedis } from '../queue/redis';
 import { logger } from '../utils/logger';
-import { sendTextMessage } from '../services/external/manychat.service';
+import { manychatStateService } from '../services/external/manychatState.service';
 
 /**
  * User-Based Rate Limiter
@@ -65,17 +65,12 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
 
         logger.warn(`User rate limit exceeded: ${subscriberId} (${count}/${maxRequests})`);
 
-        // Send friendly DM to user via ManyChat with upgrade prompt
-        const rateLimitMessage =
-          `⏰ You've used all ${maxRequests} scripts this hour!\n\n` +
-          `🔄 Reset in ${resetMinutes} minute${resetMinutes !== 1 ? 's' : ''}.\n\n` +
-          `💡 Want more? Reply UPGRADE to unlock 50 scripts/hour!`;
-
+        // Set "Busy" status via pull-based delivery (avoids Meta 400 errors)
         try {
-          await sendTextMessage(subscriberId, rateLimitMessage);
-          logger.info(`Rate limit DM sent to user: ${subscriberId}`);
-        } catch (dmError) {
-          logger.warn(`Failed to send rate limit DM to ${subscriberId}:`, dmError);
+          await manychatStateService.setBusyState(subscriberId, ttl);
+          logger.info(`Rate limit busy state set for user: ${subscriberId}`);
+        } catch (stateError) {
+          logger.warn(`Failed to set busy state for ${subscriberId}:`, stateError);
         }
 
         return res.status(429).json({

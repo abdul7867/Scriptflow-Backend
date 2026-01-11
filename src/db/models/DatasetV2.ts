@@ -26,6 +26,9 @@ export type TriggerType = 'guided' | 'instant' | 'redo';
 export type ContentType = 'educational' | 'promotional' | 'entertainment' | 'storytelling' | 'motivational' | 'other';
 export type UserTier = 'free' | 'beta' | 'premium' | 'enterprise';
 
+// Intent types for ML training - tracks how the request was classified
+export type IntentType = 'new_reel' | 'submit_idea' | 'variation' | 'extract' | 'remix' | 'copy' | 'help' | 'unknown';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,7 +38,7 @@ export interface IDatasetEntryV2 extends Document {
   // SCHEMA METADATA
   // ─────────────────────────────────────────────────────────────────────────
   schemaVersion: string;
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // USER CONTEXT (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -48,7 +51,7 @@ export interface IDatasetEntryV2 extends Document {
     preferredNiche?: string;
     sessionId: string;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // VARIATION CONTEXT (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -58,7 +61,7 @@ export interface IDatasetEntryV2 extends Document {
     isRedo: boolean;
     triggerType: TriggerType;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // INPUT FEATURES
   // ─────────────────────────────────────────────────────────────────────────
@@ -67,12 +70,18 @@ export interface IDatasetEntryV2 extends Document {
     userIdea: string;
     isDefaultIdea: boolean;
     requestHash: string;
-    
+
+    // Intent tracking (NEW - for ML training)
+    intentType: IntentType;           // How the request was classified
+    isRemix: boolean;                 // Same reel, new idea (remix mode)
+    wasExtractOnly: boolean;          // Raw transcript without AI rewrite
+    previousTranscript?: string;      // For remix: cached transcript from previous request
+
     // Hints
     toneHint?: ToneHint;
     languageHint?: string;
     mode: GenerationMode;
-    
+
     // Video analysis
     transcript?: string;
     transcriptLanguage?: string;
@@ -84,7 +93,7 @@ export interface IDatasetEntryV2 extends Document {
     videoDurationSeconds?: number;
     frameCount?: number;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // CONTENT CLASSIFICATION (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -94,7 +103,7 @@ export interface IDatasetEntryV2 extends Document {
     targetAudience?: string;
     detectedHashtags?: string[];
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // OUTPUT FEATURES
   // ─────────────────────────────────────────────────────────────────────────
@@ -112,7 +121,7 @@ export interface IDatasetEntryV2 extends Document {
     hookLengthChars?: number;
     bodyLengthChars?: number;
     ctaLengthChars?: number;
-    
+
     // Carousel output (NEW in V2)
     carouselDelivered: boolean;
     imageUrls: {
@@ -122,7 +131,7 @@ export interface IDatasetEntryV2 extends Document {
       combined?: string;
     };
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // EXPERIMENT TRACKING (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -134,7 +143,7 @@ export interface IDatasetEntryV2 extends Document {
     maxTokens?: number;
     modelConfig: Record<string, any>;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // ALTERNATIVES FOR RLHF (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -143,7 +152,7 @@ export interface IDatasetEntryV2 extends Document {
     selectedIndex?: number;
     rejectionReasons?: string[];
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // USER FEEDBACK
   // ─────────────────────────────────────────────────────────────────────────
@@ -151,15 +160,15 @@ export interface IDatasetEntryV2 extends Document {
     overallRating?: number;
     wasAccepted: boolean;
     acceptedAt?: Date;
-    
+
     sectionFeedback: {
       hook?: { rating?: number; wasRegenerated: boolean; regenerationReason?: string };
       body?: { rating?: number; wasRegenerated: boolean; regenerationReason?: string };
       cta?: { rating?: number; wasRegenerated: boolean; regenerationReason?: string };
     };
-    
+
     feedbackText?: string;
-    
+
     videoPerformance?: {
       views?: number;
       likes?: number;
@@ -167,7 +176,7 @@ export interface IDatasetEntryV2 extends Document {
       shares?: number;
       reportedAt?: Date;
     };
-    
+
     // Implicit signals (NEW in V2)
     implicit: {
       timeToFirstInteraction?: number;
@@ -177,7 +186,7 @@ export interface IDatasetEntryV2 extends Document {
       sessionEndedAfter: boolean;
     };
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // EDITS TRACKING (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -187,7 +196,7 @@ export interface IDatasetEntryV2 extends Document {
     editedSections: string[];
     timeToFirstEdit?: number;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // FAILURE TRACKING (NEW in V2)
   // ─────────────────────────────────────────────────────────────────────────
@@ -200,7 +209,7 @@ export interface IDatasetEntryV2 extends Document {
       timestamp: Date;
     }>;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // QUALITY METRICS
   // ─────────────────────────────────────────────────────────────────────────
@@ -213,7 +222,7 @@ export interface IDatasetEntryV2 extends Document {
     grammarScore?: number;
     predictedEngagement?: number;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // GENERATION METADATA
   // ─────────────────────────────────────────────────────────────────────────
@@ -227,12 +236,12 @@ export interface IDatasetEntryV2 extends Document {
     analysisAttempts: number;
     generationAttempts: number;
     promptVersion: string;
-    
+
     // Cache performance (NEW in V2)
     tier1CacheHit: boolean;
     tier2CacheHit: boolean;
   };
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // ML TRAINING FLAGS
   // ─────────────────────────────────────────────────────────────────────────
@@ -244,7 +253,7 @@ export interface IDatasetEntryV2 extends Document {
     datasetVersion: string;
     exportedAt?: Date;
   };
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -256,7 +265,7 @@ export interface IDatasetEntryV2 extends Document {
 const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
   {
     schemaVersion: { type: String, default: '2.0', index: true },
-    
+
     // User Context
     user: {
       subscriberId: { type: String, required: true, index: true },
@@ -267,7 +276,7 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       preferredNiche: { type: String },
       sessionId: { type: String, index: true },
     },
-    
+
     // Variation Context
     variation: {
       index: { type: Number, default: 0 },
@@ -275,13 +284,25 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       isRedo: { type: Boolean, default: false },
       triggerType: { type: String, enum: ['guided', 'instant', 'redo'], default: 'guided' },
     },
-    
+
     // Input Features
     input: {
       videoUrl: { type: String, required: true },
       userIdea: { type: String, required: true },
       isDefaultIdea: { type: Boolean, default: false },
       requestHash: { type: String, required: true, index: true },
+
+      // Intent tracking (NEW - for ML training)
+      intentType: {
+        type: String,
+        enum: ['new_reel', 'submit_idea', 'variation', 'extract', 'remix', 'copy', 'help', 'unknown'],
+        default: 'unknown',
+        index: true
+      },
+      isRemix: { type: Boolean, default: false },           // Same reel, new idea
+      wasExtractOnly: { type: Boolean, default: false },    // Raw transcript without AI
+      previousTranscript: { type: String },                 // For remix: cached transcript
+
       toneHint: { type: String, enum: ['professional', 'funny', 'provocative', 'educational', 'casual'] },
       languageHint: { type: String },
       mode: { type: String, enum: ['full', 'hook_only'], default: 'full' },
@@ -295,19 +316,19 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       videoDurationSeconds: { type: Number },
       frameCount: { type: Number },
     },
-    
+
     // Classification
     classification: {
       niche: { type: String, default: 'general' },
-      contentType: { 
-        type: String, 
+      contentType: {
+        type: String,
         enum: ['educational', 'promotional', 'entertainment', 'storytelling', 'motivational', 'other'],
-        default: 'other' 
+        default: 'other'
       },
       targetAudience: { type: String },
       detectedHashtags: [{ type: String }],
     },
-    
+
     // Output Features
     output: {
       generatedScript: { type: String, required: true },
@@ -331,7 +352,7 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
         combined: { type: String },
       },
     },
-    
+
     // Experiment Tracking
     experiment: {
       promptVariantId: { type: String, default: 'default' },
@@ -341,14 +362,14 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       maxTokens: { type: Number },
       modelConfig: { type: Schema.Types.Mixed, default: {} },
     },
-    
+
     // Alternatives
     alternatives: {
       candidateScripts: [{ type: String }],
       selectedIndex: { type: Number },
       rejectionReasons: [{ type: String }],
     },
-    
+
     // Feedback
     feedback: {
       overallRating: { type: Number, min: 1, max: 5 },
@@ -387,7 +408,7 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
         sessionEndedAfter: { type: Boolean, default: false },
       },
     },
-    
+
     // Edits
     edits: {
       userEditedScript: { type: String },
@@ -395,21 +416,21 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       editedSections: [{ type: String }],
       timeToFirstEdit: { type: Number },
     },
-    
+
     // Failures
     failures: {
       failedAttempts: [{
         attemptNumber: { type: Number },
         script: { type: String },
-        failureReason: { 
-          type: String, 
-          enum: ['timeout', 'content_filter', 'api_error', 'quality_gate', 'user_rejected'] 
+        failureReason: {
+          type: String,
+          enum: ['timeout', 'content_filter', 'api_error', 'quality_gate', 'user_rejected']
         },
         errorMessage: { type: String },
         timestamp: { type: Date },
       }],
     },
-    
+
     // Quality Metrics
     qualityMetrics: {
       overallScore: { type: Number, default: 50, min: 0, max: 100 },
@@ -420,7 +441,7 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       grammarScore: { type: Number, min: 0, max: 100 },
       predictedEngagement: { type: Number, min: 0, max: 100 },
     },
-    
+
     // Generation Metadata
     generation: {
       analysisModel: { type: String },
@@ -435,7 +456,7 @@ const DatasetEntryV2Schema = new Schema<IDatasetEntryV2>(
       tier1CacheHit: { type: Boolean, default: false },
       tier2CacheHit: { type: Boolean, default: false },
     },
-    
+
     // Training Flags
     training: {
       isValidated: { type: Boolean, default: false },
@@ -470,9 +491,9 @@ DatasetEntryV2Schema.index({ 'classification.contentType': 1 });
 DatasetEntryV2Schema.index({ 'qualityMetrics.overallScore': -1 });
 
 // Training export
-DatasetEntryV2Schema.index({ 
-  'training.includedInTraining': 1, 
-  'training.qualityScore': -1 
+DatasetEntryV2Schema.index({
+  'training.includedInTraining': 1,
+  'training.qualityScore': -1
 });
 
 // Feedback queries
@@ -487,43 +508,43 @@ DatasetEntryV2Schema.index({ 'feedback.wasAccepted': 1 });
  * Calculate quality score based on all available signals
  * Called after feedback update
  */
-DatasetEntryV2Schema.methods.calculateQualityScore = function(): number {
+DatasetEntryV2Schema.methods.calculateQualityScore = function (): number {
   let score = 50; // Base score
-  
+
   const feedback = this.feedback;
-  
+
   // User rating (+/- 30 points)
   if (feedback.overallRating) {
     score += (feedback.overallRating - 3) * 15;
   }
-  
+
   // Acceptance (+20 points)
   if (feedback.wasAccepted) {
     score += 20;
   }
-  
+
   // No regenerations (+15 points max)
   const sections = feedback.sectionFeedback || {};
   if (!sections.hook?.wasRegenerated) score += 5;
   if (!sections.body?.wasRegenerated) score += 5;
   if (!sections.cta?.wasRegenerated) score += 5;
-  
+
   // Implicit signals
   const implicit = feedback.implicit || {};
   if (implicit.didCopy) score += 10;
   if (implicit.copyCount > 1) score += 5;
   if (implicit.didRedo) score -= 10; // Penalty for redo
   if (implicit.sessionEndedAfter) score -= 5; // Might indicate dissatisfaction
-  
+
   // Video performance
   const perf = feedback.videoPerformance || {};
   if (perf.views && perf.views > 10000) score += 10;
   if (perf.likes && perf.views && (perf.likes / perf.views) > 0.1) score += 10;
-  
+
   // Input richness
   if (this.input.transcript) score += 5;
   if ((this.input.visualCues?.length || 0) > 3) score += 5;
-  
+
   // Clamp to 0-100
   return Math.max(0, Math.min(100, score));
 };

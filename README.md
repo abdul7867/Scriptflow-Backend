@@ -34,9 +34,50 @@ AI Backend for generating viral scripts from Instagram Reels, integrated with Ma
    
 See `PRODUCTION_CHECKLIST.md` for full deployment guide.
 
-## endpoints
+## ManyChat Webhook Integration
+
+### Payload Structure
+Configure your ManyChat External Request to send:
+
+```json
+{
+  "subscriber_id": "{{user_id}}",
+  "reel_url": "{{cuf_14126356}}",
+  "user_idea": "{{cuf_14126358}}",
+  "platform": "instagram"
+}
+```
+
+### Pull-Based Delivery (Avoids Meta 24hr Blocks)
+Create these custom fields in ManyChat:
+
+| Field Name | Purpose |
+|------------|---------|
+| `sc_status` | Status: "Processing", "Ready", "Error" |
+| `sc_last_script` | Generated script text |
+| `sc_last_image` | ImgBB URL to script image |
+
+Add field IDs to your `.env`:
+```env
+MANYCHAT_SC_STATUS_FIELD_ID=your_field_id
+MANYCHAT_SC_LAST_SCRIPT_FIELD_ID=your_field_id
+MANYCHAT_SC_LAST_IMAGE_FIELD_ID=your_field_id
+```
+
+### ManyChat Rule Setup
+Create a Rule in ManyChat:
+- **Trigger**: Custom Field Changed → `sc_status` equals "Ready"
+- **Action**: Send message with script image from `sc_last_image`
+
+**CRITICAL**: Do NOT use `message_tag` or `triggerFlow` to avoid 400 errors!
+
+## Endpoints
+
+### POST /api/v1/webhook
+ManyChat webhook endpoint - handles all script generation requests.
 
 ### POST /api/v1/script/generate
+Legacy endpoint for direct API calls.
 
 Body:
 ```json

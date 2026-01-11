@@ -5,5 +5,6 @@
 
 export * from './manychat.service';
 export * from './manychatFlow.service';
+export * from './manychatState.service';
 export * from './s3.service';
 export * from './webhook.service';

@@ -246,6 +246,93 @@
 					"response": []
 				},
 				{
+					"name": "Extract Transcript (Raw)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Extract\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Extract the raw transcript without AI rewriting. Synonyms: copy, verbatim, transcript, captions, subtitles, word-for-word"
+					},
+					"response": []
+				},
+				{
+					"name": "Remix Mode (Shorter)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"Make it shorter and funnier\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Remix the last script with new instructions. Uses cached transcript - no re-download. Synonyms: remix, shorter, longer, funnier, casual, professional"
+					},
+					"response": []
+				},
+				{
+					"name": "Combined Hack (Link + Idea)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"user_idea\": \"https://www.instagram.com/reel/ABC123/ Make a script about productivity tips\"\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/v3/webhook",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"v3",
+								"webhook"
+							]
+						},
+						"description": "Combined input - URL and idea in the same message. The system extracts the URL and uses the remaining text as the script instruction."
+					},
+					"response": []
+				},
+				{
 					"name": "Get Job Status (V3)",
 					"request": {
 						"method": "GET",

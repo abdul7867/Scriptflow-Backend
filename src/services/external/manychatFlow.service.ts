@@ -372,30 +372,30 @@ class ManyChatFlowService {
                 subscriberId
             });
 
-            // If we have a scriptUrl in context, update the copy field
-            if (context.scriptUrl && config.MANYCHAT_COPY_FIELD_ID) {
+            // If we have a scriptUrl in context, update the sc_last_script field
+            if (context.scriptUrl && config.MANYCHAT_SC_LAST_SCRIPT_FIELD_ID) {
                 const fieldSuccess = await this.setCustomField(
                     subscriberId,
-                    config.MANYCHAT_COPY_FIELD_ID,
+                    config.MANYCHAT_SC_LAST_SCRIPT_FIELD_ID,
                     context.scriptUrl
                 );
 
                 if (fieldSuccess) {
-                    logger.info('[ManyChatFlow] Fallback: Script URL saved to custom field', {
+                    logger.info('[ManyChatFlow] Fallback: Script URL saved to sc_last_script field', {
                         flow,
                         subscriberId,
-                        fieldId: config.MANYCHAT_COPY_FIELD_ID
+                        fieldId: config.MANYCHAT_SC_LAST_SCRIPT_FIELD_ID
                     });
                     // Return true as we successfully delivered the content
                     return true;
                 }
             }
 
-            // If we have an imageUrl and image field ID, update that too
-            if (context.imageUrl && config.MANYCHAT_SCRIPT_FIELD_ID) {
+            // If we have an imageUrl, update sc_last_image field
+            if (context.imageUrl && config.MANYCHAT_SC_LAST_IMAGE_FIELD_ID) {
                 await this.setCustomField(
                     subscriberId,
-                    config.MANYCHAT_SCRIPT_FIELD_ID,
+                    config.MANYCHAT_SC_LAST_IMAGE_FIELD_ID,
                     context.imageUrl
                 );
             }

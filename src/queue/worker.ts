@@ -11,7 +11,8 @@ import { extractFrames, cleanupFrames } from '../services/video/frameExtractor.s
 import { analyzeVideo, VideoAnalysis } from '../services/video/videoAnalyzer.service';
 import { generateScript, generateScriptFromVideo } from '../services/ai/scriptGenerator.service';
 import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
-import { sendToManyChat, sendTextMessage } from '../services/external/manychat.service';
+// LEGACY imports removed: sendToManyChat, sendTextMessage - using pull-based delivery via manychatStateService
+import { manychatStateService } from '../services/external/manychatState.service';
 import { generateScriptImage } from '../utils/imageGenerator';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
@@ -177,18 +178,11 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
     // Check if already downloaded AND analyzed (has transcript)
     const existingDNA = await ReelDNA.findOne({ reelUrlHash: reelHash }).lean();
     if (existingDNA?.analysis?.transcript) {
-      logger.info(`[${requestId}] ✅ Video already analyzed with transcript`);
-
-      // Send success message with analysis info
-      const analysisInfo = existingDNA.analysis;
-      await sendTextMessage(
-        subscriberId,
-        `✅ Video already analyzed!\n\n` +
-        `🎯 Hook Type: ${analysisInfo.hookType || 'Unknown'}\n` +
-        `🎭 Tone: ${analysisInfo.tone || 'Unknown'}\n` +
-        `📝 Transcript: ${analysisInfo.transcript ? 'Available (' + analysisInfo.transcript.slice(0, 50) + '...)' : 'None'}\n\n` +
-        `Say "generate" to create a script from it!`
-      );
+      logger.info(`[${requestId}] ✅ Video already analyzed with transcript`, {
+        hookType: existingDNA.analysis.hookType,
+        tone: existingDNA.analysis.tone,
+        transcriptLength: existingDNA.analysis.transcript?.length
+      });
 
       return {
         success: true,
@@ -248,16 +242,14 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
     logger.info(`[${requestId}] ✅ ReelDNA cached with full analysis`);
     await job.updateProgress(90);
 
-    // Send success message to user with analysis details
-    await sendTextMessage(
-      subscriberId,
-      `✅ Video analyzed and ready!\n\n` +
-      `🎯 Hook Type: ${videoAnalysis.hookType || 'Unknown'}\n` +
-      `🎭 Tone: ${videoAnalysis.tone || 'Unknown'}\n` +
-      `📝 Transcript: ${videoAnalysis.transcript ? 'Extracted (' + videoAnalysis.transcript.slice(0, 50) + '...)' : 'No speech detected'}\n` +
-      `👁️ Visual Cues: ${videoAnalysis.visualCues?.length || 0} detected\n\n` +
-      `Now say "generate" to create a script, or send me your idea!`
-    );
+    // Analysis complete - data is cached in ReelDNA
+    // No direct message sent - user can request script generation separately
+    logger.info(`[${requestId}] Video analysis complete`, {
+      hookType: videoAnalysis.hookType,
+      tone: videoAnalysis.tone,
+      hasTranscript: !!videoAnalysis.transcript,
+      visualCues: videoAnalysis.visualCues?.length || 0
+    });
 
     await job.updateProgress(100);
 
@@ -271,17 +263,7 @@ async function processCopyJob(job: BullJob<CopyJobData>): Promise<CopyJobResult>
 
   } catch (error: any) {
     logger.error(`[${requestId}] Copy job failed:`, error);
-
-    // Send error message to user
-    try {
-      await sendTextMessage(
-        subscriberId,
-        `❌ Failed to analyze video: ${error.message}\n\nPlease try again or send a different reel!`
-      );
-    } catch (e) {
-      logger.warn('Failed to send error message', e);
-    }
-
+    // No direct message sent - using pull-based delivery only
     throw error;
 
   } finally {
@@ -740,15 +722,9 @@ async function processJobWithTimeout(
     // Check abort signal before ManyChat
     checkAborted(signal, requestId);
 
-    // G. Send to ManyChat (with copy-friendly link)
-    await withCircuitBreaker('manychat', async () => {
-      return sendToManyChat({
-        subscriber_id: subscriberId,
-        field_name: 'script_image_url',
-        field_value: imageUrl,
-        scriptUrl  // NEW: Include copy-friendly URL
-      });
-    });
+    // G. LEGACY: sendToManyChat REMOVED to avoid duplicate triggers
+    // Pull-based delivery via manychatStateService.setReadyState() is used instead
+    // This avoids Meta 24-hour window restrictions and 400 errors
 
     // H. Update job status in MongoDB
     await Job.findOneAndUpdate(
@@ -785,6 +761,21 @@ async function processJobWithTimeout(
       logger.error(`[${requestId}] CRITICAL: FSM update failed - user may be stuck in PROCESSING state`, {
         error: fsmError.message,
         subscriberId
+      });
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // PULL-BASED DELIVERY: Update ManyChat custom fields
+    // Sets sc_status = "Ready", sc_last_script = text, sc_last_image = URL
+    // User can "pull" this data by typing "Hi" (avoids Meta 24hr window)
+    // ──────────────────────────────────────────────────────────────────
+    try {
+      await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl);
+      logger.info(`[${requestId}] ✅ ManyChat state set to Ready - user can pull data`);
+    } catch (stateError: any) {
+      // Non-fatal - legacy delivery already happened via sendToManyChat
+      logger.warn(`[${requestId}] Failed to set ManyChat ready state`, {
+        error: stateError.message
       });
     }
 
@@ -864,13 +855,8 @@ async function processJobWithTimeout(
     if (job.attemptsMade >= 1) {
       logger.info(`[${requestId}] Final attempt failed (${job.attemptsMade + 1}/3), transitioning to ERROR state`);
 
-      // Send error message to user
-      try {
-        await sendTextMessage(subscriberId, userMessage);
-        logger.info(`[${requestId}] Error message sent to user: ${userMessage}`);
-      } catch (manyChatError: any) {
-        logger.error(`[${requestId}] Failed to send error message: ${manyChatError.message}`);
-      }
+      // LEGACY: sendTextMessage REMOVED to avoid duplicate triggers
+      // Pull-based delivery via manychatStateService.setErrorState() is used instead
 
       // CRITICAL: Update FSM state to ERROR so user can start fresh
       try {
@@ -891,6 +877,22 @@ async function processJobWithTimeout(
         logger.error(`[${requestId}] CRITICAL: FSM error transition failed - user stuck!`, {
           error: fsmError.message,
           subscriberId
+        });
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      // PULL-BASED DELIVERY: Set error state in ManyChat custom fields
+      // Sets sc_status = "Error" and sc_last_script with friendly error message
+      // User can "pull" this by typing "Hi" (avoids Meta 24hr window)
+      // ──────────────────────────────────────────────────────────────────
+      try {
+        const friendlyError = manychatStateService.getFriendlyErrorMessage(error, errorType);
+        await manychatStateService.setErrorState(subscriberId, friendlyError);
+        logger.info(`[${requestId}] ManyChat error state set - user can pull error message`);
+      } catch (stateError: any) {
+        // Non-fatal - legacy delivery already attempted via sendTextMessage
+        logger.warn(`[${requestId}] Failed to set ManyChat error state`, {
+          error: stateError.message
         });
       }
     } else {

@@ -58,16 +58,26 @@ const REEL_URL_PATTERNS: RegExp[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 const VARIATION_KEYWORDS: string[] = [
+    // Redo/retry variations
     'redo', 'again', 'another', 'different', 'variation', 'new version',
     'try again', 'regenerate', 'rewrite', 'remake', 'retry', 'once more',
     'one more', 'another one', 'make another', 'give me another',
     'create another', 'generate another', 'do it again', 'do again',
-    'more', 'next', 'alternative', 'alt', '🔄', '🔁', '♻️',
+    'more', 'next', 'alternative', 'alt',
+    // Remix keywords (user wants to change the style)
+    'remix', 'rework', 'revise', 'modify', 'change', 'edit',
+    // Specific modifications
+    'shorter', 'longer', 'funnier', 'serious', 'casual', 'professional',
+    'simpler', 'detailed', 'engaging', 'punchy', 'snappy',
+    // Emojis
+    '🔄', '🔁', '♻️', '✏️',
 ];
 
 const VARIATION_EXACT_PHRASES: string[] = [
     'redo', 'again', 'another', 'more', 'next', 'retry',
     '1 more', '1more', 'one more', 'onemore',
+    // Remix exact matches
+    'remix', 'shorter', 'longer', 'funnier',
 ];
 
 const COPY_KEYWORDS: string[] = [
@@ -93,15 +103,23 @@ const HELP_EXACT_PHRASES: string[] = [
 ];
 
 const EXTRACT_KEYWORDS: string[] = [
+    // Extract/transcript keywords
     'extract', 'original', 'transcript', 'original script', 'copy original',
     'what did they say', 'exact words', 'exact script', 'real script',
     'video script', 'reel script', 'their script', 'their words',
     'get original', 'show original', 'original text', 'source',
-    '🎤', '📝',
+    // Verbatim/copy keywords
+    'verbatim', 'word-for-word', 'word for word', 'exact copy', 'raw',
+    'raw transcript', 'just the words', 'just words', 'spoken words',
+    'what they said', 'dialogue', 'subtitles', 'captions',
+    // Emojis
+    '🎤', '📝', '📜', '🗣️',
 ];
 
 const EXTRACT_EXACT_PHRASES: string[] = [
     'extract', 'original', 'transcript', 'source',
+    // Additional exact matches
+    'copy', 'verbatim', 'raw', 'captions', 'subtitles',
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -311,7 +329,7 @@ export class IntentClassifier {
 
             return {
                 intent,
-                reason: userIdea 
+                reason: userIdea
                     ? 'Message contains Instagram reel URL with user idea'
                     : 'Message contains Instagram reel URL',
                 extractedData: {
