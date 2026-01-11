@@ -872,7 +872,8 @@ class WebhookService {
             };
         }
 
-        logger.warn(`[Webhook:${requestId}] Invalid state transition`, {
+        // Log at INFO level for expected cases (e.g., user double-clicked)
+        logger.info(`[Webhook:${requestId}] Invalid state transition (handled gracefully)`, {
             subscriberId,
             currentState,
             attemptedIntent: classification.intent,

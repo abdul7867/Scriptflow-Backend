@@ -367,7 +367,7 @@ class ManyChatFlowService {
             // Message failed - try silent custom field update as fallback
             // This is especially important for COPY_SCRIPT and JOB_COMPLETED flows
             // where we need to deliver the script URL even if outside 24-hour window
-            logger.warn('[ManyChatFlow] Text message failed, attempting silent field update', {
+            logger.info('[ManyChatFlow] Text message failed, attempting silent field update', {
                 flow,
                 subscriberId
             });
@@ -464,10 +464,11 @@ class ManyChatFlowService {
             // These are policy errors meaning user is outside 24-hour window
             // Do NOT retry - this is expected behavior for inactive users
             if (error.response?.status === 400 && META_WINDOW_ERROR_CODES.includes(metaErrorCode)) {
-                logger.warn('[ManyChatFlow] Meta Window Block detected', {
+                // INFO level because we handle this gracefully via silent field update fallback
+                logger.info('[ManyChatFlow] Meta Window Block detected (handled via fallback)', {
                     subscriberId,
                     errorCode: metaErrorCode,
-                    message: 'User outside 24-hour messaging window - message will not be delivered',
+                    message: 'User outside 24-hour messaging window - using silent field update',
                     responseData: error.response?.data
                 });
 

@@ -178,12 +178,13 @@ export function extractUserIdeaFromMessageWithUrl(message: string, reelUrl: stri
     }
 
     // Common phrases to remove (case-insensitive)
+    // These are generic commands that should NOT be treated as the script topic
     const phrasesToRemove = [
-        /^make\s+(this|it|a|an)\s+/i,
-        /^create\s+(this|it|a|an)\s+/i,
-        /^generate\s+(this|it|a|an)\s+/i,
-        /^write\s+(this|it|a|an)\s+/i,
-        /^do\s+(this|it|a|an)\s+/i,
+        /^make\s+(this|it|a|an)?\s*/i,
+        /^create\s+(this|it|a|an)?\s*/i,
+        /^generate\s+(this|it|a|an)?\s*/i,
+        /^write\s+(this|it|a|an)?\s*/i,
+        /^do\s+(this|it|a|an)?\s*/i,
         /^turn\s+(this|it)\s+into\s+/i,
         /^convert\s+(this|it)\s+to\s+/i,
         /^for\s+me\s*/i,
@@ -192,6 +193,24 @@ export function extractUserIdeaFromMessageWithUrl(message: string, reelUrl: stri
         /^video\s+(about|on|for)\s+/i,
         /^reel\s+(about|on|for)\s+/i,
         /^script\s+(about|on|for)\s+/i,
+        // NEW: Generic command phrases that often follow a reel URL
+        /^start\s+(creating|making|generating)?\s*(script|video|reel)?\s*/i,
+        /^go\s*(ahead)?\s*/i,
+        /^please\s+(start|create|make|generate|go)\s*/i,
+        /^now\s+(start|create|make|generate)?\s*/i,
+        /^let'?s?\s+(go|start|create|make)\s*/i,
+        /^just\s+(go|start|create|make|do\s+it)?\s*/i,
+        /^begin\s*(creating|making)?\s*/i,
+        /^run\s*(it)?\s*/i,
+        /^execute\s*/i,
+        /^here('?s)?\s+(the|a|my)?\s*(reel|video|link)?\s*/i,
+        /^this\s+(is|reel|video|one)\s*/i,
+        /^check\s+(this|it)\s*(out)?\s*/i,
+        // Remove trailing command phrases too
+        /\s*start\s+(creating|making|generating)?\s*(script|video|reel)?\s*$/i,
+        /\s*go\s*(ahead)?\s*$/i,
+        /\s*please\s*$/i,
+        /\s*now\s*$/i,
     ];
 
     // Clean up the idea text
