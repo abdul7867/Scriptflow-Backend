@@ -9,8 +9,6 @@ dist/
 build/
 *.js.map
 
-*.md
-
 # ==============================================
 # DEPENDENCIES
 # ==============================================
@@ -33,7 +31,6 @@ cookies.txt
 # Allow folder structure and documentation, but exclude sensitive files
 secrets/*
 !secrets/.gitkeep
-!secrets/README.md
 
 # GCP Service Account Keys (NEVER COMMIT!)
 gcp-service-account.json
@@ -132,18 +129,16 @@ debug/
 render.yaml
 
 # ==============================================
-# DOCUMENTATION
-# Keep important docs, ignore generated reports
+# DOCUMENTATION - ALL IN docs/ FOLDER
+# Ignore entire docs folder and all markdown files
 # ==============================================
+docs/
 *.md
+*.txt
+PRD_*.txt
+
+# Only keep essential root-level docs
 !README.md
-!MANYCHAT_INTEGRATION_GUIDE.md
-!CHATBOT_ARCHITECTURE.md
-!MANYCHAT_SETUP_GUIDE.md
-!QUICK_REFERENCE.md
-!QUICK_START_PRODUCTION.md
-!DEPLOYMENT_SETUP.md
-!DEPLOYMENT_FIX.md
 
 # ==============================================
 # MEDIA FILES (generated at runtime)
