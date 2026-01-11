@@ -373,8 +373,16 @@ class WebhookService {
 
         if (!userIdea) {
             // Fallback: Manual extraction (backward compatibility)
-            const messageWithoutUrl = rawMessage.replace(reelUrl, '').trim();
-            if (messageWithoutUrl.length > 3) {
+            // Remove the reel URL and any trailing query parameters
+            let messageWithoutUrl = rawMessage.replace(reelUrl, '').trim();
+
+            // Remove leftover URL fragments like ?igsh=abc123 or /?igsh=...
+            messageWithoutUrl = messageWithoutUrl
+                .replace(/^\/?[?&][a-zA-Z0-9_]+=[a-zA-Z0-9_%-]*/g, '')
+                .trim();
+
+            // Only use as idea if it's meaningful text (not URL garbage)
+            if (messageWithoutUrl.length > 3 && !/^[?&/=%]/.test(messageWithoutUrl)) {
                 userIdea = messageWithoutUrl;
                 logger.debug(`[Webhook:${requestId}] Fallback idea extraction: "${userIdea}"`);
             }

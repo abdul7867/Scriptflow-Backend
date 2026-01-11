@@ -154,8 +154,28 @@ export function containsReelUrl(message: string): boolean {
  * Removes the URL and common command phrases, returning the core idea
  */
 export function extractUserIdeaFromMessageWithUrl(message: string, reelUrl: string): string | null {
-    // Remove the reel URL from the message
-    let ideaText = message.replace(reelUrl, '').trim();
+    // First, remove the full Instagram URL including any query parameters
+    // Instagram URLs often have ?igsh=... or other tracking params
+    // Pattern matches the URL and any query string that follows
+    const fullUrlPattern = new RegExp(
+        escapeRegExp(reelUrl) +
+        '(?:\\/)?(?:\\?[a-zA-Z0-9_=&%-]*)?',
+        'i'
+    );
+    let ideaText = message.replace(fullUrlPattern, '').trim();
+
+    // Also remove any standalone URL query parameters that might remain
+    // These look like: ?igsh=abc123 or &utm_source=... etc.
+    // Remove patterns that look like leftover URL fragments
+    const urlFragmentPatterns = [
+        /^[?&][a-zA-Z0-9_]+=[\w%-]*/,          // ?param=value or &param=value at start
+        /^\/?[?&][a-zA-Z0-9_]+=[\w%-]*/,       // /?igsh=... pattern
+        /^\/$/,                                 // Just a trailing slash
+    ];
+
+    for (const pattern of urlFragmentPatterns) {
+        ideaText = ideaText.replace(pattern, '').trim();
+    }
 
     // Common phrases to remove (case-insensitive)
     const phrasesToRemove = [
@@ -182,8 +202,13 @@ export function extractUserIdeaFromMessageWithUrl(message: string, reelUrl: stri
     // Trim and normalize whitespace
     ideaText = ideaText.trim().replace(/\s+/g, ' ');
 
-    // If the remaining text is too short (< 3 chars) or empty, return null
+    // If the remaining text is too short (<3 chars) or empty, return null
     if (ideaText.length < 3) {
+        return null;
+    }
+
+    // Additional check: if the text looks like a URL fragment (starts with special chars), reject it
+    if (/^[?&/=%]/.test(ideaText)) {
         return null;
     }
 
