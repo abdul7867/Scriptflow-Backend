@@ -44,7 +44,11 @@ const webhookRequestSchema = z.object({
     user_idea: z.string().optional(),
     last_text_input: z.string().optional(),
     // Reel URL (from ManyChat custom field cuf_14126356)
-    reel_url: z.string().url().optional(),
+    // Use preprocess to handle empty strings from ManyChat when custom field is not set
+    reel_url: z.preprocess(
+        (val) => (val === '' || val === null || val === 'null' || val === 'undefined') ? undefined : val,
+        z.string().url().optional()
+    ),
     // Platform identifier (e.g., "instagram")
     platform: z.string().optional(),
     // Transform empty strings to undefined for optional enum fields
