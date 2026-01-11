@@ -184,19 +184,19 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_script = "" (clear old data)
+        // sc_last_script = "..." (clear old data with placeholder)
         if (FIELD_IDS.SC_LAST_SCRIPT) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
-                field_value: ''
+                field_value: 'Generating...'
             });
         }
 
-        // sc_last_image = "" (clear old data)
+        // sc_last_image = "-" (clear old data with placeholder)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
+                field_value: '-'
             });
         }
 
@@ -303,11 +303,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "" (clear image)
+        // sc_last_image = "-" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
+                field_value: '-'
             });
         }
 
@@ -359,11 +359,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "" (clear image)
+        // sc_last_image = "-" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
+                field_value: '-'
             });
         }
 
