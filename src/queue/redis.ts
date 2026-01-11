@@ -17,7 +17,7 @@ export function getRedis(): Redis {
   if (!redis) {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     logger.info(`Creating Redis connection to: ${redisUrl.substring(0, 30)}...`);
-    
+
     redis = new Redis(redisUrl, {
       maxRetriesPerRequest: null, // Required for BullMQ
       retryStrategy: (times: number) => {
@@ -84,7 +84,7 @@ export function getRedis(): Redis {
       logger.error('Redis connection ended permanently');
     });
   }
-  
+
   return redis;
 }
 
@@ -94,7 +94,7 @@ export function getRedis(): Redis {
  */
 export async function connectRedis(): Promise<void> {
   const redisInstance = getRedis();
-  
+
   return new Promise((resolve, reject) => {
     if (redisInstance.status === 'ready') {
       logger.info('✅ Redis already connected');
@@ -124,7 +124,7 @@ export async function connectRedis(): Promise<void> {
  */
 export async function disconnectRedis(): Promise<void> {
   if (!redis) return;
-  
+
   try {
     await redis.quit();
     redis = null; // Nullify to allow reconnection

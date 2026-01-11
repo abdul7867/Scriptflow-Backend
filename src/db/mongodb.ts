@@ -14,7 +14,7 @@ export async function connectDB(): Promise<void> {
   }
 
   const mongoUri = process.env.MONGODB_URI;
-  
+
   if (!mongoUri) {
     throw new Error('MONGODB_URI environment variable is not defined');
   }
@@ -38,7 +38,7 @@ export async function connectDB(): Promise<void> {
       await mongoose.connect(mongoUri, options);
       isConnected = true;
       logger.info('✅ MongoDB connected successfully');
-      
+
       // Connection event handlers
       mongoose.connection.on('error', (err) => {
         logger.error('MongoDB connection error:', err);
@@ -60,11 +60,11 @@ export async function connectDB(): Promise<void> {
       retryCount++;
       const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
       logger.error(`MongoDB connection attempt ${retryCount}/${maxRetries} failed. Retrying in ${delay}ms...`, error);
-      
+
       if (retryCount >= maxRetries) {
         throw new Error(`Failed to connect to MongoDB after ${maxRetries} attempts`);
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

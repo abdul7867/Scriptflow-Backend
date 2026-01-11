@@ -324,6 +324,13 @@ async function processJobWithTimeout(
     }
   );
 
+  // Initialize ManyChat state (set status="Processing")
+  try {
+    await manychatStateService.initializeProcessing(subscriberId);
+  } catch (initError: any) {
+    logger.warn(`[${requestId}] Failed to initialize ManyChat state: ${initError.message}`);
+  }
+
   let videoPath: string | null = null;
   let audioPath: string | null = null;
   let frameDir: string | null = null;

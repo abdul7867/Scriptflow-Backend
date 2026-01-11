@@ -87,7 +87,7 @@ function getAuthHeaders(): Record<string, string> {
  */
 async function setCustomField(
     subscriberId: string,
-    fieldId: string,
+    fieldId: string | number,
     fieldValue: string
 ): Promise<boolean> {
     if (!config.MANYCHAT_API_KEY) {
@@ -101,42 +101,29 @@ async function setCustomField(
     }
 
     try {
-        const setFieldUrl = `${getApiBaseUrl()}/subscriber/setCustomField`;
+        // STRICT REQUIREMENT: Use this exact endpoint
+        const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
 
-        const subscriberIdInt = parseInt(subscriberId, 10);
-        const fieldIdInt = parseInt(fieldId, 10);
-
-        if (isNaN(subscriberIdInt)) {
-            logger.error('[ManyChatState] Invalid subscriber ID', { subscriberId });
-            return false;
-        }
-
-        if (isNaN(fieldIdInt)) {
-            logger.error('[ManyChatState] Invalid field ID', { fieldId });
-            return false;
-        }
+        const subscriberIdStr = subscriberId.toString();
+        // Ensure field_id is a number if possible, but keep it flexible if string is needed
+        const fieldIdNum = typeof fieldId === 'string' ? parseInt(fieldId, 10) : fieldId;
 
         await axios.post(setFieldUrl, {
-            subscriber_id: subscriberIdInt,
-            field_id: fieldIdInt,
+            subscriber_id: subscriberIdStr,
+            field_id: fieldIdNum,
             field_value: fieldValue
         }, {
-            headers: getAuthHeaders(),
+            headers: {
+                'Authorization': `Bearer ${config.MANYCHAT_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
             timeout: API_TIMEOUT_MS
         });
 
-        logger.debug('[ManyChatState] Custom field updated', {
-            subscriberId,
-            fieldId,
-            valueLength: fieldValue.length
-        });
-
+        logger.info(`[ManyChatState] ✅ Custom field updated: ${fieldId} for ${subscriberId}`);
         return true;
     } catch (error: any) {
-        logger.error('[ManyChatState] Failed to update custom field', {
-            subscriberId,
-            fieldId,
-            error: error.message,
+        logger.error(`[ManyChatState] ❌ Failed to update field ${fieldId} for ${subscriberId}: ${error.message}`, {
             response: error.response?.data
         });
         return false;
@@ -144,67 +131,18 @@ async function setCustomField(
 }
 
 /**
- * Set multiple custom fields at once
- * Uses the setCustomFields endpoint for efficiency
- * 
- * @param subscriberId - The subscriber's ManyChat ID
- * @param fields - Array of {field_id, field_value} objects
- * @returns true if successful, false otherwise
+ * Helper to set multiple fields sequentially (since we must use the single endpoint)
  */
-async function setCustomFields(
+async function setCustomFieldsSequential(
     subscriberId: string,
-    fields: Array<{ field_id: number; field_value: string }>
+    fields: Array<{ field_id: string | number; field_value: string }>
 ): Promise<boolean> {
-    if (!config.MANYCHAT_API_KEY) {
-        logger.warn('[ManyChatState] No API key configured, skipping fields update');
-        return false;
-    }
+    // Using Promise.all to send them in parallel for speed as they are non-blocking.
+    const results = await Promise.all(fields.map(f =>
+        setCustomField(subscriberId, f.field_id, f.field_value)
+    ));
 
-    if (!fields || fields.length === 0) {
-        logger.warn('[ManyChatState] No fields provided, skipping update');
-        return false;
-    }
-
-    // Filter out fields with invalid IDs
-    const validFields = fields.filter(f => !isNaN(f.field_id) && f.field_id > 0);
-
-    if (validFields.length === 0) {
-        logger.warn('[ManyChatState] No valid field IDs, skipping update');
-        return false;
-    }
-
-    try {
-        const setFieldsUrl = `${getApiBaseUrl()}/subscriber/setCustomFields`;
-
-        const subscriberIdInt = parseInt(subscriberId, 10);
-
-        if (isNaN(subscriberIdInt)) {
-            logger.error('[ManyChatState] Invalid subscriber ID', { subscriberId });
-            return false;
-        }
-
-        await axios.post(setFieldsUrl, {
-            subscriber_id: subscriberIdInt,
-            fields: validFields
-        }, {
-            headers: getAuthHeaders(),
-            timeout: API_TIMEOUT_MS
-        });
-
-        logger.debug('[ManyChatState] Custom fields updated', {
-            subscriberId,
-            fieldCount: validFields.length
-        });
-
-        return true;
-    } catch (error: any) {
-        logger.error('[ManyChatState] Failed to update custom fields', {
-            subscriberId,
-            error: error.message,
-            response: error.response?.data
-        });
-        return false;
-    }
+    return results.every(r => r === true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -270,7 +208,7 @@ class ManyChatStateService {
             return false;
         }
 
-        return await setCustomFields(subscriberId, fields);
+        return await setCustomFieldsSequential(subscriberId, fields);
     }
 
     /**
@@ -327,7 +265,7 @@ class ManyChatStateService {
             return false;
         }
 
-        const success = await setCustomFields(subscriberId, fields);
+        const success = await setCustomFieldsSequential(subscriberId, fields);
 
         if (success) {
             logger.info('[ManyChatState] ✅ Ready state set successfully', { subscriberId });
@@ -386,7 +324,7 @@ class ManyChatStateService {
             return false;
         }
 
-        return await setCustomFields(subscriberId, fields);
+        return await setCustomFieldsSequential(subscriberId, fields);
     }
 
     /**
@@ -442,7 +380,7 @@ class ManyChatStateService {
             return false;
         }
 
-        return await setCustomFields(subscriberId, fields);
+        return await setCustomFieldsSequential(subscriberId, fields);
     }
 
     /**
