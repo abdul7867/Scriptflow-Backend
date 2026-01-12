@@ -64,6 +64,13 @@ const SESSION_KEY_PREFIX = 'session:';
 /** Redis key prefix for variation counts */
 const VARIATION_KEY_PREFIX = 'variation:';
 
+/**
+ * In-memory TTL cache to avoid redis.ttl() calls
+ * Key: session key, Value: last refresh timestamp (ms)
+ * OPTIMIZATION: Reduces Redis reads by ~33% per session update
+ */
+const sessionTTLCache = new Map<string, number>();
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -141,8 +148,8 @@ class SessionManager {
    * Update session with new data
    * Automatically updates lastActivityAt
    * 
-   * Performance Optimization PRD Section 2.2.3:
-   * Only refresh TTL if >50% expired to reduce Redis writes by 50%
+   * OPTIMIZED: Uses in-memory TTL cache to skip redis.ttl() calls
+   * This reduces Redis reads by ~33% per session update
    */
   async updateSession(
     subscriberId: string,
@@ -151,13 +158,10 @@ class SessionManager {
     try {
       const redis = getRedis();
       const key = getSessionKey(subscriberId);
+      const now = Date.now();
 
-      // Get existing session and TTL
-      const [existingData, ttl] = await Promise.all([
-        redis.get(key),
-        redis.ttl(key),
-      ]);
-
+      // Get existing session only (skip TTL query - use in-memory cache)
+      const existingData = await redis.get(key);
       const existing = existingData ? JSON.parse(existingData) : createEmptySession();
 
       // Merge updates
@@ -167,14 +171,16 @@ class SessionManager {
         lastActivityAt: new Date().toISOString(),
       };
 
-      // Performance Optimization PRD Section 2.2.3: Conditional TTL Refresh
-      // Only set new expiry if TTL is less than 50% of original (15 minutes remaining)
-      // This reduces session writes by ~50%
-      const shouldRefreshTTL = ttl < 0 || ttl < SESSION_TTL_SECONDS / 2;
+      // OPTIMIZATION: Use in-memory cache instead of redis.ttl() call
+      // Check if TTL refresh is needed (>50% of TTL expired)
+      const lastRefresh = sessionTTLCache.get(key) || 0;
+      const ttlHalfLifeMs = (SESSION_TTL_SECONDS * 1000) / 2; // 15 minutes in ms
+      const shouldRefreshTTL = (now - lastRefresh) > ttlHalfLifeMs;
 
       if (shouldRefreshTTL) {
-        // Session TTL needs refresh - use SETEX
+        // Session TTL needs refresh - use SETEX and update cache
         await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(updated));
+        sessionTTLCache.set(key, now);
       } else {
         // TTL still fresh (>50% remaining) - just update data without TTL refresh
         await redis.set(key, JSON.stringify(updated), 'KEEPTTL');

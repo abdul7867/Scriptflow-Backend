@@ -1,342 +1,681 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enhanced Copy Link Page Demo | ScriptFlow</title>
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Your Script | ScriptFlow</title>
+  <meta name="description" content="Your AI-generated video script - tap to copy">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+
   <style>
+    :root {
+      /* SUNSET GOLD + ELECTRIC VIOLET Color Palette */
+      --bg-primary: #0a0a0c;
+      --bg-secondary: #0f0f12;
+      --bg-card: rgba(15, 15, 18, 0.9);
+
+      /* Primary Accents - Sunset Gold + Violet Mix */
+      --accent-primary: #8b5cf6;
+      /* Electric Violet - primary brand */
+      --accent-secondary: #f59e0b;
+      /* Sunset Gold - secondary highlight */
+      --accent-gradient: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+
+      /* Content Colors */
+      --accent-camera: #64748b;
+      /* Slate - camera setup */
+      --accent-overlay: #f59e0b;
+      /* Sunset Gold - text overlay */
+      --accent-dialogue: #a78bfa;
+      /* Light Violet - dialogue */
+      --accent-success: #22c55e;
+      /* Green - success state */
+
+      /* Text Colors */
+      --text-primary: #fafafa;
+      --text-secondary: #a5a5b0;
+      --text-muted: #6b6b7a;
+
+      /* Borders */
+      --border-subtle: rgba(139, 92, 246, 0.1);
+      --border-accent: rgba(139, 92, 246, 0.3);
+      --border-gold: rgba(245, 158, 11, 0.3);
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Poppins', sans-serif;
-      background: linear-gradient(180deg, #09090b 0%, #18181b 100%);
-      color: #fafafa;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       min-height: 100vh;
       padding: 20px;
-      padding-bottom: 120px;
+      padding-bottom: 100px;
     }
-    
+
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
       padding-bottom: 20px;
-      border-bottom: 2px solid rgba(255,255,255,0.08);
+      border-bottom: 1px solid var(--border-subtle);
     }
-    
+
     .logo {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 900;
-      letter-spacing: -0.8px;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
     }
-    
+
     .logo span {
-      color: #22d3ee;
-      text-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    
+
     .badge {
-      font-size: 10px;
-      color: #22d3ee;
-      background: rgba(34, 211, 238, 0.1);
-      border: 1px solid rgba(34, 211, 238, 0.3);
+      font-size: 9px;
+      background: var(--accent-gradient);
+      color: white;
       padding: 6px 12px;
       border-radius: 6px;
       font-weight: 700;
       letter-spacing: 2px;
     }
-    
+
     .idea {
       font-size: 13px;
-      color: #d4d4d8;
-      margin-bottom: 32px;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
       padding: 16px 20px;
-      background: rgba(255,255,255,0.04);
+      background: var(--bg-secondary);
       border-radius: 12px;
-      border-left: 4px solid #22d3ee;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+      border-left: 3px solid;
+      border-image: var(--accent-gradient) 1;
     }
-    
+
     .idea-label {
-      font-size: 10px;
-      font-weight: 800;
+      font-size: 9px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 3px;
-      color: #22d3ee;
+      letter-spacing: 2px;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 8px;
     }
-    
+
+    /* Section Cards */
     .section-card {
-      background: rgba(24, 24, 27, 0.6);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       border-radius: 16px;
-      padding: 24px;
       margin-bottom: 24px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(10px);
+      overflow: hidden;
+      backdrop-filter: blur(20px);
     }
-    
+
     .section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 18px 24px;
+      background: rgba(139, 92, 246, 0.03);
+      border-bottom: 1px solid var(--border-subtle);
     }
-    
+
     .section-title {
-      font-size: 11px;
-      font-weight: 900;
+      font-size: 10px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 4px;
-      color: #22d3ee;
+      letter-spacing: 3px;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    
+
+    .section-content {
+      padding: 0;
+    }
+
+    /* Content Pair - Visual Hierarchy */
+    .content-pair {
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .content-pair:last-child {
+      border-bottom: none;
+    }
+
+    /* 📹 CAMERA SETUP Block */
+    .camera-block {
+      padding: 20px 24px;
+      background: rgba(100, 116, 139, 0.05);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .block-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .camera-label {
+      color: var(--accent-camera);
+    }
+
+    .camera-text {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    /* 📝 ON-SCREEN TEXT Block */
+    .overlay-container {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px dashed rgba(245, 158, 11, 0.2);
+    }
+
+    .overlay-label {
+      color: var(--accent-overlay);
+    }
+
+    .overlay-text {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-overlay);
+      background: rgba(245, 158, 11, 0.08);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(245, 158, 11, 0.15);
+      display: inline-block;
+    }
+
+    /* 🎤 SPEAK THIS Block */
+    .dialogue-block {
+      padding: 20px 24px;
+      background: rgba(139, 92, 246, 0.03);
+    }
+
+    .dialogue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .dialogue-label {
+      color: var(--accent-dialogue);
+    }
+
+    .dialogue-text {
+      font-size: 16px;
+      line-height: 1.8;
+      color: var(--text-primary);
+      font-weight: 500;
+      user-select: all;
+      -webkit-user-select: all;
+    }
+
+    /* Copy Buttons */
     .copy-section-btn {
-      background: rgba(34, 211, 238, 0.1);
-      border: 1px solid rgba(34, 211, 238, 0.3);
-      color: #22d3ee;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid var(--border-accent);
+      color: var(--accent-primary);
       padding: 6px 12px;
       border-radius: 6px;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       cursor: pointer;
       transition: all 0.2s ease;
       letter-spacing: 1px;
     }
-    
-    .copy-section-btn:hover {
-      background: rgba(34, 211, 238, 0.2);
-      border-color: rgba(34, 211, 238, 0.5);
+
+    .copy-dialogue-btn {
+      background: rgba(167, 139, 250, 0.1);
+      border: 1px solid rgba(167, 139, 250, 0.2);
+      color: var(--accent-dialogue);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 1px;
     }
-    
-    .copy-section-btn:active {
-      transform: scale(0.95);
+
+    .copy-section-btn:hover,
+    .copy-dialogue-btn:hover {
+      transform: translateY(-1px);
     }
-    
-    .copy-section-btn.copied {
-      background: rgba(34, 197, 94, 0.2);
-      border-color: rgba(34, 197, 94, 0.5);
-      color: #22c55e;
+
+    .copy-section-btn:active,
+    .copy-dialogue-btn:active {
+      transform: scale(0.96);
     }
-    
-    .section-text {
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-      font-size: 14px;
-      line-height: 2;
-      color: #e4e4e7;
-      white-space: pre-wrap;
-      word-break: break-word;
-      user-select: all;
-      -webkit-user-select: all;
+
+    .copy-section-btn.copied,
+    .copy-dialogue-btn.copied {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: var(--accent-success);
     }
-    
+
+    /* Main Copy Button */
     .copy-all-button {
       position: fixed;
       bottom: 20px;
       left: 20px;
       right: 20px;
-      background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
-      color: #09090b;
+      background: var(--accent-gradient);
+      color: white;
       border: none;
       border-radius: 14px;
       padding: 18px 28px;
-      font-size: 17px;
-      font-weight: 800;
+      font-size: 15px;
+      font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      box-shadow: 0 12px 36px rgba(34, 211, 238, 0.4);
+      gap: 10px;
+      box-shadow: 0 8px 32px rgba(139, 92, 246, 0.35), 0 8px 32px rgba(245, 158, 11, 0.15);
       transition: all 0.2s ease;
       z-index: 1000;
       letter-spacing: 0.5px;
     }
-    
+
     .copy-all-button:active {
-      transform: scale(0.97);
-    }
-    
-    .copy-all-button.copied {
-      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-      box-shadow: 0 12px 36px rgba(34, 197, 94, 0.4);
-    }
-    
-    .copy-icon {
-      width: 22px;
-      height: 22px;
-    }
-    
-    .footer {
-      text-align: center;
-      font-size: 11px;
-      color: #52525b;
-      margin-top: 32px;
-      letter-spacing: 2px;
+      transform: scale(0.98);
     }
 
+    .copy-all-button.copied {
+      background: linear-gradient(135deg, var(--accent-success) 0%, #16a34a 100%);
+      box-shadow: 0 8px 32px rgba(34, 197, 94, 0.35);
+    }
+
+    .copy-icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 32px;
+      letter-spacing: 3px;
+    }
+
+    /* Desktop: Side-by-side layout */
     @media (min-width: 768px) {
       body {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
         padding: 40px;
+        padding-bottom: 120px;
       }
-      
+
+      .content-pair {
+        display: grid;
+        grid-template-columns: 40% 60%;
+      }
+
+      .camera-block {
+        border-bottom: none;
+        border-right: 1px solid var(--border-subtle);
+      }
+
       .copy-all-button {
         left: 50%;
         right: auto;
         transform: translateX(-50%);
         max-width: 400px;
       }
-      
+
       .copy-all-button:active {
-        transform: translateX(-50%) scale(0.97);
+        transform: translateX(-50%) scale(0.98);
       }
     }
   </style>
 </head>
+
 <body>
   <div class="header">
     <div class="logo">SCRIPT<span>FLOW</span></div>
-    <div class="badge">✦ COPY READY</div>
+    <div class="badge">✦ V2.0</div>
   </div>
-  
+
   <div class="idea">
     <div class="idea-label">💡 Your Concept</div>
-    Create a compelling Instagram reel about productivity tips for remote workers
+    The complete guide to building a 6-figure personal brand on Instagram using content psychology and strategic
+    engagement
   </div>
-  
+
+  <!-- HOOK Section -->
   <div class="section-card">
     <div class="section-header">
       <div class="section-title">01 / HOOK</div>
       <button class="copy-section-btn" onclick="copySection('hook')">
-        <span class="copy-text-hook">COPY</span>
+        <span class="copy-text-hook">COPY ALL</span>
       </button>
     </div>
-    <pre class="section-text" id="hookText">🎬 VISUAL: Close-up on your face, speaking directly to camera
-💬 SAY: Are you working from home but still feeling overwhelmed?
+    <div class="section-content">
 
-🎬 VISUAL: Quick cut to cluttered desk with multiple screens
-💬 SAY: Here's what nobody tells you about remote work productivity...</pre>
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Wide shot of luxury workspace with ring light and professional setup. Quick zoom to
+            close-up face shot, slightly raised eyebrow, skeptical look.</div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"The Algorithm Doesn't Care..."</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('hook-0')" data-id="hook-0">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="hook-0">"Everyone's talking about 'beating the algorithm'... but here's what
+            nobody tells you: the algorithm doesn't actually care about you. It cares about ONE thing only."</div>
+        </div>
+      </div>
+
+    </div>
   </div>
-  
+
+  <!-- BODY Section (Extended with 5 insights for long content test) -->
   <div class="section-card">
     <div class="section-header">
       <div class="section-title">02 / BODY</div>
       <button class="copy-section-btn" onclick="copySection('body')">
-        <span class="copy-text-body">COPY</span>
+        <span class="copy-text-body">COPY ALL</span>
       </button>
     </div>
-    <pre class="section-text" id="bodyText">🎬 VISUAL: Show clean, organized workspace
-💬 SAY: First, create dedicated zones. Your work zone should trigger productivity mode.
+    <div class="section-content">
 
-🎬 VISUAL: Timer on screen showing 25-minute intervals
-💬 SAY: Second, use the Pomodoro technique. 25 minutes focused work, 5 minutes break.
+      <!-- Insight 1 -->
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Close-up, lean forward slightly, index finger raised. Intense eye contact with
+            camera.</div>
 
-🎬 VISUAL: Calendar app with color-coded blocks
-💬 SAY: Third, time-block your calendar. Treat your focus time like important meetings.</pre>
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"#1 Watch Time = Currency"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('body-0')" data-id="body-0">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="body-0">"First, understand this: watch time is the ONLY currency that matters.
+            BECAUSE Instagram's entire business model is built on keeping people on the app longer. If your content
+            makes people stay, you win. Period."</div>
+        </div>
+      </div>
+
+      <!-- Insight 2 -->
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Pull back to medium shot. Hand gestures counting on fingers. Background shows content
+            calendar on screen.</div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"#2 The 3-Second Rule"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('body-1')" data-id="body-1">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="body-1">"Second, master the 3-second rule. BECAUSE research shows that 65% of
+            viewers make their stay-or-scroll decision in the first three seconds. Your hook isn't just important—it's
+            EVERYTHING. Start with pattern interrupts, not introductions."</div>
+        </div>
+      </div>
+
+      <!-- Insight 3 -->
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Screen recording showing Instagram Insights dashboard. Highlight the "Saves" and
+            "Shares" metrics with red circles.</div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"#3 Saves > Likes"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('body-2')" data-id="body-2">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="body-2">"Third, stop chasing likes. BECAUSE saves and shares signal to
+            Instagram that your content has LONG-TERM value. A like is 'nice content.' A save is 'I need to come back to
+            this.' That's the difference between viral and forgettable."</div>
+        </div>
+      </div>
+
+      <!-- Insight 4 -->
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Back to face shot. Snap fingers for emphasis. Quick jump cuts between key words.
+          </div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"#4 Consistency > Quality"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('body-3')" data-id="body-3">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="body-3">"Fourth—and this is controversial—consistency beats quality. BECAUSE
+            the algorithm rewards creators who show up reliably. One amazing video per month loses to three good videos
+            per week. Your audience forgets perfection, but they remember presence."</div>
+        </div>
+      </div>
+
+      <!-- Insight 5 -->
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Pull back to show full setup. Hand on heart, authentic tone. Soft lighting change to
+            warmer tones.</div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"#5 Build Community First"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('body-4')" data-id="body-4">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="body-4">"Fifth, stop treating followers as numbers. BECAUSE community drives
+            conversions, not follower count. 1,000 true fans who engage beat 100,000 ghost followers. Reply to EVERY
+            comment for your first year. That's how empires are built."</div>
+        </div>
+      </div>
+
+    </div>
   </div>
-  
+
+  <!-- CTA Section -->
   <div class="section-card">
     <div class="section-header">
       <div class="section-title">03 / CALL TO ACTION</div>
       <button class="copy-section-btn" onclick="copySection('cta')">
-        <span class="copy-text-cta">COPY</span>
+        <span class="copy-text-cta">COPY ALL</span>
       </button>
     </div>
-    <pre class="section-text" id="ctaText">🎬 VISUAL: Back to your face, confident smile
-💬 SAY: Try these three strategies for one week and watch your productivity soar.
+    <div class="section-content">
 
-🎬 VISUAL: Text overlay: "Follow for more productivity hacks"
-💬 SAY: Follow me for more remote work tips. Comment "PRODUCTIVE" if you're ready to level up!</pre>
+      <div class="content-pair">
+        <div class="camera-block">
+          <div class="block-label camera-label">📹 CAMERA SETUP</div>
+          <div class="camera-text">Extreme close-up, confident smile, point at camera. Energy builds. Quick zoom out at
+            "save this."</div>
+
+          <div class="overlay-container">
+            <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+            <div class="overlay-text">"Save This → Build Empire 🔥"</div>
+          </div>
+        </div>
+        <div class="dialogue-block">
+          <div class="dialogue-header">
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
+            <button class="copy-dialogue-btn" onclick="copyDialogue('cta-0')" data-id="cta-0">
+              <span class="copy-dialogue-text">COPY</span>
+            </button>
+          </div>
+          <div class="dialogue-text" id="cta-0">"This is the exact playbook I used to go from zero to six figures. SAVE
+            this so you don't lose it. Follow for Part 2 where I break down the psychology of viral hooks. And comment
+            'EMPIRE' if you're ready to build yours!"</div>
+        </div>
+      </div>
+
+    </div>
   </div>
-  
+
   <button class="copy-all-button" id="copyAllBtn" onclick="copyAll()">
     <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+      </path>
     </svg>
-    <span id="copyAllText">COPY ENTIRE SCRIPT</span>
+    <span id="copyAllText">COPY ALL DIALOGUE</span>
   </button>
-  
+
   <div class="footer">
     POWERED BY SCRIPTFLOW AI
   </div>
-  
+
   <script>
-    const fullScript = `[HOOK]
-🎬 VISUAL: Close-up on your face, speaking directly to camera
-💬 SAY: Are you working from home but still feeling overwhelmed?
+    // Get all dialogue text
+    function getAllDialogue() {
+      const dialogues = document.querySelectorAll('.dialogue-text');
+      const texts = [];
+      dialogues.forEach(function (el) {
+        const text = el.innerText.replace(/^"|"$/g, '').trim();
+        if (text) texts.push(text);
+      });
+      return texts.join('\n\n');
+    }
 
-🎬 VISUAL: Quick cut to cluttered desk with multiple screens
-💬 SAY: Here's what nobody tells you about remote work productivity...
+    async function copyDialogue(dialogueId) {
+      const textElement = document.getElementById(dialogueId);
+      const btn = document.querySelector('[data-id="' + dialogueId + '"]');
+      const btnText = btn.querySelector('.copy-dialogue-text');
 
-[BODY]
-🎬 VISUAL: Show clean, organized workspace
-💬 SAY: First, create dedicated zones. Your work zone should trigger productivity mode.
+      if (!textElement) return;
 
-🎬 VISUAL: Timer on screen showing 25-minute intervals
-💬 SAY: Second, use the Pomodoro technique. 25 minutes focused work, 5 minutes break.
+      const text = textElement.innerText.replace(/^"|"$/g, '').trim();
 
-🎬 VISUAL: Calendar app with color-coded blocks
-💬 SAY: Third, time-block your calendar. Treat your focus time like important meetings.
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.classList.add('copied');
+        btnText.innerText = '✓';
 
-[CTA]
-🎬 VISUAL: Back to your face, confident smile
-💬 SAY: Try these three strategies for one week and watch your productivity soar.
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          btnText.innerText = 'COPY';
+        }, 1500);
+      } catch (err) {
+        fallbackCopy(text, btn, btnText, 'COPY');
+      }
+    }
 
-🎬 VISUAL: Text overlay: "Follow for more productivity hacks"
-💬 SAY: Follow me for more remote work tips. Comment "PRODUCTIVE" if you're ready to level up!`;
-    
     async function copySection(section) {
-      const elementId = section + 'Text';
-      const textElement = document.getElementById(elementId);
       const btnTextElement = document.querySelector('.copy-text-' + section);
       const btnElement = btnTextElement.parentElement;
-      
-      if (!textElement) return;
-      
-      const text = textElement.innerText;
-      
+
+      const sectionCard = btnElement.closest('.section-card');
+      const dialogues = sectionCard.querySelectorAll('.dialogue-text');
+      const texts = [];
+      dialogues.forEach(function (el) {
+        const text = el.innerText.replace(/^"|"$/g, '').trim();
+        if (text) texts.push(text);
+      });
+      const text = texts.join('\n\n');
+
       try {
         await navigator.clipboard.writeText(text);
         btnElement.classList.add('copied');
         btnTextElement.innerText = '✓ COPIED';
-        
-        setTimeout(function() {
+
+        setTimeout(function () {
           btnElement.classList.remove('copied');
-          btnTextElement.innerText = 'COPY';
+          btnTextElement.innerText = 'COPY ALL';
         }, 2000);
       } catch (err) {
-        fallbackCopy(text, btnElement, btnTextElement, 'COPY');
+        fallbackCopy(text, btnElement, btnTextElement, 'COPY ALL');
       }
     }
-    
+
     async function copyAll() {
       const btn = document.getElementById('copyAllBtn');
       const btnText = document.getElementById('copyAllText');
-      
+      const allDialogue = getAllDialogue();
+
       try {
-        await navigator.clipboard.writeText(fullScript);
+        await navigator.clipboard.writeText(allDialogue);
         btn.classList.add('copied');
-        btnText.innerText = '✓ COPIED TO CLIPBOARD!';
-        
-        setTimeout(function() {
+        btnText.innerText = '✓ COPIED!';
+
+        setTimeout(function () {
           btn.classList.remove('copied');
-          btnText.innerText = 'COPY ENTIRE SCRIPT';
+          btnText.innerText = 'COPY ALL DIALOGUE';
         }, 2000);
       } catch (err) {
-        fallbackCopy(fullScript, btn, btnText, 'COPY ENTIRE SCRIPT');
+        fallbackCopy(allDialogue, btn, btnText, 'COPY ALL DIALOGUE');
       }
     }
-    
+
     function fallbackCopy(text, btn, btnText, originalText) {
       const textarea = document.createElement('textarea');
       textarea.value = text;
@@ -344,21 +683,22 @@
       textarea.style.opacity = '0';
       document.body.appendChild(textarea);
       textarea.select();
-      
+
       try {
         document.execCommand('copy');
         btn.classList.add('copied');
         btnText.innerText = '✓ COPIED!';
-        setTimeout(function() {
+        setTimeout(function () {
           btn.classList.remove('copied');
           btnText.innerText = originalText;
         }, 2000);
       } catch (e) {
         btnText.innerText = 'Long-press to copy';
       }
-      
+
       document.body.removeChild(textarea);
     }
   </script>
 </body>
+
 </html>

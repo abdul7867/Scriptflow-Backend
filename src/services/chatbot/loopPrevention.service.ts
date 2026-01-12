@@ -197,6 +197,8 @@ class LoopPreventionService {
     /**
      * Check if a message should be processed or ignored due to loop detection.
      * 
+     * OPTIMIZED: Uses Redis pipeline to batch rate + lastAction checks (reduces 5 calls to 1)
+     * 
      * @param params - Check parameters
      * @returns LoopCheckResult indicating if message should be processed
      */
@@ -210,7 +212,7 @@ class LoopPreventionService {
         const { subscriberId, rawMessage, source, requestId } = params;
 
         // ─────────────────────────────────────────────────────────────────────────
-        // CHECK 1: System message pattern detection
+        // CHECK 1: System message pattern detection (NO Redis - pure regex)
         // ─────────────────────────────────────────────────────────────────────────
         if (this.isSystemMessage(rawMessage)) {
             logger.debug('[LoopPrevention] System message detected', {
@@ -228,7 +230,7 @@ class LoopPreventionService {
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // CHECK 2: Backend flow marker detection
+        // CHECK 2: Backend flow marker detection (NO Redis - pure regex)
         // ─────────────────────────────────────────────────────────────────────────
         if (this.isBackendFlowMessage(rawMessage)) {
             logger.debug('[LoopPrevention] Backend flow message detected', {
@@ -244,7 +246,7 @@ class LoopPreventionService {
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // CHECK 3: Ignored source detection
+        // CHECK 3: Ignored source detection (NO Redis - pure string check)
         // ─────────────────────────────────────────────────────────────────────────
         if (source && this.isIgnoredSource(source)) {
             logger.debug('[LoopPrevention] Message from ignored source', {
@@ -262,64 +264,86 @@ class LoopPreventionService {
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // CHECK 4: Rate-based loop detection
+        // CHECK 4 & 5: PIPELINED Redis checks (rate + lastAction in 1 call)
+        // OPTIMIZATION: Reduces 3 individual Redis calls to 1 pipeline
         // ─────────────────────────────────────────────────────────────────────────
-        const rateCheck = await this.checkMessageRate(subscriberId);
-        if (!rateCheck.allowed) {
-            logger.warn('[LoopPrevention] Rate-based loop detected', {
-                subscriberId,
-                messageCount: rateCheck.count,
-                requestId,
-            });
+        try {
+            const redis = getRedis();
+            const rateKey = getRateKey(subscriberId);
+            const lastActionKey = getLastActionKey(subscriberId);
 
-            return {
-                shouldProcess: false,
-                reason: `Too many messages (${rateCheck.count}/${MAX_MESSAGES_PER_MINUTE}) in the last minute`,
-                loopType: 'rate_loop',
-                details: { messageCount: rateCheck.count, limit: MAX_MESSAGES_PER_MINUTE },
-            };
-        }
+            // Pipeline: Fetch rate count AND last action in single round-trip
+            const pipeline = redis.pipeline();
+            pipeline.get(rateKey);
+            pipeline.get(lastActionKey);
+            const results = await pipeline.exec();
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // CHECK 5: Duplicate message detection
-        // ─────────────────────────────────────────────────────────────────────────
-        const messageHash = hashMessage(rawMessage);
-        const lastAction = await this.getLastAction(subscriberId);
+            // Parse pipeline results
+            const rateCountRaw = results?.[0]?.[1] as string | null;
+            const lastActionRaw = results?.[1]?.[1] as string | null;
 
-        if (lastAction) {
-            const timeSinceLastAction = Date.now() - lastAction.timestamp;
+            const currentRateCount = rateCountRaw ? parseInt(rateCountRaw, 10) : 0;
+            const lastAction = lastActionRaw ? JSON.parse(lastActionRaw) as LastActionRecord : null;
 
-            // Check for exact duplicate within threshold
-            if (lastAction.messageHash === messageHash && timeSinceLastAction < DUPLICATE_THRESHOLD_MS) {
-                logger.debug('[LoopPrevention] Duplicate message detected', {
+            // CHECK 4: Rate limit
+            if (currentRateCount >= MAX_MESSAGES_PER_MINUTE) {
+                logger.warn('[LoopPrevention] Rate-based loop detected', {
                     subscriberId,
-                    timeSinceLastAction,
+                    messageCount: currentRateCount,
                     requestId,
                 });
 
                 return {
                     shouldProcess: false,
-                    reason: 'Duplicate message detected within threshold',
-                    loopType: 'duplicate_action',
-                    details: {
-                        timeSinceLastAction,
-                        threshold: DUPLICATE_THRESHOLD_MS,
-                        lastAction: lastAction.action,
-                    },
+                    reason: `Too many messages (${currentRateCount}/${MAX_MESSAGES_PER_MINUTE}) in the last minute`,
+                    loopType: 'rate_loop',
+                    details: { messageCount: currentRateCount, limit: MAX_MESSAGES_PER_MINUTE },
                 };
             }
+
+            // CHECK 5: Duplicate detection
+            const messageHash = hashMessage(rawMessage);
+            if (lastAction) {
+                const timeSinceLastAction = Date.now() - lastAction.timestamp;
+
+                if (lastAction.messageHash === messageHash && timeSinceLastAction < DUPLICATE_THRESHOLD_MS) {
+                    logger.debug('[LoopPrevention] Duplicate message detected', {
+                        subscriberId,
+                        timeSinceLastAction,
+                        requestId,
+                    });
+
+                    return {
+                        shouldProcess: false,
+                        reason: 'Duplicate message detected within threshold',
+                        loopType: 'duplicate_action',
+                        details: {
+                            timeSinceLastAction,
+                            threshold: DUPLICATE_THRESHOLD_MS,
+                            lastAction: lastAction.action,
+                        },
+                    };
+                }
+            }
+
+            // ─────────────────────────────────────────────────────────────────────────
+            // ALL CHECKS PASSED - Increment rate counter (single optimized call)
+            // ─────────────────────────────────────────────────────────────────────────
+            // Use INCR + EXPIRE in pipeline for atomic increment
+            const incrPipeline = redis.pipeline();
+            incrPipeline.incr(rateKey);
+            incrPipeline.expire(rateKey, RATE_WINDOW_SECONDS);
+            await incrPipeline.exec();
+
+            return {
+                shouldProcess: true,
+            };
+
+        } catch (error) {
+            logger.error('[LoopPrevention] Pipeline check failed, allowing message', { subscriberId, error });
+            // Fail open - allow message if Redis is unavailable
+            return { shouldProcess: true };
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // ALL CHECKS PASSED
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Increment message rate counter
-        await this.incrementMessageRate(subscriberId);
-
-        return {
-            shouldProcess: true,
-        };
     }
 
     // ─────────────────────────────────────────────────────────────────────────

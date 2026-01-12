@@ -99,9 +99,11 @@ function escapeHtml(text: string): string {
 
 /**
  * Parsed visual-dialogue pair
+ * ENHANCED V2: Added textOverlay field for separate TEXT OVERLAY extraction
  */
 interface VisualDialoguePair {
   visual: string;
+  textOverlay: string;  // NEW: Separate field for 📝 TEXT OVERLAY
   dialogue: string;
 }
 
@@ -141,49 +143,66 @@ function parseScriptSections(scriptText: string): { hook: ParsedSection; body: P
 }
 
 /**
- * Extract visual and dialogue pairs from section content
+ * Extract visual, text overlay, and dialogue from section content
+ * ENHANCED V2: Added TEXT OVERLAY extraction for separate on-screen text
  */
 function extractVisualDialoguePairs(content: string): ParsedSection {
   const pairs: VisualDialoguePair[] = [];
   const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
   let currentVisual = '';
+  let currentTextOverlay = '';
   let currentDialogue = '';
 
   for (const line of lines) {
     // Check for visual marker (🎬 VISUAL: or just visual:)
     const visualMatch = line.match(/^(?:🎬\s*)?(?:VISUAL|Visual)\s*:\s*(.+)/i);
+    // Check for text overlay marker (📝 TEXT OVERLAY: or just text overlay:)
+    const textOverlayMatch = line.match(/^(?:📝\s*)?(?:TEXT OVERLAY|Text Overlay|TEXT_OVERLAY)\s*:\s*(.+)/i);
     // Check for dialogue marker (💬 SAY: or just say:)
     const dialogueMatch = line.match(/^(?:💬\s*)?(?:SAY|Say)\s*:\s*(.+)/i);
 
     if (visualMatch) {
       // If we have a previous pair, save it
-      if (currentVisual || currentDialogue) {
-        pairs.push({ visual: currentVisual.trim(), dialogue: currentDialogue.trim() });
+      if (currentVisual || currentDialogue || currentTextOverlay) {
+        pairs.push({
+          visual: currentVisual.trim(),
+          textOverlay: currentTextOverlay.trim(),
+          dialogue: currentDialogue.trim()
+        });
       }
       currentVisual = visualMatch[1].replace(/^[""]|[""]$/g, '').trim();
+      currentTextOverlay = '';
       currentDialogue = '';
+    } else if (textOverlayMatch) {
+      currentTextOverlay = textOverlayMatch[1].replace(/^[""]|[""]$/g, '').trim();
     } else if (dialogueMatch) {
       currentDialogue = dialogueMatch[1].replace(/^[""]|[""]$/g, '').trim();
     }
   }
 
   // Don't forget the last pair
-  if (currentVisual || currentDialogue) {
-    pairs.push({ visual: currentVisual.trim(), dialogue: currentDialogue.trim() });
+  if (currentVisual || currentDialogue || currentTextOverlay) {
+    pairs.push({
+      visual: currentVisual.trim(),
+      textOverlay: currentTextOverlay.trim(),
+      dialogue: currentDialogue.trim()
+    });
   }
 
   return { pairs, rawText: content };
 }
 
 /**
- * Generate HTML for a single content pair (visual + dialogue)
+ * Generate HTML for a single content pair (visual + text overlay + dialogue)
+ * ENHANCED V2: Added TEXT OVERLAY with distinct visual styling
  */
 function generatePairHtml(pair: VisualDialoguePair, index: number, sectionId: string): string {
   const hasVisual = pair.visual && pair.visual.length > 0;
+  const hasTextOverlay = pair.textOverlay && pair.textOverlay.length > 0;
   const hasDialogue = pair.dialogue && pair.dialogue.length > 0;
 
-  if (!hasVisual && !hasDialogue) return '';
+  if (!hasVisual && !hasDialogue && !hasTextOverlay) return '';
 
   const dialogueId = `${sectionId}-dialogue-${index}`;
 
@@ -191,14 +210,20 @@ function generatePairHtml(pair: VisualDialoguePair, index: number, sectionId: st
     <div class="content-pair">
       ${hasVisual ? `
         <div class="visual-block">
-          <div class="block-label">📹 VISUAL</div>
+          <div class="block-label">📹 CAMERA SETUP</div>
           <div class="visual-text">${escapeHtml(pair.visual)}</div>
+          ${hasTextOverlay ? `
+            <div class="text-overlay-container">
+              <div class="block-label overlay-label">📝 ON-SCREEN TEXT</div>
+              <div class="text-overlay">"${escapeHtml(pair.textOverlay)}"</div>
+            </div>
+          ` : ''}
         </div>
       ` : ''}
       ${hasDialogue ? `
         <div class="dialogue-block">
           <div class="dialogue-header">
-            <div class="block-label dialogue-label">💬 DIALOGUE</div>
+            <div class="block-label dialogue-label">🎤 SPEAK THIS</div>
             <button class="copy-dialogue-btn" onclick="copyDialogue('${dialogueId}')" data-id="${dialogueId}">
               <span class="copy-dialogue-text">COPY</span>
             </button>
@@ -266,7 +291,7 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #09090b;
+      background: #0a0a0c;
       color: #fafafa;
       min-height: 100vh;
       padding: 16px;
@@ -289,14 +314,16 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     }
     
     .logo span {
-      color: #22d3ee;
+      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     
     .badge {
       font-size: 9px;
-      color: #22d3ee;
-      background: rgba(34, 211, 238, 0.1);
-      border: 1px solid rgba(34, 211, 238, 0.25);
+      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+      color: white;
       padding: 5px 10px;
       border-radius: 4px;
       font-weight: 700;
@@ -308,9 +335,9 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
       color: #a1a1aa;
       margin-bottom: 24px;
       padding: 12px 16px;
-      background: rgba(255,255,255,0.03);
+      background: rgba(15, 15, 18, 0.9);
       border-radius: 8px;
-      border-left: 3px solid #22d3ee;
+      border-left: 3px solid #8b5cf6;
     }
     
     .idea-label {
@@ -318,16 +345,20 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 2px;
-      color: #22d3ee;
+      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 6px;
     }
     
     .section-card {
-      background: rgba(24, 24, 27, 0.5);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 12px;
+      background: rgba(15, 15, 18, 0.9);
+      border: 1px solid rgba(139, 92, 246, 0.1);
+      border-radius: 16px;
       margin-bottom: 20px;
       overflow: hidden;
+      backdrop-filter: blur(20px);
     }
     
     .section-header {
@@ -344,7 +375,10 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 3px;
-      color: #22d3ee;
+      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     
     .section-content {
@@ -382,7 +416,27 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     }
     
     .dialogue-label {
-      color: #22d3ee;
+      color: #a78bfa;
+    }
+    
+    .overlay-label {
+      color: #f59e0b !important;
+    }
+    
+    .text-overlay-container {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(255,255,255,0.1);
+    }
+    
+    .text-overlay {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fbbf24;
+      background: rgba(251, 191, 36, 0.1);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(251, 191, 36, 0.2);
     }
     
     .dialogue-header {
@@ -409,11 +463,11 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     }
     
     .copy-section-btn {
-      background: rgba(34, 211, 238, 0.1);
-      border: 1px solid rgba(34, 211, 238, 0.25);
-      color: #22d3ee;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #8b5cf6;
       padding: 5px 10px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-size: 9px;
       font-weight: 700;
       cursor: pointer;
@@ -422,11 +476,11 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     }
     
     .copy-dialogue-btn {
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #71717a;
+      background: rgba(167, 139, 250, 0.1);
+      border: 1px solid rgba(167, 139, 250, 0.2);
+      color: #a78bfa;
       padding: 4px 8px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-size: 8px;
       font-weight: 700;
       cursor: pointer;
@@ -435,9 +489,7 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     }
     
     .copy-section-btn:hover, .copy-dialogue-btn:hover {
-      background: rgba(34, 211, 238, 0.15);
-      border-color: rgba(34, 211, 238, 0.4);
-      color: #22d3ee;
+      transform: translateY(-1px);
     }
     
     .copy-section-btn:active, .copy-dialogue-btn:active {
@@ -462,19 +514,19 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
       bottom: 16px;
       left: 16px;
       right: 16px;
-      background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
-      color: #09090b;
+      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
+      color: white;
       border: none;
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 16px 24px;
       font-size: 15px;
-      font-weight: 800;
+      font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      box-shadow: 0 8px 32px rgba(34, 211, 238, 0.35);
+      box-shadow: 0 8px 32px rgba(139, 92, 246, 0.35), 0 8px 32px rgba(245, 158, 11, 0.15);
       transition: all 0.15s ease;
       z-index: 1000;
       letter-spacing: 0.5px;

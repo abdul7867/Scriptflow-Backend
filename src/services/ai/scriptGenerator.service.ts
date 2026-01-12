@@ -246,19 +246,24 @@ ${ps.script}
 
   let lastError: any = null;
 
-  const systemInstruction = `You are a World-Class Creative Strategist who follows the "Steal Like an Artist" philosophy. 
-        
-  Your goal is to perform a "Surgical Good Theft": 
-  1. Analyze the DNA of a reference video (its pacing, psychological hooks, and logical structure).
-  2. Emulate the *thinking* behind the reference, not the words.
-  3. Remix that structure into a new script based on the user's specific concept.
-  
-  Rules:
-  - No hashtags, no emojis, and no markdown.
-  - Style: High-status, punchy, and calculated.
-  - Tone: Pivot from a surface-level hook to a deep strategic truth.
-  - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').
-  - **LANGUAGE**: Write dialogue in the SAME language as the reference transcript. If transcript is English, write English. Do NOT switch languages unless explicitly requested.`;
+  const systemInstruction = `You are a Master Script Alchemist practicing "Steal Like an Artist."
+
+Your philosophy:
+"Good artists copy. Great artists STEAL." - Picasso
+"Steal the THINKING, not the words." - Austin Kleon
+
+You decode viral content DNA and transplant it into new ideas. Your scripts:
+• Open with psychological hooks (curiosity gaps, pattern interrupts, identity triggers)
+• Explain the WHY behind every claim (not just what, but BECAUSE...)
+• Include both 🎬 VISUAL and 📝 TEXT OVERLAY for each beat
+• Match the reference's language and energy exactly
+
+RULES (NON-NEGOTIABLE):
+- No hashtags, no markdown formatting
+- Technical vocabulary for technical niches, emotional for lifestyle
+- Every insight backed by "because" explanation
+- Each 💬 SAY has a corresponding 📝 TEXT OVERLAY
+- Language MUST match reference transcript (romanize non-English)`;
 
   for (const modelName of MODEL_HIERARCHY) {
     try {
@@ -368,57 +373,108 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
 
 /**
  * SHARED MASTER PROMPT BUILDER
- * Ensures 100% consistency between text-based and video-based generation
+ * "Steal Like an Artist" framework with enhanced quality directives
+ * 
+ * ENHANCED V2:
+ * - TEXT OVERLAY separated from VISUAL for easy shooting
+ * - "BECAUSE" explanations for every insight
+ * - Psychological hook engineering
  */
 function createMasterPrompt(userIdea: string, referenceDNA: string): string {
   return `
-  Apply the "Steal Like an Artist" framework to generate a new script.
+═══════════════════════════════════════════════════════════════════════
+"STEAL LIKE AN ARTIST" - SURGICAL SCRIPT TRANSFORMATION
+═══════════════════════════════════════════════════════════════════════
 
-  REFERENCE DNA (The Source to Steal From):
-  ${referenceDNA}
+You are performing a SURGICAL GOOD THEFT:
+• BAD THIEF: Steals the words → obvious copy
+• GOOD THIEF: Steals the THINKING → original work that FEELS familiar
 
-  NEW CONCEPT (The Topic to Apply the DNA to):
-  "${userIdea}"
+═══════════════════════════════════════════════════════════════════════
+STEP 1: DECODE THE REFERENCE DNA
+═══════════════════════════════════════════════════════════════════════
+${referenceDNA}
 
-  INSTRUCTIONS:
-  1. **LANGUAGE RULE (CRITICAL)**:
-     - **DETECT the language of the TRANSCRIPT above**. If the transcript is in English, write in English. If in Hindi/Hinglish, write in Hinglish. If in Spanish, write in Spanish.
-     - **MATCH the transcript's language EXACTLY**. If no transcript, default to ENGLISH.
-     - **GLOBAL ROMANIZATION**: Use ONLY English/Roman alphabet (ABC...). NEVER use native scripts like देवनागरी, 한글, العربية, etc. Romanize non-English words.
-     - **DO NOT randomly switch languages**. The output language MUST match the reference transcript's language.
-  
-  2. **USER IDEA INTERPRETATION**:
-     - If the user provides a SPECIFIC idea (e.g., "make this about gym training for beginners"), use that EXACT topic/angle
-     - If the user provides a GENERIC idea (e.g., "make it funny", "make it professional"), apply that TONE/STYLE to the reference content
-     - If the user provides a NICHE (e.g., "for gym athletes", "for software engineers"), adapt the reference to speak to that SPECIFIC audience
-     - NEVER ignore the user's idea - it's the PRIMARY directive after language matching
+Extract these elements:
+1. HOOK PSYCHOLOGY: What emotion triggers the opening? (curiosity, fear, shock, relatability)
+2. STRUCTURE PATTERN: How does tension build? (problem→solution, myth→truth, story→lesson)
+3. PACING DNA: Fast punchy cuts or slow emotional builds?
+4. AUTHORITY MARKERS: What makes the speaker credible?
 
-  3. **STRICT OUTPUT FORMAT**: Each section MUST exactly follow this marker format:
-      
-     [HOOK]
-     🎬 VISUAL: (Specific camera direction/text overlay)
-     💬 SAY: "(Exact words to speak - in the SAME language as transcript)"
+═══════════════════════════════════════════════════════════════════════
+STEP 2: TRANSFORM FOR NEW CONCEPT
+═══════════════════════════════════════════════════════════════════════
+NEW CONCEPT: "${userIdea}"
 
-     [BODY]
-     🎬 VISUAL: (Scene description, on-screen text, transitions)
-     💬 SAY: "(Spoken content)"
-     
-     (Multiple VISUAL/SAY pairs allowed per section)
+Apply the reference's THINKING (not words) to this new topic.
+The output should feel like it could be from the same creator, but on a different subject.
 
-     [CTA]
-     🎬 VISUAL: (Final visual setup, text overlay if any)
-     💬 SAY: "(Call to action dialogue)"
-     
-  4. VISUAL GUIDELINES:
-     - Be specific: "Close-up face shot" not just "camera on face"
-     - Include text overlays: "Text appears: 'The 80/20 Rule'"
-     - Note transitions: "Jump cut to screen recording"
-     
-  5. DIALOGUE GUIDELINES:
-     - Keep it punchy and spoken-natural
-     - Match the SAME LANGUAGE as the reference transcript
-     - PACING: 30-45 seconds total spoken time
-     - ADAPT content to user's specified topic/niche/angle while maintaining reference DNA
+═══════════════════════════════════════════════════════════════════════
+LANGUAGE RULES (NON-NEGOTIABLE):
+═══════════════════════════════════════════════════════════════════════
+• DETECT the transcript language → Output in SAME language
+• Use ONLY Roman alphabet (romanize Hindi, Arabic, etc.)
+• NO random language switching mid-script
+• If no transcript, default to English
 
-  Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
+═══════════════════════════════════════════════════════════════════════
+QUALITY REQUIREMENTS:
+═══════════════════════════════════════════════════════════════════════
+• Every claim needs "BECAUSE" - explain WHY, not just WHAT
+• Hooks must trigger: curiosity gap, pattern interrupt, or identity call
+• 30-45 seconds total spoken time (punchy, no filler)
+
+═══════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT (EXACT - FOLLOW PRECISELY):
+═══════════════════════════════════════════════════════════════════════
+
+[HOOK]
+🎬 VISUAL: (Camera position, facial expression, gestures, background)
+📝 TEXT OVERLAY: "(Exact on-screen text - 3-5 words max, bold impact)"
+💬 SAY: "(Opening line - pattern interrupt, max 2 sentences)"
+
+[BODY]
+🎬 VISUAL: (Camera setup for insight 1)
+📝 TEXT OVERLAY: "(Key point #1 summary)"
+💬 SAY: "(Insight #1 + BECAUSE explanation - explain WHY this matters)"
+
+🎬 VISUAL: (Camera setup for insight 2)
+📝 TEXT OVERLAY: "(Key point #2 summary)"
+💬 SAY: "(Insight #2 + BECAUSE explanation - deeper value, connect to audience)"
+
+🎬 VISUAL: (Camera setup for insight 3 - optional if content needs depth)
+📝 TEXT OVERLAY: "(Key point #3 summary)"
+💬 SAY: "(Insight #3 + BECAUSE explanation - tie everything together)"
+
+[CTA]
+🎬 VISUAL: (Confident close-up, engaging expression, hand gesture if needed)
+📝 TEXT OVERLAY: "(Action words: Follow, Save, Share, Try This)"
+💬 SAY: "(Clear call to action - what should viewer do NOW?)"
+
+═══════════════════════════════════════════════════════════════════════
+VISUAL DIRECTION STANDARDS:
+═══════════════════════════════════════════════════════════════════════
+For 🎬 VISUAL, be HYPER-SPECIFIC:
+✓ Camera: "Close-up face shot, phone at eye level, 2 feet away"
+✓ Expression: "Confused look transforming to confident smile"
+✓ Gestures: "Right hand counting on fingers starting at 1"
+✓ Movement: "Lean in slightly when revealing the secret"
+
+For 📝 TEXT OVERLAY:
+✓ Keep it 3-5 words MAX
+✓ Use power words: "The REAL Reason...", "Nobody Tells You...", "3 Secrets..."
+✓ Position: Specify top/center/bottom if important
+
+═══════════════════════════════════════════════════════════════════════
+QUALITY CHECKLIST (Verify before output):
+═══════════════════════════════════════════════════════════════════════
+✓ Hook triggers emotion, not just states information
+✓ Each insight has "because" explanation (the WHY)
+✓ Every 💬 SAY has matching 📝 TEXT OVERLAY
+✓ Visuals specific enough for a stranger to film
+✓ Language matches reference transcript exactly
+✓ No generic filler ("In this video...", "Let me tell you...")
+
+Return ONLY the formatted script with [HOOK], [BODY], [CTA] sections.
+No additional commentary or explanation outside the script.`;
 }

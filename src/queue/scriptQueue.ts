@@ -82,8 +82,8 @@ const QUEUE_CONFIG = {
   warningQueueDepth: parseInt(process.env.QUEUE_WARNING_DEPTH || '150', 10),
   /** Redis key for backpressure flag */
   backpressureKey: 'queue:backpressure',
-  /** How often to check queue depth (ms) */
-  checkInterval: parseInt(process.env.QUEUE_CHECK_INTERVAL || '10000', 10),
+  /** How often to check queue depth (ms) - Optimized: 60s instead of 10s */
+  checkInterval: parseInt(process.env.QUEUE_CHECK_INTERVAL || '60000', 10),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
