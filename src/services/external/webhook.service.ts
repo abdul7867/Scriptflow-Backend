@@ -205,6 +205,7 @@ class WebhookService {
 
             // ───────────────────────────────────────────────────────────────────────
             // STEP 2: Check rate limits
+            // Per spec RATE LIMIT RULE: Set sc_status = BUSY (never send messages)
             // ───────────────────────────────────────────────────────────────────────
             const rateLimitStatus = await getUserRateLimitStatus(subscriberId);
 
@@ -215,10 +216,9 @@ class WebhookService {
                     limit: rateLimitStatus.limit
                 });
 
-                await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.RATE_LIMITED, {
-                    resetInMinutes: Math.ceil(rateLimitStatus.resetInSeconds / 60),
-                    limit: rateLimitStatus.limit,
-                });
+                // SPEC: Set sc_status = BUSY, sc_prompt_message = wait message
+                // Backend NEVER sends Instagram messages - only updates fields
+                await manychatStateService.setBusyState(subscriberId, rateLimitStatus.resetInSeconds);
 
                 return {
                     success: false,
@@ -440,10 +440,14 @@ class WebhookService {
             });
 
             // Set ManyChat status to AwaitingIdea so automation can prompt user
+            // NOTE: We ONLY set custom fields here (no message sending).
+            // ManyChat Default Reply reads sc_status and sc_prompt_message to show prompt.
+            // This avoids Meta 24-hour window errors (error 3011).
             await manychatStateService.setAwaitingIdeaState(subscriberId, normalizedUrl);
 
-            await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.PROMPT_IDEA, {
-                reelUrl: normalizedUrl,
+            logger.info(`[Webhook:${requestId}] Awaiting idea state set (pull-based, no API message)`, {
+                subscriberId,
+                reelUrl: normalizedUrl.substring(0, 50)
             });
 
             return {
@@ -802,11 +806,18 @@ class WebhookService {
             matchedRule: classification.matchedRule,
         });
 
-        // Trigger help flow based on current state
-        if (currentState === ChatbotState.IDLE) {
+        // PULL-BASED: We no longer send messages via API to avoid 24-hour window errors.
+        // ManyChat Default Reply reads sc_status and sc_prompt_message to show appropriate help.
+        // The fields were already set when the user entered this state.
+        // 
+        // If the user is AWAITING_IDEA, fields are already set - just log and return.
+        // For other states, we TRY to send a message but don't fail if it doesn't work.
+        if (currentState === ChatbotState.AWAITING_IDEA) {
+            logger.debug(`[Webhook:${requestId}] Invalid intent in AWAITING_IDEA - fields already set`);
+            // Fields already set by setAwaitingIdeaState, ManyChat will show prompt
+        } else if (currentState === ChatbotState.IDLE) {
+            // Try to send welcome, but don't fail if 24h window expired
             await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.WELCOME_HELP);
-        } else if (currentState === ChatbotState.AWAITING_IDEA) {
-            await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.PROMPT_IDEA);
         } else if (currentState === ChatbotState.AWAITING_FEEDBACK) {
             await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.FEEDBACK_HELP);
         } else {

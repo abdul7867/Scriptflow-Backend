@@ -44,6 +44,7 @@ export const config = cleanEnv(process.env, {
   MANYCHAT_SC_REEL_URL_FIELD_ID: str({ desc: 'Field ID for sc_reel_url (current reel being processed)', default: '' }),
   MANYCHAT_SC_PROMPT_MESSAGE_FIELD_ID: str({ desc: 'Field ID for sc_prompt_message (contextual user message)', default: '' }),
   MANYCHAT_SC_COPY_URL_FIELD_ID: str({ desc: 'Field ID for sc_copy_url (copy link for script)', default: '' }),
+  MANYCHAT_SC_ERROR_CODE_FIELD_ID: str({ desc: 'Field ID for sc_error_code (error code for debugging)', default: '' }),
 
 
   // Image Services

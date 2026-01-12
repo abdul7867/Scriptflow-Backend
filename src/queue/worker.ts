@@ -893,12 +893,12 @@ async function processJobWithTimeout(
 
       // ──────────────────────────────────────────────────────────────────
       // PULL-BASED DELIVERY: Set error state in ManyChat custom fields
-      // Sets sc_status = "Error" and sc_last_script with friendly error message
+      // Sets sc_status = "Error", sc_prompt_message with friendly error, and sc_error_code
       // User can "pull" this by typing "Hi" (avoids Meta 24hr window)
       // ──────────────────────────────────────────────────────────────────
       try {
         const friendlyError = manychatStateService.getFriendlyErrorMessage(error, errorType);
-        await manychatStateService.setErrorState(subscriberId, friendlyError);
+        await manychatStateService.setErrorState(subscriberId, friendlyError, errorType);
         logger.info(`[${requestId}] ManyChat error state set - user can pull error message`);
       } catch (stateError: any) {
         // Non-fatal - legacy delivery already attempted via sendTextMessage

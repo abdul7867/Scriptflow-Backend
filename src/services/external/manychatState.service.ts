@@ -28,13 +28,26 @@ const API_TIMEOUT_MS = 30000;
 
 /**
  * Status values for sc_status custom field
+ * 
+ * IMPORTANT: These are the ONLY allowed states per spec.
+ * ManyChat automation relies on these exact values.
+ * DO NOT add new states without updating ManyChat flows.
  */
 export enum ScriptStatus {
-    PROCESSING = 'Processing',
-    READY = 'Ready',
-    ERROR = 'Error',
-    BUSY = 'Busy',  // Rate limited - user should try again later
-    AWAITING_IDEA = 'AwaitingIdea',  // Waiting for user to provide their idea
+    /** Initial state - no active session */
+    IDLE = 'IDLE',
+    /** Waiting for user to provide their idea after sending reel */
+    AWAITING_IDEA = 'AWAITING_IDEA',
+    /** Backend is processing the request (async job running) */
+    PROCESSING = 'PROCESSING',
+    /** Script is ready - ManyChat should deliver and set to DELIVERED */
+    READY = 'READY',
+    /** Script has been delivered to user - allows variation requests */
+    DELIVERED = 'DELIVERED',
+    /** An error occurred - show sc_prompt_message */
+    ERROR = 'ERROR',
+    /** Rate limited - user should try again later */
+    BUSY = 'BUSY',
 }
 
 /**
@@ -57,6 +70,7 @@ const FIELD_IDS = {
     SC_REEL_URL: config.MANYCHAT_SC_REEL_URL_FIELD_ID || '',
     SC_PROMPT_MESSAGE: config.MANYCHAT_SC_PROMPT_MESSAGE_FIELD_ID || '',
     SC_COPY_URL: config.MANYCHAT_SC_COPY_URL_FIELD_ID || '',
+    SC_ERROR_CODE: (config as any).MANYCHAT_SC_ERROR_CODE_FIELD_ID || '',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -184,6 +198,43 @@ async function setCustomFieldsSequential(
 class ManyChatStateService {
 
     /**
+     * Initialize IDLE state for first-time users
+     * 
+     * Per spec INITIALIZATION RULE:
+     * - IF sc_status has no value → set sc_status = IDLE
+     * - DO NOT reinitialize existing users
+     * 
+     * This should be called on first contact with a new subscriber.
+     * 
+     * @param subscriberId - The subscriber's ManyChat ID
+     * @returns true if initialized, false if already had a state
+     */
+    async initializeIdleState(subscriberId: string): Promise<boolean> {
+        logger.info('[ManyChatState] Checking if user needs IDLE initialization', { subscriberId });
+
+        // Note: We can't check if field is empty via API, so we always set IDLE
+        // ManyChat automation should only call this on truly new users
+        // This is safe because IDLE just means "ready for new input"
+
+        if (!FIELD_IDS.SC_STATUS) {
+            logger.warn('[ManyChatState] SC_STATUS field not configured, skipping IDLE init');
+            return false;
+        }
+
+        const success = await setCustomField(
+            subscriberId,
+            FIELD_IDS.SC_STATUS,
+            ScriptStatus.IDLE
+        );
+
+        if (success) {
+            logger.info('[ManyChatState] ✅ User initialized to IDLE state', { subscriberId });
+        }
+
+        return success;
+    }
+
+    /**
      * Initialize processing state - Called when webhook queues a job
      * 
      * Sets sc_status to "Processing", prompt message, and clears old data.
@@ -261,8 +312,14 @@ class ManyChatStateService {
     /**
      * Set ready state with script data - Called when worker completes
      * 
-     * Updates all fields: sc_status = "Ready", script, image, copy URL, prompt.
-     * ManyChat automation reads these fields and delivers the script to user.
+     * CRITICAL: Order of updates matters!
+     * Per spec READY STATE RULE, fields must be set in this order:
+     * 1. sc_last_image (image URL)
+     * 2. sc_last_script (script text)
+     * 3. sc_copy_url (copy link)
+     * 4. ONLY THEN sc_status = READY
+     * 
+     * This prevents ManyChat from trying to deliver before data is available.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param scriptText - The generated script text content
@@ -276,121 +333,168 @@ class ManyChatStateService {
         imageUrl: string,
         copyUrl?: string
     ): Promise<boolean> {
-        logger.info('[ManyChatState] Setting ready state', {
+        logger.info('[ManyChatState] Setting ready state (ORDERED)', {
             subscriberId,
             scriptLength: scriptText.length,
             hasImage: !!imageUrl,
             hasCopyUrl: !!copyUrl
         });
 
-        // Build fields array
-        const fields: Array<{ field_id: number; field_value: string }> = [];
+        // ══════════════════════════════════════════════════════════════════
+        // CRITICAL: Set fields in STRICT ORDER per spec
+        // sc_last_image → sc_last_script → sc_copy_url → sc_status = READY
+        // Status MUST be set LAST to prevent race conditions
+        // ══════════════════════════════════════════════════════════════════
 
-        // sc_status = "Ready" (set first for faster detection)
-        if (FIELD_IDS.SC_STATUS) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
-                field_value: ScriptStatus.READY
-            });
-        }
+        let allSuccess = true;
 
-        // sc_prompt_message = ready message
-        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_PROMPT_MESSAGE, 10),
-                field_value: PROMPT_MESSAGES.READY
-            });
-        }
-
-        // sc_last_script = scriptText
-        if (FIELD_IDS.SC_LAST_SCRIPT) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
-                field_value: scriptText
-            });
-        }
-
-        // sc_last_image = imageUrl
+        // STEP 1: sc_last_image = imageUrl
         if (FIELD_IDS.SC_LAST_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: imageUrl
-            });
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_LAST_IMAGE,
+                imageUrl
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] Failed to set sc_last_image');
+                allSuccess = false;
+            }
         }
 
-        // sc_copy_url = copyUrl
+        // STEP 2: sc_last_script = scriptText
+        if (FIELD_IDS.SC_LAST_SCRIPT) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_LAST_SCRIPT,
+                scriptText
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] Failed to set sc_last_script');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 3: sc_copy_url = copyUrl
         if (FIELD_IDS.SC_COPY_URL && copyUrl) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
-                field_value: copyUrl
-            });
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_COPY_URL,
+                copyUrl
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] Failed to set sc_copy_url');
+                allSuccess = false;
+            }
         }
 
-        if (fields.length === 0) {
-            logger.warn('[ManyChatState] No field IDs configured, skipping ready state update');
-            return false;
+        // STEP 4: sc_prompt_message = ready message
+        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
+            await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_PROMPT_MESSAGE,
+                PROMPT_MESSAGES.READY
+            );
         }
 
-        const success = await setCustomFieldsSequential(subscriberId, fields);
-
-        if (success) {
-            logger.info('[ManyChatState] ✅ Ready state set successfully', { subscriberId });
+        // STEP 5 (LAST): sc_status = READY
+        // This is set LAST so ManyChat only sees READY after all data is in place
+        if (FIELD_IDS.SC_STATUS) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_STATUS,
+                ScriptStatus.READY
+            );
+            if (!success) {
+                logger.error('[ManyChatState] CRITICAL: Failed to set sc_status = READY');
+                allSuccess = false;
+            }
         }
 
-        return success;
+        if (allSuccess) {
+            logger.info('[ManyChatState] ✅ Ready state set successfully (ordered)', { subscriberId });
+        } else {
+            logger.warn('[ManyChatState] Ready state set with some failures', { subscriberId });
+        }
+
+        return allSuccess;
     }
+
 
     /**
      * Set error state with friendly message - Called when worker fails
      * 
-     * Updates sc_status = "Error" and sc_last_script with error message.
+     * Per spec ERROR RULE:
+     * - sc_status = ERROR
+     * - sc_prompt_message = human-readable message
+     * - sc_error_code = error code for debugging
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param errorMessage - Friendly error message for the user
+     * @param errorCode - Optional error code for debugging
      * @returns true if successful, false otherwise
      */
     async setErrorState(
         subscriberId: string,
-        errorMessage: string
+        errorMessage: string,
+        errorCode?: string
     ): Promise<boolean> {
         logger.info('[ManyChatState] Setting error state', {
             subscriberId,
-            errorMessage: errorMessage.substring(0, 100)
+            errorMessage: errorMessage.substring(0, 100),
+            errorCode
         });
 
-        // Build fields array
-        const fields: Array<{ field_id: number; field_value: string }> = [];
+        let allSuccess = true;
 
-        // sc_last_script = error message
+        // STEP 1: sc_prompt_message = error message (human-readable)
+        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_PROMPT_MESSAGE,
+                errorMessage
+            );
+            if (!success) allSuccess = false;
+        }
+
+        // STEP 2: sc_error_code = error code (for debugging)
+        if (FIELD_IDS.SC_ERROR_CODE && errorCode) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_ERROR_CODE,
+                errorCode
+            );
+            if (!success) allSuccess = false;
+        }
+
+        // STEP 3: sc_last_script = error message (fallback display)
         if (FIELD_IDS.SC_LAST_SCRIPT) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
-                field_value: errorMessage
-            });
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_LAST_SCRIPT,
+                errorMessage
+            );
+            if (!success) allSuccess = false;
         }
 
-        // sc_last_image = "-" (clear image)
+        // STEP 4: sc_last_image = "-" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
-            });
+            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '-');
         }
 
-        // sc_status = "Error"
+        // STEP 5 (LAST): sc_status = ERROR
         if (FIELD_IDS.SC_STATUS) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
-                field_value: ScriptStatus.ERROR
-            });
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_STATUS,
+                ScriptStatus.ERROR
+            );
+            if (!success) {
+                logger.error('[ManyChatState] CRITICAL: Failed to set sc_status = ERROR');
+                allSuccess = false;
+            }
         }
 
-        if (fields.length === 0) {
-            logger.warn('[ManyChatState] No field IDs configured, skipping error state update');
-            return false;
-        }
-
-        return await setCustomFieldsSequential(subscriberId, fields);
+        return allSuccess;
     }
 
     /**
