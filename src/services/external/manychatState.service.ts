@@ -287,12 +287,15 @@ class ManyChatStateService {
         }
 
         // sc_last_image = "" (clear old data with empty string to prevent 403s and invalid URL errors)
+        /* SKIPPED: Setting image field to "" causes ManyChat 400 "Invalid field value" error.
+           We will leave the old image until the new one is ready.
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
                 field_value: ''
             });
         }
+        */
 
         // sc_copy_url = "" (clear old copy URL)
         if (FIELD_IDS.SC_COPY_URL) {
@@ -316,12 +319,14 @@ class ManyChatStateService {
         }
 
         // script_image = "" (clear old image)
+        /* SKIPPED: Setting image field to "" causes ManyChat 400 "Invalid field value" error.
         if (FIELD_IDS.SCRIPT_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SCRIPT_IMAGE, 10),
                 field_value: ''
             });
         }
+        */
 
         // script_copy_link = "" (clear old link)
         if (FIELD_IDS.SCRIPT_COPY_LINK) {
