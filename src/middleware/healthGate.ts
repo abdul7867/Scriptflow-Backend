@@ -241,9 +241,10 @@ export async function healthGate(
         return next();
     }
 
-    // Always allow webhook endpoint to pass through - ManyChat needs a response
-    // The webhook service has its own rate limiting and will queue jobs appropriately
-    if (req.path === '/api/v3/webhook') {
+    // Always allow webhook/API endpoints to pass through - ManyChat needs a response
+    // The services have their own rate limiting and will queue jobs appropriately
+    // V2 and V3 both use BullMQ queue which handles backpressure
+    if (req.path === '/api/v3/webhook' || req.path === '/api/v2/generate-script') {
         return next();
     }
 
