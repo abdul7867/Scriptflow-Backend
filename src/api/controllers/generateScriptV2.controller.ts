@@ -102,6 +102,7 @@ export const generateScriptHandlerV2 = async (req: Request, res: Response): Prom
       status: 'queued',
       reelUrl: normalizedUrl,
       userIdea: user_idea || '',
+      requestHash,
       createdAt: new Date()
     });
 
