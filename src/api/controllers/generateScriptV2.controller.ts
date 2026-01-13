@@ -39,8 +39,20 @@ export const generateScriptHandlerV2 = async (req: Request, res: Response): Prom
   const startTime = Date.now();
 
   try {
+    // Normalize field names from ManyChat (accept both naming conventions)
+    // ManyChat sends: user_message, user_reel
+    // Schema expects: user_idea, reel_url
+    const normalizedBody = {
+      subscriber_id: req.body.subscriber_id,
+      reel_url: req.body.reel_url || req.body.user_reel,
+      user_idea: req.body.user_idea || req.body.user_message,
+      tone_hint: req.body.tone_hint,
+      language_hint: req.body.language_hint,
+      mode: req.body.mode
+    };
+
     // 1. Validate Request
-    const parseResult = scriptGenerationSchema.safeParse(req.body);
+    const parseResult = scriptGenerationSchema.safeParse(normalizedBody);
     if (!parseResult.success) {
       res.status(400).json({
         success: false,
