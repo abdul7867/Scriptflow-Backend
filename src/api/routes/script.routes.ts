@@ -13,5 +13,5 @@ export {
 } from '../controllers/generateScriptV2.controller';
 
 // Legacy Handler (for backwards compatibility)
-export { generateScriptHandler } from '../controllers/generateScript.legacy.controller';
+export { generateScriptHandler, getJobStatusHandler } from '../controllers/generateScript.legacy.controller';
 
