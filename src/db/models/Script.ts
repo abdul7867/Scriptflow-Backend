@@ -11,8 +11,16 @@ export interface IScript extends Document {
   reelUrl: string;
   userIdea: string;
   scriptText: string;
-  imageUrl?: string;        // Generated script image URL
+  imageUrl?: string;        // Generated script image URL (legacy single image)
   scriptUrl?: string;       // Public URL for copy-friendly text view
+  // Carousel URLs (3 separate images for hook/body/cta)
+  carouselUrls?: {
+    hook?: string;
+    body?: string;
+    cta?: string;
+  };
+  // Variation tracking
+  variationIndex?: number;  // 0 = original, 1+ = regenerations
   // ML-relevant metadata
   modelVersion?: string;
   generationTimeMs?: number;
@@ -57,6 +65,15 @@ const ScriptSchema = new Schema<IScript>({
   },
   scriptUrl: {
     type: String
+  },
+  carouselUrls: {
+    hook: { type: String },
+    body: { type: String },
+    cta: { type: String }
+  },
+  variationIndex: {
+    type: Number,
+    default: 0
   },
   modelVersion: { 
     type: String, 

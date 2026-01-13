@@ -326,6 +326,46 @@
       letter-spacing: 3px;
     }
 
+    /* Variation Indicator Badge */
+    .variation-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: var(--accent-secondary);
+      letter-spacing: 1px;
+    }
+
+    .variation-badge.variation-a { background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); color: var(--accent-primary); }
+    .variation-badge.variation-b { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: var(--accent-secondary); }
+    .variation-badge.variation-c { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); color: var(--accent-success); }
+
+    /* Enhanced Emoji Markers for Script Syntax */
+    .emoji-visual { color: #60a5fa; font-weight: 700; }
+    .emoji-text { color: #fbbf24; font-weight: 700; }
+    .emoji-speak { color: #a78bfa; font-weight: 700; }
+
+    /* Script Format Tag Pills */
+    .format-tag {
+      display: inline-block;
+      font-size: 8px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-right: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .format-tag.visual { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+    .format-tag.overlay { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .format-tag.dialogue { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+
     /* Desktop: Side-by-side layout */
     @media (min-width: 768px) {
       body {
@@ -362,13 +402,15 @@
 <body>
   <div class="header">
     <div class="logo">SCRIPT<span>FLOW</span></div>
-    <div class="badge">✦ V2.0</div>
+    <div class="badge">✦ V3.0</div>
   </div>
 
   <div class="idea">
     <div class="idea-label">💡 Your Concept</div>
-    The complete guide to building a 6-figure personal brand on Instagram using content psychology and strategic
-    engagement
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <span>The complete guide to building a 6-figure personal brand on Instagram using content psychology and strategic engagement</span>
+      <span class="variation-badge variation-a">✦ VERSION A</span>
+    </div>
   </div>
 
   <!-- HOOK Section -->

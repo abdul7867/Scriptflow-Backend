@@ -375,15 +375,17 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
  * SHARED MASTER PROMPT BUILDER
  * "Steal Like an Artist" framework with enhanced quality directives
  * 
- * ENHANCED V2:
+ * ENHANCED V3:
  * - TEXT OVERLAY separated from VISUAL for easy shooting
  * - "BECAUSE" explanations for every insight
- * - Psychological hook engineering
+ * - Psychological hook engineering with 10 hook archetypes
+ * - Niche-specific tone calibration
+ * - Anti-generic language filter
  */
 function createMasterPrompt(userIdea: string, referenceDNA: string): string {
   return `
 ═══════════════════════════════════════════════════════════════════════
-"STEAL LIKE AN ARTIST" - SURGICAL SCRIPT TRANSFORMATION
+"STEAL LIKE AN ARTIST" - SURGICAL SCRIPT TRANSFORMATION V3
 ═══════════════════════════════════════════════════════════════════════
 
 You are performing a SURGICAL GOOD THEFT:
@@ -400,6 +402,7 @@ Extract these elements:
 2. STRUCTURE PATTERN: How does tension build? (problem→solution, myth→truth, story→lesson)
 3. PACING DNA: Fast punchy cuts or slow emotional builds?
 4. AUTHORITY MARKERS: What makes the speaker credible?
+5. NICHE VOCABULARY: What specific terminology resonates with this audience?
 
 ═══════════════════════════════════════════════════════════════════════
 STEP 2: TRANSFORM FOR NEW CONCEPT
@@ -410,6 +413,24 @@ Apply the reference's THINKING (not words) to this new topic.
 The output should feel like it could be from the same creator, but on a different subject.
 
 ═══════════════════════════════════════════════════════════════════════
+HOOK ENGINEERING - CHOOSE THE RIGHT ARCHETYPE:
+═══════════════════════════════════════════════════════════════════════
+Select the BEST hook type for this concept:
+
+1. 🚫 CONTRARIAN: "Everyone says X... but here's the truth"
+2. ❓ CURIOSITY GAP: "I discovered something that changed everything"
+3. 🔢 LISTICLE TEASE: "3 things nobody tells you about..."
+4. 😱 SHOCK OPENER: Start with the most surprising fact FIRST
+5. 🪞 IDENTITY CALL: "If you're a [type of person], you need to hear this"
+6. 🎭 STORY HOOK: "I was doing [X] when [unexpected thing happened]..."
+7. ⚠️ URGENT WARNING: "Stop doing [common thing] immediately"
+8. 🤔 MYTH BUSTER: "[Common belief] is actually destroying your [goal]"
+9. 💡 AHA MOMENT: "The moment I realized [insight], everything changed"
+10. 🎯 DIRECT CHALLENGE: "You're probably making this mistake right now"
+
+Pick ONE that fits the concept. Do NOT use generic hooks.
+
+═══════════════════════════════════════════════════════════════════════
 LANGUAGE RULES (NON-NEGOTIABLE):
 ═══════════════════════════════════════════════════════════════════════
 • DETECT the transcript language → Output in SAME language
@@ -418,11 +439,28 @@ LANGUAGE RULES (NON-NEGOTIABLE):
 • If no transcript, default to English
 
 ═══════════════════════════════════════════════════════════════════════
-QUALITY REQUIREMENTS:
+QUALITY REQUIREMENTS V3 (UPGRADED):
 ═══════════════════════════════════════════════════════════════════════
 • Every claim needs "BECAUSE" - explain WHY, not just WHAT
-• Hooks must trigger: curiosity gap, pattern interrupt, or identity call
-• 30-45 seconds total spoken time (punchy, no filler)
+• Hooks must trigger ONE specific emotion from the archetype list above
+• 25-40 seconds total spoken time (punchy, no filler)
+• Each insight must provide ACTIONABLE value, not just information
+• Use SPECIFIC numbers/examples (not "many people" but "73% of creators")
+• Dialogue must sound CONVERSATIONAL, not scripted (use contractions, pauses)
+
+═══════════════════════════════════════════════════════════════════════
+BANNED PHRASES (NEVER USE):
+═══════════════════════════════════════════════════════════════════════
+❌ "In this video..."
+❌ "Let me tell you..."
+❌ "So basically..."
+❌ "What I'm going to show you..."
+❌ "You might be wondering..."
+❌ "Trust me when I say..."
+❌ "It's important to understand..."
+❌ "The thing is..."
+❌ Starting with "So..." or "Okay so..."
+❌ Ending with "...and that's it" or "...hope this helps"
 
 ═══════════════════════════════════════════════════════════════════════
 OUTPUT FORMAT (EXACT - FOLLOW PRECISELY):
@@ -452,28 +490,50 @@ OUTPUT FORMAT (EXACT - FOLLOW PRECISELY):
 💬 SAY: "(Clear call to action - what should viewer do NOW?)"
 
 ═══════════════════════════════════════════════════════════════════════
-VISUAL DIRECTION STANDARDS:
+VISUAL DIRECTION STANDARDS (BE HYPER-SPECIFIC):
 ═══════════════════════════════════════════════════════════════════════
-For 🎬 VISUAL, be HYPER-SPECIFIC:
-✓ Camera: "Close-up face shot, phone at eye level, 2 feet away"
-✓ Expression: "Confused look transforming to confident smile"
-✓ Gestures: "Right hand counting on fingers starting at 1"
-✓ Movement: "Lean in slightly when revealing the secret"
+For 🎬 VISUAL, specify ALL of these:
+✓ Shot type: "Close-up face shot" / "Medium shot waist-up" / "Wide shot with background"
+✓ Camera angle: "Phone at eye level" / "Slightly above looking down" / "Low angle looking up"
+✓ Distance: "2 feet from face" / "Arms length away"
+✓ Expression: "Eyebrows raised, slight smirk" / "Serious, direct eye contact"
+✓ Hands/Body: "Right hand counting on fingers" / "Arms crossed, leaning back"
+✓ Movement: "Quick zoom in on 'secret'" / "Pan left to reveal whiteboard"
+✓ Lighting mood: "Bright ring light" / "Moody side lighting" / "Natural window light"
 
 For 📝 TEXT OVERLAY:
-✓ Keep it 3-5 words MAX
+✓ Keep it 3-5 words MAX (shorter = more impact)
 ✓ Use power words: "The REAL Reason...", "Nobody Tells You...", "3 Secrets..."
-✓ Position: Specify top/center/bottom if important
+✓ Position: "Top-center" / "Bottom-third" if relevant
+✓ Style hint: "Bold caps" / "Handwritten style" if impactful
+
+═══════════════════════════════════════════════════════════════════════
+NICHE-SPECIFIC TONE CALIBRATION:
+═══════════════════════════════════════════════════════════════════════
+Adapt your vocabulary and energy:
+• Business/Finance: Data-driven, authority language, ROI focus
+• Fitness/Health: Energetic, motivational, transformation stories
+• Tech/Coding: Precise, problem-solution, efficiency focus
+• Lifestyle/Fashion: Aspirational, aesthetic, relatable moments
+• Education: Clear explanations, examples, step-by-step
+• Comedy/Entertainment: Timing, callbacks, unexpected twists
+• Relationships: Emotional intelligence, vulnerability, connection
+
+Match the niche energy in your word choices, examples, and delivery style.
 
 ═══════════════════════════════════════════════════════════════════════
 QUALITY CHECKLIST (Verify before output):
 ═══════════════════════════════════════════════════════════════════════
-✓ Hook triggers emotion, not just states information
+✓ Hook uses ONE specific archetype from the list above
+✓ Hook triggers emotion in first 3 words
 ✓ Each insight has "because" explanation (the WHY)
-✓ Every 💬 SAY has matching 📝 TEXT OVERLAY
-✓ Visuals specific enough for a stranger to film
+✓ Every 💬 SAY has matching 📝 TEXT OVERLAY  
+✓ Visuals specific enough for a stranger to film exactly
+✓ Dialogue sounds like natural speech (contractions, rhythm)
 ✓ Language matches reference transcript exactly
-✓ No generic filler ("In this video...", "Let me tell you...")
+✓ NO banned phrases anywhere in the script
+✓ Total spoken time: 25-40 seconds (read it aloud mentally)
+✓ Each section provides standalone value
 
 Return ONLY the formatted script with [HOOK], [BODY], [CTA] sections.
 No additional commentary or explanation outside the script.`;

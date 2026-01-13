@@ -150,6 +150,20 @@ UserMemorySchema.index({ 'stats.lastActiveAt': -1 });
 UserMemorySchema.index({ 'stats.lastActiveAt': 1 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PRE-SAVE HOOK - CAP HISTORY SIZE
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_HISTORY_SIZE = 50;
+
+UserMemorySchema.pre('save', function(next) {
+  // Cap recentHistory to prevent unbounded growth
+  if (this.recentHistory && this.recentHistory.length > MAX_HISTORY_SIZE) {
+    this.recentHistory = this.recentHistory.slice(0, MAX_HISTORY_SIZE);
+  }
+  next();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STATIC METHODS
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -214,9 +228,9 @@ UserMemorySchema.statics.recordGeneration = async function(
     createdAt: new Date(),
   });
   
-  // Trim history to last 10
-  if (memory.recentHistory.length > 10) {
-    memory.recentHistory = memory.recentHistory.slice(0, 10);
+  // Trim history to last 50 (pre-save hook also enforces this)
+  if (memory.recentHistory.length > 50) {
+    memory.recentHistory = memory.recentHistory.slice(0, 50);
   }
   
   await memory.save();
