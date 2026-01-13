@@ -302,6 +302,35 @@ class ManyChatStateService {
             });
         }
 
+        // ══════════════════════════════════════════════════════════════════
+        // V2 FIELDS CLEANUP
+        // Explicitly clear V2 output fields to ensure "Value Changed" triggers fire
+        // ══════════════════════════════════════════════════════════════════
+
+        // ai_generated_script = "-" (clear old script)
+        if (FIELD_IDS.AI_GENERATED_SCRIPT) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.AI_GENERATED_SCRIPT, 10),
+                field_value: '-'
+            });
+        }
+
+        // script_image = "-" (clear old image)
+        if (FIELD_IDS.SCRIPT_IMAGE) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SCRIPT_IMAGE, 10),
+                field_value: '-'
+            });
+        }
+
+        // script_copy_link = "-" (clear old link)
+        if (FIELD_IDS.SCRIPT_COPY_LINK) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SCRIPT_COPY_LINK, 10),
+                field_value: '-'
+            });
+        }
+
         if (fields.length === 0) {
             logger.warn('[ManyChatState] No field IDs configured, skipping initialization', {
                 subscriberId,
