@@ -608,12 +608,14 @@ class ManyChatStateService {
             });
         }
 
-        if (FIELD_IDS.SC_LAST_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
-            });
-        }
+        // SKIPPED: Setting image field to "" causes ManyChat "Invalid field value" error.
+        // The old image will remain until a new successful generation replaces it.
+        // if (FIELD_IDS.SC_LAST_IMAGE) {
+        //     fields.push({
+        //         field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
+        //         field_value: ''
+        //     });
+        // }
 
         // Clear old copy URL
         if (FIELD_IDS.SC_COPY_URL) {
@@ -669,13 +671,14 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "" (clear image)
-        if (FIELD_IDS.SC_LAST_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
-            });
-        }
+        // SKIPPED: Setting image field to "" causes ManyChat "Invalid field value" error.
+        // The old image will remain until a new successful generation replaces it.
+        // if (FIELD_IDS.SC_LAST_IMAGE) {
+        //     fields.push({
+        //         field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
+        //         field_value: ''
+        //     });
+        // }
 
         // sc_status = "Busy"
         if (FIELD_IDS.SC_STATUS) {
