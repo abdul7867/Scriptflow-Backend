@@ -151,8 +151,41 @@ async function setCustomField(
         // Log the actual value being sent for image fields (helps debug URL issues)
         const isImageField = fieldIdNum === parseInt(FIELD_IDS.SC_LAST_IMAGE || '0', 10) || 
                             fieldIdNum === parseInt(FIELD_IDS.SCRIPT_IMAGE || '0', 10);
+        
+        // CRITICAL: Validate image URL before sending to ManyChat
         if (isImageField) {
-            logger.info(`[ManyChatState] Setting image field ${fieldId} to URL: ${fieldValue.substring(0, 100)}...`);
+            logger.info(`[ManyChatState] Setting image field ${fieldId} to URL: ${fieldValue}`);
+            
+            // Validate URL format for image fields
+            if (!fieldValue || fieldValue === 'undefined' || fieldValue === 'null') {
+                logger.error(`[ManyChatState] ❌ INVALID IMAGE URL: fieldValue is empty/undefined`, {
+                    subscriberId,
+                    fieldId,
+                    fieldValue
+                });
+                return false;
+            }
+            
+            // Check if it's a valid URL
+            try {
+                const urlObj = new URL(fieldValue);
+                if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                    logger.error(`[ManyChatState] ❌ INVALID IMAGE URL: not http/https`, {
+                        subscriberId,
+                        fieldId,
+                        fieldValue
+                    });
+                    return false;
+                }
+            } catch (urlError) {
+                logger.error(`[ManyChatState] ❌ INVALID IMAGE URL: failed to parse`, {
+                    subscriberId,
+                    fieldId,
+                    fieldValue,
+                    error: (urlError as Error).message
+                });
+                return false;
+            }
         }
 
         const response = await axios.post(setFieldUrl, {
@@ -313,10 +346,21 @@ class ManyChatStateService {
         imageUrl: string,
         copyUrl?: string
     ): Promise<boolean> {
+        // VALIDATION: Check imageUrl is valid before proceeding
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+            logger.error('[ManyChatState] ❌ setReadyState called with invalid imageUrl', {
+                subscriberId,
+                imageUrl,
+                imageUrlType: typeof imageUrl
+            });
+            // Don't fail completely - still set other fields
+        }
+
         logger.info('[ManyChatState] Setting ready state (ORDERED)', {
             subscriberId,
             scriptLength: scriptText.length,
             hasImage: !!imageUrl,
+            imageUrlPreview: imageUrl?.substring(0, 80),
             hasCopyUrl: !!copyUrl
         });
 
@@ -324,19 +368,42 @@ class ManyChatStateService {
         // CRITICAL: Set fields in STRICT ORDER per spec
         // sc_last_image → sc_last_script → sc_copy_url → sc_status = READY
         // Status MUST be set LAST to prevent race conditions
+        // 
+        // ⚠️ IMPORTANT: Flow B triggers when image field changes!
+        // We MUST only set image field if URL is valid, otherwise Flow B
+        // will trigger and ManyChat will show "Not valid url" error.
         // ══════════════════════════════════════════════════════════════════
 
         let allSuccess = true;
+        
+        // Helper to validate URL
+        const isValidImageUrl = (url: string): boolean => {
+            if (!url || url === 'undefined' || url === 'null') return false;
+            try {
+                const parsed = new URL(url);
+                return ['http:', 'https:'].includes(parsed.protocol);
+            } catch {
+                return false;
+            }
+        };
 
-        // STEP 1: sc_last_image = imageUrl
+        // STEP 1: sc_last_image = imageUrl (ONLY if valid - triggers Flow B!)
         if (FIELD_IDS.SC_LAST_IMAGE) {
-            const success = await setCustomField(
-                subscriberId,
-                FIELD_IDS.SC_LAST_IMAGE,
-                imageUrl
-            );
-            if (!success) {
-                logger.warn('[ManyChatState] Failed to set sc_last_image');
+            if (isValidImageUrl(imageUrl)) {
+                const success = await setCustomField(
+                    subscriberId,
+                    FIELD_IDS.SC_LAST_IMAGE,
+                    imageUrl
+                );
+                if (!success) {
+                    logger.warn('[ManyChatState] Failed to set sc_last_image');
+                    allSuccess = false;
+                }
+            } else {
+                logger.error('[ManyChatState] ⚠️ SKIPPING sc_last_image - invalid URL would trigger Flow B with error', {
+                    subscriberId,
+                    imageUrl
+                });
                 allSuccess = false;
             }
         }
@@ -657,10 +724,21 @@ class ManyChatStateService {
         imageUrl: string,
         copyUrl?: string
     ): Promise<boolean> {
+        // VALIDATION: Check imageUrl is valid before proceeding
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+            logger.error('[ManyChatState] ❌ V2 setReadyState called with invalid imageUrl', {
+                subscriberId,
+                imageUrl,
+                imageUrlType: typeof imageUrl
+            });
+            // Don't fail completely - still set other fields
+        }
+
         logger.info('[ManyChatState] Setting V2 ready state', {
             subscriberId,
             scriptLength: scriptText.length,
             hasImage: !!imageUrl,
+            imageUrlPreview: imageUrl?.substring(0, 80),
             hasCopyUrl: !!copyUrl
         });
 
@@ -671,22 +749,46 @@ class ManyChatStateService {
         const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
         const copyFieldId = FIELD_IDS.SCRIPT_COPY_LINK || FIELD_IDS.SC_COPY_URL;
 
+        // Helper to validate URL
+        const isValidImageUrl = (url: string): boolean => {
+            if (!url || url === 'undefined' || url === 'null') return false;
+            try {
+                const parsed = new URL(url);
+                return ['http:', 'https:'].includes(parsed.protocol);
+            } catch {
+                return false;
+            }
+        };
+
         // ══════════════════════════════════════════════════════════════════
         // CRITICAL ORDER: Set ALL fields BEFORE ai_generated_script!
         // ai_generated_script change triggers ManyChat automation.
         // If we set it before other fields, ManyChat will read stale values.
+        // 
+        // ⚠️ IMPORTANT: Flow B triggers when image field changes!
+        // We MUST only set image field if URL is valid, otherwise Flow B
+        // will trigger and ManyChat will show "Not valid url" error.
+        // 
         // ORDER: script_image → script_copy_link → ai_generated_script (LAST!)
         // ══════════════════════════════════════════════════════════════════
 
-        // STEP 1: script_image = imageUrl (set FIRST)
+        // STEP 1: script_image = imageUrl (set FIRST - ONLY if valid! Triggers Flow B)
         if (imageFieldId) {
-            const success = await setCustomField(
-                subscriberId,
-                imageFieldId,
-                imageUrl
-            );
-            if (!success) {
-                logger.warn('[ManyChatState] V2: Failed to set script_image');
+            if (isValidImageUrl(imageUrl)) {
+                const success = await setCustomField(
+                    subscriberId,
+                    imageFieldId,
+                    imageUrl
+                );
+                if (!success) {
+                    logger.warn('[ManyChatState] V2: Failed to set script_image');
+                    allSuccess = false;
+                }
+            } else {
+                logger.error('[ManyChatState] ⚠️ V2: SKIPPING script_image - invalid URL would trigger Flow B with error', {
+                    subscriberId,
+                    imageUrl
+                });
                 allSuccess = false;
             }
         }

@@ -643,6 +643,16 @@ async function processJobWithTimeout(
     const imageUrl = await withCircuitBreaker('cloudinary', async () => {
       return generateScriptImage(scriptText);
     });
+    
+    // VALIDATION: Ensure imageUrl is valid before proceeding
+    if (!imageUrl || !imageUrl.startsWith('http')) {
+      logger.error(`[${requestId}] ❌ CRITICAL: Image generation returned invalid URL`, {
+        imageUrl,
+        imageUrlType: typeof imageUrl
+      });
+      throw new Error(`Image generation failed: invalid URL returned (${imageUrl})`);
+    }
+    logger.info(`[${requestId}] ✅ Image generated: ${imageUrl.substring(0, 80)}...`);
     await job.updateProgress(80);
 
     // D2. Generate public ID for copy-friendly link (collision-safe)
