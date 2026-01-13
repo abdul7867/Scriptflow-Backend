@@ -34,6 +34,7 @@ export const config = cleanEnv(process.env, {
   // ManyChat
   MANYCHAT_API_KEY: str({ desc: 'API Key for ManyChat (Optional in dev)', default: '' }),
   MANYCHAT_CHANNEL: str({ choices: ['fb', 'ig'], desc: 'ManyChat channel: fb (default - works for both FB and Instagram)', default: 'fb' }),
+  MANYCHAT_API_TOKEN: str({ desc: 'API Token for ManyChat (Bearer)', default: '' }),
 
   // Pull-based delivery model fields (avoids Meta 24-hour window restrictions)
   // Create Text-type custom fields in ManyChat and enter their IDs here
