@@ -148,6 +148,14 @@ export function createServer() {
     generateScriptHandlerV2
   );
 
+  // V2 Alias (for ManyChat compatibility)
+  app.post('/api/v2/generate-script',
+    betaAccessControl,
+    checkUserBlocked,
+    userRateLimiter,
+    generateScriptHandlerV2
+  );
+
   // V3 Webhook Handler (FSM-based with Intent Classification)
   // Rate limiting is now done inside webhook service to only count successful job queues
   app.post('/api/v3/webhook',
