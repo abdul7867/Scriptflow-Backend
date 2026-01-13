@@ -55,7 +55,13 @@ export const config = cleanEnv(process.env, {
 
 
   // Image Services
-  IMGBB_API_KEY: str({ desc: 'API Key for ImgBB' }),
+  IMGBB_API_KEY: str({ desc: 'API Key for ImgBB', default: '' }),
+
+  // Cloudinary Configuration
+  CLOUDINARY_CLOUD_NAME: str({ desc: 'Cloudinary Cloud Name', default: '' }),
+  CLOUDINARY_API_KEY: str({ desc: 'Cloudinary API Key', default: '' }),
+  CLOUDINARY_API_SECRET: str({ desc: 'Cloudinary API Secret', default: '' }),
+
   FFMPEG_PATH: str({ desc: 'Path to FFmpeg executable', default: ffmpegPath || '' }),
   FFPROBE_PATH: str({ desc: 'Path to FFprobe executable', default: ffprobePath || '' }),
 
@@ -74,7 +80,7 @@ export const config = cleanEnv(process.env, {
   S3_BUCKET_NAME: str({ desc: 'S3 Bucket Name for images', default: '' }),
 
   // Image Provider Selection
-  IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb'], default: 'imgbb' }),
+  IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb', 'cloudinary'], default: 'cloudinary' }),
 
   // Instagram Cookies Path (supports both Windows and Linux)
   INSTAGRAM_COOKIES_PATH: str({
