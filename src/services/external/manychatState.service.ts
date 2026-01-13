@@ -532,10 +532,11 @@ class ManyChatStateService {
             if (!success) allSuccess = false;
         }
 
-        // STEP 4: sc_last_image = "" (clear image)
-        if (FIELD_IDS.SC_LAST_IMAGE) {
-            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '');
-        }
+        // STEP 4: sc_last_image - SKIP clearing (ManyChat rejects empty strings for URL fields)
+        // The old image will remain until a new successful generation replaces it
+        // if (FIELD_IDS.SC_LAST_IMAGE) {
+        //     await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '');
+        // }
 
         // STEP 5 (LAST): sc_status = ERROR
         if (FIELD_IDS.SC_STATUS) {
