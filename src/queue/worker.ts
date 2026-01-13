@@ -751,25 +751,34 @@ async function processJobWithTimeout(
     // I. CRITICAL: Update FSM state to AWAITING_FEEDBACK and store script metadata
     // This enables COPY and VARIATION intents to work properly
     try {
-      await chatbotFSM.transition(subscriberId, ChatbotEvent.PROCESSING_COMPLETE, {
+      const transitionResult = await chatbotFSM.transition(subscriberId, ChatbotEvent.PROCESSING_COMPLETE, {
         scriptUrl,
         imageUrl,
       });
 
-      // Store script metadata for COPY/VARIATION intents
-      await chatbotFSM.updateMetadata(subscriberId, {
-        lastScriptUrl: scriptUrl,
-        lastScriptId: publicId,
-        lastImageUrl: imageUrl,
-        lastReelUrl: reelUrl,
-        lastUserIdea: userIdea,
-      });
+      if (transitionResult.success) {
+        // Store script metadata for COPY/VARIATION intents
+        await chatbotFSM.updateMetadata(subscriberId, {
+          lastScriptUrl: scriptUrl,
+          lastScriptId: publicId,
+          lastImageUrl: imageUrl,
+          lastReelUrl: reelUrl,
+          lastUserIdea: userIdea,
+        });
 
-      logger.info(`[${requestId}] FSM successfully transitioned to AWAITING_FEEDBACK`);
+        logger.info(`[${requestId}] FSM successfully transitioned to AWAITING_FEEDBACK`);
+      } else {
+        logger.error(`[${requestId}] FSM transition failed - invalid transition attempted`, {
+          subscriberId,
+          currentState: transitionResult.previousState,
+          event: ChatbotEvent.PROCESSING_COMPLETE,
+          error: transitionResult.error?.message
+        });
+      }
     } catch (fsmError: any) {
       // Non-fatal - script was delivered, but user state is wrong
       // This is CRITICAL - user will be stuck in PROCESSING state
-      logger.error(`[${requestId}] CRITICAL: FSM update failed - user may be stuck in PROCESSING state`, {
+      logger.error(`[${requestId}] CRITICAL: FSM update failed (internal error) - user may be stuck in PROCESSING state`, {
         error: fsmError.message,
         subscriberId
       });

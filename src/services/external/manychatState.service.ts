@@ -286,11 +286,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "-" (clear old data with placeholder)
+        // sc_last_image = "https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png" (clear old data with valid placeholder)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
+                field_value: 'https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png'
             });
         }
 
@@ -315,11 +315,11 @@ class ManyChatStateService {
             });
         }
 
-        // script_image = "-" (clear old image)
+        // script_image = "https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png" (clear old image)
         if (FIELD_IDS.SCRIPT_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SCRIPT_IMAGE, 10),
-                field_value: '-'
+                field_value: 'https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png'
             });
         }
 
@@ -509,9 +509,9 @@ class ManyChatStateService {
             if (!success) allSuccess = false;
         }
 
-        // STEP 4: sc_last_image = "-" (clear image)
+        // STEP 4: sc_last_image = "https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
-            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '-');
+            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, 'https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png');
         }
 
         // STEP 5 (LAST): sc_status = ERROR
@@ -645,11 +645,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "-" (clear image)
+        // sc_last_image = "https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
+                field_value: 'https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png'
             });
         }
 
