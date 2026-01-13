@@ -5,10 +5,18 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
 import { logger } from './logger';
 import { config } from '../config';
 
 const IMGBB_API_KEY = config.IMGBB_API_KEY;
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: config.CLOUDINARY_CLOUD_NAME,
+  api_key: config.CLOUDINARY_API_KEY,
+  api_secret: config.CLOUDINARY_API_SECRET,
+});
 
 // Load fonts once (Poppins - universal, modern, excellent readability)
 const fontDataBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'));
@@ -247,7 +255,31 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     logger.info(`Image generated in ${generationTime}ms (Satori)`);
 
     // Provider switching logic
-    if (config.IMAGE_PROVIDER === 's3') {
+    if (config.IMAGE_PROVIDER === 'cloudinary') {
+      // Cloudinary Upload
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'manychat_automation',
+            resource_type: 'image',
+          },
+          (error, result) => {
+            if (error) {
+              logger.error('Cloudinary upload failed:', error);
+              return reject(error);
+            }
+            if (!result || !result.secure_url) {
+              return reject(new Error('Cloudinary upload success but no secure_url found'));
+            }
+            logger.info(`Image uploaded to Cloudinary: ${result.secure_url}`);
+            resolve(result.secure_url);
+          }
+        );
+
+        // Convert buffer to stream and pipe to Cloudinary
+        uploadStream.end(pngBuffer);
+      });
+    } else if (config.IMAGE_PROVIDER === 's3') {
       // Import dynamically to avoid require errors if module is missing? 
       // Better to import at top, but for now assuming user installs deps.
       const { uploadToS3 } = require('../services/s3Service');

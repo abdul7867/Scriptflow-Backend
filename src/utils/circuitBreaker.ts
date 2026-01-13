@@ -77,6 +77,13 @@ export const DEFAULT_CONFIGS: Record<string, CircuitBreakerConfig> = {
     successThreshold: 2,
     failureWindow: 60000,
   },
+  cloudinary: {
+    name: 'cloudinary',
+    failureThreshold: 3,
+    resetTimeout: 30000,
+    successThreshold: 2,
+    failureWindow: 60000,
+  },
   s3: {
     name: 's3',
     failureThreshold: 5,

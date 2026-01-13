@@ -640,7 +640,7 @@ async function processJobWithTimeout(
 
     // D. Generate script image FIRST (so we can cache the URL)
     logger.info(`[${requestId}] Generating script image...`);
-    const imageUrl = await withCircuitBreaker('imgbb', async () => {
+    const imageUrl = await withCircuitBreaker('cloudinary', async () => {
       return generateScriptImage(scriptText);
     });
     await job.updateProgress(80);
@@ -852,7 +852,7 @@ async function processJobWithTimeout(
       errorType = 'api';
       userMessage = '🤖 AI service temporarily overloaded. Please wait 30 seconds and try again!';
       logger.error(`[${requestId}] Gemini/Vertex AI error: ${error.message}`);
-    } else if (error.message?.includes('ImgBB') || error.message?.includes('upload')) {
+    } else if (error.message?.includes('ImgBB') || error.message?.includes('Cloudinary') || error.message?.includes('upload')) {
       errorType = 'upload';
       userMessage = '📷 Image upload failed. Please try again!';
     } else if (error.message?.includes('GOOGLE_APPLICATION_CREDENTIALS') || error.message?.includes('credentials')) {
