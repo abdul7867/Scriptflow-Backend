@@ -286,19 +286,48 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "-" (clear old data with placeholder)
+        // sc_last_image = "" (clear old data)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
+                field_value: ''
             });
         }
 
-        // sc_copy_url = "-" (clear old copy URL)
+        // sc_copy_url = "" (clear old copy URL)
         if (FIELD_IDS.SC_COPY_URL) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
-                field_value: '-'
+                field_value: ''
+            });
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // V2 FIELDS CLEANUP
+        // Explicitly clear V2 output fields to ensure "Value Changed" triggers fire
+        // ══════════════════════════════════════════════════════════════════
+
+        // ai_generated_script = "" (clear old script)
+        if (FIELD_IDS.AI_GENERATED_SCRIPT) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.AI_GENERATED_SCRIPT, 10),
+                field_value: ''
+            });
+        }
+
+        // script_image = "" (clear old image)
+        if (FIELD_IDS.SCRIPT_IMAGE) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SCRIPT_IMAGE, 10),
+                field_value: ''
+            });
+        }
+
+        // script_copy_link = "" (clear old link)
+        if (FIELD_IDS.SCRIPT_COPY_LINK) {
+            fields.push({
+                field_id: parseInt(FIELD_IDS.SCRIPT_COPY_LINK, 10),
+                field_value: ''
             });
         }
 
@@ -509,9 +538,9 @@ class ManyChatStateService {
             if (!success) allSuccess = false;
         }
 
-        // STEP 4: sc_last_image = "-" (clear image)
+        // STEP 4: sc_last_image = "" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
-            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '-');
+            await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '');
         }
 
         // STEP 5 (LAST): sc_status = ERROR
@@ -580,14 +609,14 @@ class ManyChatStateService {
         if (FIELD_IDS.SC_LAST_SCRIPT) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
-                field_value: '-'
+                field_value: ''
             });
         }
 
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
+                field_value: ''
             });
         }
 
@@ -595,7 +624,7 @@ class ManyChatStateService {
         if (FIELD_IDS.SC_COPY_URL) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
-                field_value: '-'
+                field_value: ''
             });
         }
 
@@ -645,11 +674,11 @@ class ManyChatStateService {
             });
         }
 
-        // sc_last_image = "-" (clear image)
+        // sc_last_image = "" (clear image)
         if (FIELD_IDS.SC_LAST_IMAGE) {
             fields.push({
                 field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: '-'
+                field_value: ''
             });
         }
 
