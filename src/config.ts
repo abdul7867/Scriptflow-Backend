@@ -57,10 +57,9 @@ export const config = cleanEnv(process.env, {
   // Image Services
   IMGBB_API_KEY: str({ desc: 'API Key for ImgBB', default: '' }),
 
-  // Cloudinary Configuration
-  CLOUDINARY_CLOUD_NAME: str({ desc: 'Cloudinary Cloud Name', default: '' }),
-  CLOUDINARY_API_KEY: str({ desc: 'Cloudinary API Key', default: '' }),
-  CLOUDINARY_API_SECRET: str({ desc: 'Cloudinary API Secret', default: '' }),
+  // Cloudinary Configuration (uses CLOUDINARY_URL format)
+  // Format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+  CLOUDINARY_URL: str({ desc: 'Cloudinary URL (cloudinary://key:secret@cloud)', default: '' }),
 
   FFMPEG_PATH: str({ desc: 'Path to FFmpeg executable', default: ffmpegPath || '' }),
   FFPROBE_PATH: str({ desc: 'Path to FFprobe executable', default: ffprobePath || '' }),

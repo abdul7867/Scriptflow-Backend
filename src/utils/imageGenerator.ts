@@ -11,12 +11,15 @@ import { config } from '../config';
 
 const IMGBB_API_KEY = config.IMGBB_API_KEY;
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: config.CLOUDINARY_CLOUD_NAME,
-  api_key: config.CLOUDINARY_API_KEY,
-  api_secret: config.CLOUDINARY_API_SECRET,
-});
+// Configure Cloudinary using CLOUDINARY_URL
+// Format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+if (config.CLOUDINARY_URL) {
+  // Cloudinary auto-configures from CLOUDINARY_URL env variable
+  // Just verify it's set - cloudinary SDK reads it automatically
+  logger.info('Cloudinary configured via CLOUDINARY_URL');
+} else {
+  logger.warn('CLOUDINARY_URL not set - image uploads may fail');
+}
 
 // Load fonts once (Poppins - universal, modern, excellent readability)
 const fontDataBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'));
