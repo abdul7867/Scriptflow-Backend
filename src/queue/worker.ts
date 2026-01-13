@@ -19,7 +19,7 @@ import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
 import { uploadVideoToS3 } from '../services/external/s3.service';
 
 // FSM for state updates
-import { chatbotFSM, ChatbotEvent } from '../services/chatbot/chatbotStateMachine.service';
+import { chatbotFSM, ChatbotEvent, ChatbotState } from '../services/chatbot/chatbotStateMachine.service';
 
 // Production hardening
 import { withCircuitBreaker, CircuitOpenError } from '../utils/circuitBreaker';
@@ -324,6 +324,17 @@ async function processJobWithTimeout(
       attempts: job.attemptsMade + 1
     }
   );
+
+  // Update FSM state to PROCESSING
+  // This ensures the FSM is in the correct state to accept PROCESSING_COMPLETE later
+  // We use forceState because V2 jobs might bypass the standard conversation flow
+  try {
+    await chatbotFSM.forceState(subscriberId, ChatbotState.PROCESSING, 'Job started');
+    logger.info(`[${requestId}] FSM state forced to PROCESSING`);
+  } catch (fsmError: any) {
+    // Log warning but don't fail the job - we want to try to process anyway
+    logger.warn(`[${requestId}] FSM force state to PROCESSING failed: ${fsmError.message}`);
+  }
 
   // Initialize ManyChat state (set status="Processing" with contextual message)
   // Also passes variation info for custom "Creating version #X..." messages
