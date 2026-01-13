@@ -159,6 +159,7 @@ function formatSection(lines: string[]): string {
 
 export async function generateScriptImage(scriptText: string): Promise<string> {
   const startTime = Date.now();
+  logger.info(`Starting script image generation using provider: ${config.IMAGE_PROVIDER}`);
   try {
     // Parse script sections
     const sections = parseScript(scriptText);
