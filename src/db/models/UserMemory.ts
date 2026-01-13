@@ -155,12 +155,11 @@ UserMemorySchema.index({ 'stats.lastActiveAt': 1 });
 
 const MAX_HISTORY_SIZE = 50;
 
-UserMemorySchema.pre('save', function(next) {
+UserMemorySchema.pre('save', function() {
   // Cap recentHistory to prevent unbounded growth
   if (this.recentHistory && this.recentHistory.length > MAX_HISTORY_SIZE) {
     this.recentHistory = this.recentHistory.slice(0, MAX_HISTORY_SIZE);
   }
-  next();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
