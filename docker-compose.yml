@@ -41,7 +41,8 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-imgbb}
+      # Image Provider: cloudinary (recommended) or imgbb (may get rate-limited by ManyChat)
+      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-cloudinary}
       # User limits
       - USER_RATE_LIMIT=${USER_RATE_LIMIT:-10}
       - MAX_BETA_USERS=${MAX_BETA_USERS:-100}

@@ -148,7 +148,14 @@ async function setCustomField(
         // Ensure field_id is a number if possible, but keep it flexible if string is needed
         const fieldIdNum = typeof fieldId === 'string' ? parseInt(fieldId, 10) : fieldId;
 
-        await axios.post(setFieldUrl, {
+        // Log the actual value being sent for image fields (helps debug URL issues)
+        const isImageField = fieldIdNum === parseInt(FIELD_IDS.SC_LAST_IMAGE || '0', 10) || 
+                            fieldIdNum === parseInt(FIELD_IDS.SCRIPT_IMAGE || '0', 10);
+        if (isImageField) {
+            logger.info(`[ManyChatState] Setting image field ${fieldId} to URL: ${fieldValue.substring(0, 100)}...`);
+        }
+
+        const response = await axios.post(setFieldUrl, {
             subscriber_id: subscriberIdStr,
             field_id: fieldIdNum,
             field_value: fieldValue
@@ -159,6 +166,17 @@ async function setCustomField(
             },
             timeout: API_TIMEOUT_MS
         });
+
+        // CRITICAL: Validate ManyChat API response - it should return {"status": "success"}
+        const responseData = response.data;
+        if (responseData?.status !== 'success') {
+            logger.error(`[ManyChatState] ❌ ManyChat API returned non-success status for field ${fieldId}`, {
+                subscriberId,
+                responseData,
+                fieldValue: isImageField ? fieldValue : '[redacted]'
+            });
+            return false;
+        }
 
         logger.info(`[ManyChatState] ✅ Custom field updated: ${fieldId} for ${subscriberId}`);
         return true;
