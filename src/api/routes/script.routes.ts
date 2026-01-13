@@ -8,9 +8,8 @@
  */
 
 // V2 Unified Handler (recommended)
-export { 
-  generateScriptHandlerV2,
-  getJobStatusHandler 
+export {
+  generateScriptHandlerV2
 } from '../controllers/generateScriptV2.controller';
 
 // Legacy Handler (for backwards compatibility)

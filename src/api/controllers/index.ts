@@ -4,7 +4,7 @@
  */
 
 // Script generation controllers (V2 - recommended)
-export { generateScriptHandlerV2, getJobStatusHandler } from './generateScriptV2.controller';
+export { generateScriptHandlerV2 } from './generateScriptV2.controller';
 // Legacy handler for backwards compatibility
 export { generateScriptHandler } from './generateScript.legacy.controller';
 
