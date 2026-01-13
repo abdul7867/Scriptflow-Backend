@@ -259,8 +259,12 @@ class ManyChatStateService {
     /**
      * Initialize processing state - Called when webhook queues a job
      * 
-     * Sets sc_status to "Processing", prompt message, and clears old data.
-     * ManyChat automation reads sc_prompt_message to show "Creating..." message.
+     * For V2 flow: This is now a NO-OP because:
+     * 1. ManyChat triggers on ai_generated_script change only
+     * 2. We don't want to update ANY fields until the script is ready
+     * 3. Updating fields here could trigger ManyChat prematurely
+     * 
+     * The "wait message" is already shown by ManyChat automation after the external request.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param isVariation - Whether this is a variation (for custom message)
@@ -272,97 +276,17 @@ class ManyChatStateService {
         isVariation: boolean = false,
         variationNumber: number = 0
     ): Promise<boolean> {
-        logger.info('[ManyChatState] Initializing processing state', { subscriberId, isVariation, variationNumber });
-
-        // Build fields array with available field IDs
-        const fields: Array<{ field_id: number; field_value: string }> = [];
-
-        // sc_status = "Processing"
-        if (FIELD_IDS.SC_STATUS) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_STATUS, 10),
-                field_value: ScriptStatus.PROCESSING
-            });
-        }
-
-        // sc_prompt_message = contextual message
-        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
-            const message = isVariation && variationNumber > 0
-                ? PROMPT_MESSAGES.PROCESSING_VARIATION(variationNumber)
-                : PROMPT_MESSAGES.PROCESSING;
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_PROMPT_MESSAGE, 10),
-                field_value: message
-            });
-        }
-
-        // sc_last_script = "..." (clear old data with placeholder)
-        if (FIELD_IDS.SC_LAST_SCRIPT) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_SCRIPT, 10),
-                field_value: 'Generating...'
-            });
-        }
-
-        // sc_last_image = "" (clear old data with empty string to prevent 403s and invalid URL errors)
-        /* SKIPPED: Setting image field to "" causes ManyChat 400 "Invalid field value" error.
-           We will leave the old image until the new one is ready.
-        if (FIELD_IDS.SC_LAST_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_LAST_IMAGE, 10),
-                field_value: ''
-            });
-        }
-        */
-
-        // sc_copy_url = "" (clear old copy URL)
-        if (FIELD_IDS.SC_COPY_URL) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SC_COPY_URL, 10),
-                field_value: ''
-            });
-        }
-
-        // ══════════════════════════════════════════════════════════════════
-        // V2 FIELDS CLEANUP
-        // Explicitly clear V2 output fields to ensure "Value Changed" triggers fire
-        // ══════════════════════════════════════════════════════════════════
-
-        // ai_generated_script = "" (clear old script)
-        if (FIELD_IDS.AI_GENERATED_SCRIPT) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.AI_GENERATED_SCRIPT, 10),
-                field_value: ''
-            });
-        }
-
-        // script_image = "" (clear old image)
-        /* SKIPPED: Setting image field to "" causes ManyChat 400 "Invalid field value" error.
-        if (FIELD_IDS.SCRIPT_IMAGE) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SCRIPT_IMAGE, 10),
-                field_value: ''
-            });
-        }
-        */
-
-        // script_copy_link = "" (clear old link)
-        if (FIELD_IDS.SCRIPT_COPY_LINK) {
-            fields.push({
-                field_id: parseInt(FIELD_IDS.SCRIPT_COPY_LINK, 10),
-                field_value: ''
-            });
-        }
-
-        if (fields.length === 0) {
-            logger.warn('[ManyChatState] No field IDs configured, skipping initialization', {
-                subscriberId,
-                hint: 'Set MANYCHAT_SC_STATUS_FIELD_ID, MANYCHAT_SC_LAST_SCRIPT_FIELD_ID, etc.'
-            });
-            return false;
-        }
-
-        return await setCustomFieldsSequential(subscriberId, fields);
+        // V2 FLOW: Don't update any fields here!
+        // ManyChat shows "wait message" after external request automatically.
+        // We only update fields in setReadyStateV2 when the script is ready.
+        // This prevents premature triggering of the "ai_generated_script changed" rule.
+        logger.info('[ManyChatState] V2: Skipping initializeProcessing (no fields to update)', { 
+            subscriberId, 
+            isVariation, 
+            variationNumber,
+            reason: 'V2 flow only updates fields when script is ready'
+        });
+        return true;
     }
 
     /**
@@ -479,10 +403,12 @@ class ManyChatStateService {
     /**
      * Set error state with friendly message - Called when worker fails
      * 
-     * Per spec ERROR RULE:
-     * - sc_status = ERROR
-     * - sc_prompt_message = human-readable message
-     * - sc_error_code = error code for debugging
+     * For V2 flow: We do NOT update ai_generated_script on error because
+     * that would trigger the ManyChat automation with invalid data.
+     * 
+     * Instead, we only log the error. The user will see no response,
+     * but they can try again. ManyChat's timeout handling can show a
+     * fallback message if needed.
      * 
      * @param subscriberId - The subscriber's ManyChat ID
      * @param errorMessage - Friendly error message for the user
@@ -494,64 +420,19 @@ class ManyChatStateService {
         errorMessage: string,
         errorCode?: string
     ): Promise<boolean> {
-        logger.info('[ManyChatState] Setting error state', {
+        // V2 FLOW: Do NOT update any fields on error!
+        // Updating ai_generated_script would trigger ManyChat automation with invalid data.
+        // The user simply won't receive a response, and can try again.
+        // ManyChat's built-in timeout handling can show a fallback message.
+        logger.warn('[ManyChatState] V2: Error occurred but NOT updating fields to avoid triggering automation', {
             subscriberId,
             errorMessage: errorMessage.substring(0, 100),
-            errorCode
+            errorCode,
+            reason: 'Updating ai_generated_script on error would send wrong message to user'
         });
-
-        let allSuccess = true;
-
-        // STEP 1: sc_prompt_message = error message (human-readable)
-        if (FIELD_IDS.SC_PROMPT_MESSAGE) {
-            const success = await setCustomField(
-                subscriberId,
-                FIELD_IDS.SC_PROMPT_MESSAGE,
-                errorMessage
-            );
-            if (!success) allSuccess = false;
-        }
-
-        // STEP 2: sc_error_code = error code (for debugging)
-        if (FIELD_IDS.SC_ERROR_CODE && errorCode) {
-            const success = await setCustomField(
-                subscriberId,
-                FIELD_IDS.SC_ERROR_CODE,
-                errorCode
-            );
-            if (!success) allSuccess = false;
-        }
-
-        // STEP 3: sc_last_script = error message (fallback display)
-        if (FIELD_IDS.SC_LAST_SCRIPT) {
-            const success = await setCustomField(
-                subscriberId,
-                FIELD_IDS.SC_LAST_SCRIPT,
-                errorMessage
-            );
-            if (!success) allSuccess = false;
-        }
-
-        // STEP 4: sc_last_image - SKIP clearing (ManyChat rejects empty strings for URL fields)
-        // The old image will remain until a new successful generation replaces it
-        // if (FIELD_IDS.SC_LAST_IMAGE) {
-        //     await setCustomField(subscriberId, FIELD_IDS.SC_LAST_IMAGE, '');
-        // }
-
-        // STEP 5 (LAST): sc_status = ERROR
-        if (FIELD_IDS.SC_STATUS) {
-            const success = await setCustomField(
-                subscriberId,
-                FIELD_IDS.SC_STATUS,
-                ScriptStatus.ERROR
-            );
-            if (!success) {
-                logger.error('[ManyChatState] CRITICAL: Failed to set sc_status = ERROR');
-                allSuccess = false;
-            }
-        }
-
-        return allSuccess;
+        
+        // Return true since we intentionally skip updates (not a failure)
+        return true;
     }
 
     /**
@@ -790,7 +671,14 @@ class ManyChatStateService {
         const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
         const copyFieldId = FIELD_IDS.SCRIPT_COPY_LINK || FIELD_IDS.SC_COPY_URL;
 
-        // STEP 1: script_image (ai_generated_script) = imageUrl
+        // ══════════════════════════════════════════════════════════════════
+        // CRITICAL ORDER: Set ALL fields BEFORE ai_generated_script!
+        // ai_generated_script change triggers ManyChat automation.
+        // If we set it before other fields, ManyChat will read stale values.
+        // ORDER: script_image → script_copy_link → ai_generated_script (LAST!)
+        // ══════════════════════════════════════════════════════════════════
+
+        // STEP 1: script_image = imageUrl (set FIRST)
         if (imageFieldId) {
             const success = await setCustomField(
                 subscriberId,
@@ -803,20 +691,7 @@ class ManyChatStateService {
             }
         }
 
-        // STEP 2: ai_generated_script = scriptText
-        if (scriptFieldId) {
-            const success = await setCustomField(
-                subscriberId,
-                scriptFieldId,
-                scriptText
-            );
-            if (!success) {
-                logger.warn('[ManyChatState] V2: Failed to set ai_generated_script');
-                allSuccess = false;
-            }
-        }
-
-        // STEP 3: script_copy_link = copyUrl
+        // STEP 2: script_copy_link = copyUrl (set SECOND)
         if (copyFieldId && copyUrl) {
             const success = await setCustomField(
                 subscriberId,
@@ -829,18 +704,23 @@ class ManyChatStateService {
             }
         }
 
-        // STEP 4: sc_status = READY (if configured - for V3 compatibility)
-        if (FIELD_IDS.SC_STATUS) {
+        // STEP 3: ai_generated_script = scriptText (set LAST - this triggers ManyChat!)
+        // This MUST be last because changing this field triggers the ManyChat automation.
+        // All other fields must be set before this so ManyChat reads correct values.
+        if (scriptFieldId) {
             const success = await setCustomField(
                 subscriberId,
-                FIELD_IDS.SC_STATUS,
-                ScriptStatus.READY
+                scriptFieldId,
+                scriptText
             );
             if (!success) {
-                logger.warn('[ManyChatState] V2: Failed to set sc_status = READY');
-                // Not critical for V2 - don't mark as failure
+                logger.warn('[ManyChatState] V2: Failed to set ai_generated_script');
+                allSuccess = false;
             }
         }
+
+        // NOTE: sc_status is NOT needed for V2 flow since ManyChat triggers on ai_generated_script
+        // Removing to avoid unnecessary API calls
 
         if (allSuccess) {
             logger.info('[ManyChatState] ✅ V2 Ready state set successfully', { subscriberId });
