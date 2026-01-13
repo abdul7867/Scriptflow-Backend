@@ -71,6 +71,10 @@ const FIELD_IDS = {
     SC_PROMPT_MESSAGE: config.MANYCHAT_SC_PROMPT_MESSAGE_FIELD_ID || '',
     SC_COPY_URL: config.MANYCHAT_SC_COPY_URL_FIELD_ID || '',
     SC_ERROR_CODE: (config as any).MANYCHAT_SC_ERROR_CODE_FIELD_ID || '',
+    // V2 Field Names (alternative)
+    AI_GENERATED_SCRIPT: (config as any).MANYCHAT_AI_GENERATED_SCRIPT_FIELD_ID || '',
+    SCRIPT_IMAGE: (config as any).MANYCHAT_SCRIPT_IMAGE_FIELD_ID || '',
+    SCRIPT_COPY_LINK: (config as any).MANYCHAT_SCRIPT_COPY_LINK_FIELD_ID || '',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -692,6 +696,103 @@ class ManyChatStateService {
             hasScriptField: !!FIELD_IDS.SC_LAST_SCRIPT,
             hasImageField: !!FIELD_IDS.SC_LAST_IMAGE
         };
+    }
+
+    /**
+     * V2 Ready State - Uses V2 field names
+     * 
+     * Updates ManyChat custom fields using V2 naming convention:
+     * - ai_generated_script -> Script text
+     * - script_image -> Image URL
+     * - script_copy_link -> Webpage URL
+     * 
+     * Falls back to V3 field names if V2 not configured.
+     * 
+     * @param subscriberId - The subscriber's ManyChat ID
+     * @param scriptText - The generated script text content
+     * @param imageUrl - The image URL
+     * @param copyUrl - The webpage URL for copying
+     * @returns true if successful, false otherwise
+     */
+    async setReadyStateV2(
+        subscriberId: string,
+        scriptText: string,
+        imageUrl: string,
+        copyUrl?: string
+    ): Promise<boolean> {
+        logger.info('[ManyChatState] Setting V2 ready state', {
+            subscriberId,
+            scriptLength: scriptText.length,
+            hasImage: !!imageUrl,
+            hasCopyUrl: !!copyUrl
+        });
+
+        let allSuccess = true;
+
+        // Use V2 field names if configured, otherwise fall back to V3 names
+        const scriptFieldId = FIELD_IDS.AI_GENERATED_SCRIPT || FIELD_IDS.SC_LAST_SCRIPT;
+        const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
+        const copyFieldId = FIELD_IDS.SCRIPT_COPY_LINK || FIELD_IDS.SC_COPY_URL;
+
+        // STEP 1: script_image (ai_generated_script) = imageUrl
+        if (imageFieldId) {
+            const success = await setCustomField(
+                subscriberId,
+                imageFieldId,
+                imageUrl
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set script_image');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 2: ai_generated_script = scriptText
+        if (scriptFieldId) {
+            const success = await setCustomField(
+                subscriberId,
+                scriptFieldId,
+                scriptText
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set ai_generated_script');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 3: script_copy_link = copyUrl
+        if (copyFieldId && copyUrl) {
+            const success = await setCustomField(
+                subscriberId,
+                copyFieldId,
+                copyUrl
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set script_copy_link');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 4: sc_status = READY (if configured - for V3 compatibility)
+        if (FIELD_IDS.SC_STATUS) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.SC_STATUS,
+                ScriptStatus.READY
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set sc_status = READY');
+                // Not critical for V2 - don't mark as failure
+            }
+        }
+
+        if (allSuccess) {
+            logger.info('[ManyChatState] ✅ V2 Ready state set successfully', { subscriberId });
+        } else {
+            logger.warn('[ManyChatState] V2 Ready state set with some failures', { subscriberId });
+        }
+
+        return allSuccess;
     }
 }
 

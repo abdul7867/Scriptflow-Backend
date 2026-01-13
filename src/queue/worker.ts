@@ -309,10 +309,11 @@ async function processJobWithTimeout(
     toneHint,
     languageHint,
     mode,
-    isCopyMode // When true, output transcript as-is formatted as script
+    isCopyMode, // When true, output transcript as-is formatted as script
+    isV2 // When true, use V2 ManyChat field names
   } = job.data;
 
-  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}`);
+  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}${isV2 ? ' [V2]' : ''}`);
 
   // Update job status in MongoDB
   await Job.findOneAndUpdate(
@@ -776,13 +777,18 @@ async function processJobWithTimeout(
 
     // ──────────────────────────────────────────────────────────────────
     // PULL-BASED DELIVERY: Update ManyChat custom fields
-    // Sets sc_status = "Ready", sc_last_script = text, sc_last_image = URL
-    // User can "pull" this data by typing "Hi" (avoids Meta 24hr window)
+    // V2: Uses ai_generated_script, script_image, script_copy_link
+    // V3: Uses sc_last_script, sc_last_image, sc_copy_url, sc_status
     // ──────────────────────────────────────────────────────────────────
     try {
-      // Pass all data needed for ManyChat automation to deliver the script
-      await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl, scriptUrl);
-      logger.info(`[${requestId}] ✅ ManyChat state set to Ready - user can pull data`);
+      // Use V2 method if job was from V2 endpoint
+      if (isV2) {
+        await manychatStateService.setReadyStateV2(subscriberId, scriptText, imageUrl, scriptUrl);
+        logger.info(`[${requestId}] ✅ ManyChat V2 state set - fields: ai_generated_script, script_image, script_copy_link`);
+      } else {
+        await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl, scriptUrl);
+        logger.info(`[${requestId}] ✅ ManyChat state set to Ready - user can pull data`);
+      }
     } catch (stateError: any) {
       // Non-fatal - ManyChat automation will still work with the fields that were set
       logger.warn(`[${requestId}] Failed to set ManyChat ready state`, {

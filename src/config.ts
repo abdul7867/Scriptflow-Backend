@@ -47,6 +47,12 @@ export const config = cleanEnv(process.env, {
   MANYCHAT_SC_COPY_URL_FIELD_ID: str({ desc: 'Field ID for sc_copy_url (copy link for script)', default: '' }),
   MANYCHAT_SC_ERROR_CODE_FIELD_ID: str({ desc: 'Field ID for sc_error_code (error code for debugging)', default: '' }),
 
+  // V2 Custom Fields (alternative field names)
+  // These map to ManyChat custom fields by NAME: ai_generated_script, script_image, script_copy_link
+  MANYCHAT_AI_GENERATED_SCRIPT_FIELD_ID: str({ desc: 'Field ID for ai_generated_script (script text)', default: '' }),
+  MANYCHAT_SCRIPT_IMAGE_FIELD_ID: str({ desc: 'Field ID for script_image (image URL)', default: '' }),
+  MANYCHAT_SCRIPT_COPY_LINK_FIELD_ID: str({ desc: 'Field ID for script_copy_link (webpage URL)', default: '' }),
+
 
   // Image Services
   IMGBB_API_KEY: str({ desc: 'API Key for ImgBB' }),

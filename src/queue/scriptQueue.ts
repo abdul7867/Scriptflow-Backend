@@ -34,6 +34,9 @@ export interface ScriptJobData {
   // Variation tracking (for regeneration requests)
   isVariation?: boolean;
   variationIndex?: number;
+
+  // V2 flag: Use V2 ManyChat field names (ai_generated_script, script_image, script_copy_link)
+  isV2?: boolean;
 }
 
 /**
