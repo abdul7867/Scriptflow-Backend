@@ -352,5 +352,12 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
   } catch (error: any) {
     logger.error('Failed to generate or upload image: ' + (error.message || error));
     throw error;
+  } finally {
+    // MEMORY OPTIMIZATION: Hint GC after heavy image processing
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
   }
 }

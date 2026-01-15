@@ -241,6 +241,12 @@ export async function healthGate(
         return next();
     }
 
+    // Always allow script viewing endpoints - read-only, lightweight
+    // Users should always be able to view their generated scripts
+    if (req.path.startsWith('/s/')) {
+        return next();
+    }
+
     // Always allow webhook/API endpoints to pass through - ManyChat needs a response
     // The services have their own rate limiting and will queue jobs appropriately
     // V2 and V3 both use BullMQ queue which handles backpressure

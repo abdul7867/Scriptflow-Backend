@@ -431,12 +431,26 @@ Select the BEST hook type for this concept:
 Pick ONE that fits the concept. Do NOT use generic hooks.
 
 ═══════════════════════════════════════════════════════════════════════
-LANGUAGE RULES (NON-NEGOTIABLE):
+LANGUAGE RULES (CRITICAL - READ CAREFULLY):
 ═══════════════════════════════════════════════════════════════════════
-• DETECT the transcript language → Output in SAME language
-• Use ONLY Roman alphabet (romanize Hindi, Arabic, etc.)
+PRIORITY ORDER for language detection:
+1. AUDIO (spoken words in transcript) > CAPTIONS (on-screen text) > VISUAL TEXT
+2. The SPOKEN language in the transcript is what matters, NOT the caption language
+
+STRICT RULES:
+• Detect the SPOKEN language from the transcript (ignore on-screen text language)
+• If the video SPEAKS in English but has captions in Hindi/Arabic/etc → OUTPUT IN ENGLISH
+• If the video SPEAKS in Hindi/Arabic/etc → Romanize to English alphabet (transliterate)
+• ALL output MUST use Roman alphabet (A-Z) - no Hindi, Arabic, Chinese, or other scripts
+• Visual directions (🎬 VISUAL) and Technical labels must ALWAYS be in English
 • NO random language switching mid-script
-• If no transcript, default to English
+• When in doubt, default to ENGLISH
+
+EXAMPLES:
+✅ CORRECT: Video speaks English with Hindi captions → Script in English
+✅ CORRECT: Video speaks Hindi → Script in romanized Hindi (e.g., "Aap yeh galti mat karo")
+❌ WRONG: Video speaks English → Script outputs in Hindi/Arabic script
+❌ WRONG: Mixing देवनागरी or عربي characters in output
 
 ═══════════════════════════════════════════════════════════════════════
 QUALITY REQUIREMENTS V3 (UPGRADED):

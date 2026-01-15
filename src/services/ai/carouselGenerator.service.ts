@@ -3,7 +3,7 @@
  * 
  * ScriptFlow 2.0 Premium Output
  * 
- * Each card is 1080x1080 (Instagram optimal) containing:
+ * Each card is 900x900 (ManyChat Gallery optimal) containing:
  * - Card 1: HOOK section with 0-3 sec timing
  * - Card 2: BODY section with 3-15 sec timing
  * - Card 3: CTA section with 15-20 sec timing
@@ -53,9 +53,9 @@ export interface CarouselConfig {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Card dimensions - Instagram optimal 1:1 ratio */
-const CARD_WIDTH = 1080;
-const CARD_HEIGHT = 1080;
+/** Card dimensions - ManyChat Gallery optimal 1:1 ratio (reduces memory) */
+const CARD_WIDTH = 900;
+const CARD_HEIGHT = 900;
 
 /** Load fonts (same as imageGenerator) */
 let fontDataBold: Buffer;
@@ -174,14 +174,16 @@ export function parseScriptSections(scriptText: string): ScriptSections {
 }
 
 /**
- * Extract VISUAL and SAY content from lines
+ * Extract VISUAL, TEXT OVERLAY, and SAY content from lines
  */
-function extractVisualAndDialogue(lines: string[]): { visual: string; dialogue: string } {
+function extractVisualAndDialogue(lines: string[]): { visual: string; textOverlay: string; dialogue: string } {
   let visual = '';
+  let textOverlay = '';
   let dialogue = '';
 
   for (const line of lines) {
     const isVisual = line.includes('🎬') || line.toLowerCase().includes('visual:');
+    const isTextOverlay = line.includes('📝') || line.toLowerCase().includes('text overlay:');
     const isSay = line.includes('💬') || line.toLowerCase().includes('say:');
 
     if (isVisual) {
@@ -190,6 +192,13 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; dialogue: 
         .replace(/^visual:\s*/i, '')
         .trim();
       visual += (visual ? '\n' : '') + cleaned;
+    } else if (isTextOverlay) {
+      const cleaned = line
+        .replace(/^📝\s*/i, '')
+        .replace(/^text overlay:\s*/i, '')
+        .replace(/^[""]|[""]$/g, '')  // Remove quotes
+        .trim();
+      textOverlay += (textOverlay ? ' • ' : '') + cleaned;
     } else if (isSay) {
       const cleaned = line
         .replace(/^💬\s*/i, '')
@@ -200,7 +209,7 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; dialogue: 
     }
   }
 
-  return { visual, dialogue };
+  return { visual, textOverlay, dialogue };
 }
 
 /**
@@ -211,12 +220,9 @@ function truncateText(text: string, maxLength: number): string {
   return text.substring(0, maxLength - 3) + '...';
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CARD GENERATORS
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
  * Generate HTML template for a single section card
+ * ENHANCED: Matches demo page styling with proper visual hierarchy
  */
 function generateCardTemplate(
   sectionKey: 'hook' | 'body' | 'cta',
@@ -224,67 +230,81 @@ function generateCardTemplate(
   variationTag: string
 ): string {
   const meta = SECTION_META[sectionKey];
-  const { visual, dialogue } = extractVisualAndDialogue(lines);
+  const { visual, textOverlay, dialogue } = extractVisualAndDialogue(lines);
 
-  // Truncate for card fit
-  const displayVisual = truncateText(visual || 'Visual direction here...', 200);
-  const displayDialogue = truncateText(dialogue || 'Dialogue here...', 300);
+  // Truncate for card fit - increased limits for 900px card
+  const displayVisual = truncateText(visual || 'Camera setup goes here...', 180);
+  const displayOverlay = truncateText(textOverlay || '', 60);
+  const displayDialogue = truncateText(dialogue || 'Dialogue goes here...', 250);
+
+  // Dynamic font sizes based on content length
+  const dialogueFontSize = displayDialogue.length > 150 ? 20 : displayDialogue.length > 100 ? 22 : 26;
 
   return `
-    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 48px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgDark} 0%, ${COLORS.bgCard} 100%); color: ${COLORS.textMain};">
+    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgDark} 0%, ${COLORS.bgCard} 100%); color: ${COLORS.textMain};">
       
       <!-- Top Bar: Brand + Variation + Timing -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid rgba(139, 92, 246, 0.15);">
         
         <!-- Brand -->
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="display: flex; font-size: 20px; font-weight: 800; color: ${COLORS.textMain}; letter-spacing: -0.5px;">SCRIPT<span style="color: ${meta.accent};">FLOW</span></div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; font-size: 18px; font-weight: 800; color: ${COLORS.textMain}; letter-spacing: -0.5px;">SCRIPT<span style="background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">FLOW</span></div>
         </div>
         
-        <!-- Variation + Timing Badges -->
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="display: flex; background: ${COLORS.accentBg}; border: 1px solid ${COLORS.accentBorder}; padding: 6px 14px; border-radius: 20px;">
-            <span style="font-size: 12px; font-weight: 700; color: ${meta.accent};">${variationTag}</span>
+        <!-- Badges -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%); border: 1px solid rgba(139, 92, 246, 0.3); padding: 5px 12px; border-radius: 16px;">
+            <span style="font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${variationTag}</span>
           </div>
-          <div style="display: flex; background: rgba(255,255,255,0.05); border: 1px solid ${COLORS.border}; padding: 6px 14px; border-radius: 20px;">
-            <span style="font-size: 12px; font-weight: 600; color: ${COLORS.textDim};">⏱ ${meta.timing}</span>
+          <div style="display: flex; background: rgba(255,255,255,0.05); border: 1px solid ${COLORS.border}; padding: 5px 12px; border-radius: 16px;">
+            <span style="font-size: 11px; font-weight: 600; color: ${COLORS.textDim};">⏱ ${meta.timing}</span>
           </div>
         </div>
       </div>
       
-      <!-- Section Header -->
-      <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 40px; padding: 24px; background: rgba(${sectionKey === 'hook' ? '34, 211, 238' : sectionKey === 'body' ? '167, 139, 250' : '74, 222, 128'}, 0.1); border-radius: 16px; border: 1px solid ${meta.accent}40;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-          <span style="font-size: 32px;">${meta.emoji}</span>
-          <span style="font-size: 28px; font-weight: 800; color: ${meta.accent}; letter-spacing: 2px;">${meta.number} / ${meta.title}</span>
+      <!-- Section Header - Compact -->
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding: 16px 20px; background: rgba(${sectionKey === 'hook' ? '139, 92, 246' : sectionKey === 'body' ? '245, 158, 11' : '34, 197, 94'}, 0.1); border-radius: 12px; border: 1px solid ${meta.accent}30;">
+        <span style="font-size: 28px;">${meta.emoji}</span>
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 20px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1px;">${meta.number} / ${meta.title}</span>
+          <span style="font-size: 12px; color: ${COLORS.textMuted}; font-weight: 500;">${meta.subtitle}</span>
         </div>
-        <span style="font-size: 14px; color: ${COLORS.textDim}; font-weight: 500;">${meta.subtitle}</span>
       </div>
       
-      <!-- Content Area -->
-      <div style="display: flex; flex-direction: column; flex: 1; gap: 24px;">
+      <!-- Content Area - Flex to fill space -->
+      <div style="display: flex; flex-direction: column; flex: 1; gap: 16px;">
         
-        <!-- Visual Direction -->
-        <div style="display: flex; flex-direction: column; padding: 24px; background: ${COLORS.bgSection}; border-radius: 12px; border: 1px solid ${COLORS.border};">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-            <span style="font-size: 11px; font-weight: 800; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 2px;">📹 VISUAL DIRECTION</span>
+        <!-- Camera Setup Block -->
+        <div style="display: flex; flex-direction: column; padding: 16px 20px; background: rgba(100, 116, 139, 0.08); border-radius: 10px; border: 1px solid rgba(100, 116, 139, 0.15);">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+            <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px;">📹 CAMERA SETUP</span>
           </div>
-          <div style="display: flex; font-size: 16px; color: ${COLORS.textDim}; line-height: 1.6; font-style: italic;">${escapeHtml(displayVisual)}</div>
+          <div style="display: flex; font-size: 14px; color: ${COLORS.textSecondary}; line-height: 1.55;">${escapeHtml(displayVisual)}</div>
         </div>
         
-        <!-- Dialogue -->
-        <div style="display: flex; flex-direction: column; flex: 1; padding: 28px; background: ${COLORS.bgSection}; border-radius: 12px; border: 2px solid ${meta.accent}40;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-            <span style="font-size: 11px; font-weight: 900; color: ${meta.accent}; text-transform: uppercase; letter-spacing: 2.5px;">💬 DIALOGUE</span>
+        ${displayOverlay ? `
+        <!-- On-Screen Text Block (Sunset Gold) -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: rgba(245, 158, 11, 0.1); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.25);">
+          <span style="font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 1.5px;">📝 ON-SCREEN</span>
+          <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">"${escapeHtml(displayOverlay)}"</span>
+        </div>
+        ` : ''}
+        
+        <!-- Dialogue Block (Main Focus - Electric Violet) -->
+        <div style="display: flex; flex-direction: column; flex: 1; padding: 20px 24px; background: rgba(139, 92, 246, 0.06); border-radius: 12px; border: 2px solid ${meta.accent}40;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+            <span style="font-size: 10px; font-weight: 900; color: ${meta.accent}; text-transform: uppercase; letter-spacing: 2px;">🎤 SPEAK THIS</span>
           </div>
-          <div style="display: flex; font-size: 22px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.5; letter-spacing: -0.3px;">"${escapeHtml(displayDialogue)}"</div>
+          <div style="display: flex; flex: 1; align-items: center;">
+            <div style="display: flex; font-size: ${dialogueFontSize}px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.5; letter-spacing: -0.3px;">"${escapeHtml(displayDialogue)}"</div>
+          </div>
         </div>
         
       </div>
       
       <!-- Footer -->
-      <div style="display: flex; justify-content: center; margin-top: 24px;">
-        <span style="font-size: 10px; font-weight: 600; color: ${COLORS.textMuted}; letter-spacing: 2px; opacity: 0.6;">SWIPE FOR MORE →</span>
+      <div style="display: flex; justify-content: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+        <span style="font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 3px;">SWIPE FOR MORE →</span>
       </div>
       
     </div>
@@ -406,12 +426,19 @@ export async function generateCarouselImages(
     const renderTime = Date.now() - startTime;
     logger.info(`Carousel cards rendered in ${renderTime}ms`);
 
-    // Upload all 3 in parallel
-    const [hookUrl, bodyUrl, ctaUrl] = await Promise.all([
-      uploadImage(hookBuffer, `${prefix}_hook.png`),
-      uploadImage(bodyBuffer, `${prefix}_body.png`),
-      uploadImage(ctaBuffer, `${prefix}_cta.png`),
-    ]);
+    // MEMORY OPTIMIZATION: Upload sequentially to avoid holding all 3 buffers
+    // Each buffer can be ~300-400KB, so sequential upload reduces peak memory by ~600KB
+    const hookUrl = await uploadImage(hookBuffer, `${prefix}_hook.png`);
+    // @ts-ignore - Allow nullifying for GC
+    let hook = null; // Allow GC to collect hookBuffer
+
+    const bodyUrl = await uploadImage(bodyBuffer, `${prefix}_body.png`);
+    // @ts-ignore - Allow nullifying for GC
+    let body = null; // Allow GC to collect bodyBuffer
+
+    const ctaUrl = await uploadImage(ctaBuffer, `${prefix}_cta.png`);
+    // @ts-ignore - Allow nullifying for GC
+    let cta = null; // Allow GC to collect ctaBuffer
 
     const totalTime = Date.now() - startTime;
     logger.info(`Carousel images generated and uploaded in ${totalTime}ms`, {
@@ -419,6 +446,13 @@ export async function generateCarouselImages(
       bodyUrl: bodyUrl.substring(0, 50) + '...',
       ctaUrl: ctaUrl.substring(0, 50) + '...',
     });
+
+    // MEMORY OPTIMIZATION: Hint GC after heavy image processing
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
 
     return {
       hookCard: hookUrl,

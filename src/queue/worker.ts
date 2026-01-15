@@ -1066,9 +1066,21 @@ export function startWorker(): Worker<any, any> {
 
   worker.on('completed', (job) => {
     logger.info(`Worker: Job ${job.id} completed`);
+    // Proactive Memory Cleanup after every job
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
   });
 
   worker.on('failed', (job, error) => {
+    // Proactive Memory Cleanup after failure
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
     // Don't log timeout errors as critical - they're expected during idle
     if (error.message && error.message.includes('Command timed out')) {
       if (!idleLogged) {
