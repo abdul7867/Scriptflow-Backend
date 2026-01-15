@@ -28,6 +28,11 @@ services:
       - MANYCHAT_SC_STATUS_FIELD_ID=${MANYCHAT_SC_STATUS_FIELD_ID}
       - MANYCHAT_SC_LAST_SCRIPT_FIELD_ID=${MANYCHAT_SC_LAST_SCRIPT_FIELD_ID}
       - MANYCHAT_SC_LAST_IMAGE_FIELD_ID=${MANYCHAT_SC_LAST_IMAGE_FIELD_ID}
+      - MANYCHAT_SC_COPY_URL_FIELD_ID=${MANYCHAT_SC_COPY_URL_FIELD_ID:-}
+      # V2 Carousel Fields - 3 separate images for Gallery carousel
+      - MANYCHAT_CAROUSEL_HOOK_FIELD_ID=${MANYCHAT_CAROUSEL_HOOK_FIELD_ID:-}
+      - MANYCHAT_CAROUSEL_BODY_FIELD_ID=${MANYCHAT_CAROUSEL_BODY_FIELD_ID:-}
+      - MANYCHAT_CAROUSEL_CTA_FIELD_ID=${MANYCHAT_CAROUSEL_CTA_FIELD_ID:-}
       # Legacy fields (keep if needed for backward compatibility)
       - MANYCHAT_SCRIPT_FIELD_ID=${MANYCHAT_SCRIPT_FIELD_ID:-}
       - MANYCHAT_COPY_FIELD_ID=${MANYCHAT_COPY_FIELD_ID:-}
@@ -41,8 +46,8 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      # Image Provider: cloudinary (recommended) or imgbb (may get rate-limited by ManyChat)
-      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-cloudinary}
+      # Image Provider: imgbb (recommended for ManyChat) or cloudinary
+      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-imgbb}
       # User limits
       - USER_RATE_LIMIT=${USER_RATE_LIMIT:-10}
       - MAX_BETA_USERS=${MAX_BETA_USERS:-100}

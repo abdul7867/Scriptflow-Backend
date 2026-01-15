@@ -77,7 +77,7 @@ print_status "All required secrets found"
 echo ""
 echo "Validating .env configuration..."
 
-REQUIRED_VARS=("MONGODB_URI" "REDIS_URL" "GCP_PROJECT_ID" "IMGBB_API_KEY")
+REQUIRED_VARS=("MONGODB_URI" "REDIS_URL" "GCP_PROJECT_ID" "IMGBB_API_KEY" "MANYCHAT_API_KEY")
 MISSING_VARS=0
 
 for VAR in "${REQUIRED_VARS[@]}"; do
@@ -91,6 +91,24 @@ if [ $MISSING_VARS -eq 1 ]; then
     echo ""
     echo "Add the missing variables to $SECRETS_DIR/.env"
     exit 1
+fi
+
+# Check for V2 carousel fields (warning only)
+V2_CAROUSEL_VARS=("MANYCHAT_CAROUSEL_HOOK_FIELD_ID" "MANYCHAT_CAROUSEL_BODY_FIELD_ID" "MANYCHAT_CAROUSEL_CTA_FIELD_ID")
+V2_MISSING=0
+
+for VAR in "${V2_CAROUSEL_VARS[@]}"; do
+    if ! grep -q "^${VAR}=" "$SECRETS_DIR/.env"; then
+        V2_MISSING=1
+    fi
+done
+
+if [ $V2_MISSING -eq 1 ]; then
+    print_warning "V2 Carousel fields not configured - carousel images won't be sent to ManyChat"
+    echo "        Add these to .env for carousel support:"
+    echo "        MANYCHAT_CAROUSEL_HOOK_FIELD_ID=<field_id>"
+    echo "        MANYCHAT_CAROUSEL_BODY_FIELD_ID=<field_id>"
+    echo "        MANYCHAT_CAROUSEL_CTA_FIELD_ID=<field_id>"
 fi
 
 print_status ".env validation passed"
