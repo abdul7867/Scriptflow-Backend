@@ -8,6 +8,8 @@
 dist/
 build/
 *.js.map
+.agent/rules/
+
 
 # ==============================================
 # DEPENDENCIES

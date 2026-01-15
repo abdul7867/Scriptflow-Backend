@@ -50,8 +50,17 @@ export const config = cleanEnv(process.env, {
   // V2 Custom Fields (alternative field names)
   // These map to ManyChat custom fields by NAME: ai_generated_script, script_image, script_copy_link
   MANYCHAT_AI_GENERATED_SCRIPT_FIELD_ID: str({ desc: 'Field ID for ai_generated_script (script text)', default: '' }),
-  MANYCHAT_SCRIPT_IMAGE_FIELD_ID: str({ desc: 'Field ID for script_image (image URL)', default: '' }),
+  MANYCHAT_SCRIPT_IMAGE_FIELD_ID: str({ desc: 'Field ID for script_image (single image URL)', default: '' }),
   MANYCHAT_SCRIPT_COPY_LINK_FIELD_ID: str({ desc: 'Field ID for script_copy_link (webpage URL)', default: '' }),
+
+  // V2 Carousel Fields - Send 3 images (HOOK, BODY, CTA) as carousel
+  MANYCHAT_CAROUSEL_HOOK_FIELD_ID: str({ desc: 'Field ID for carousel hook image', default: '' }),
+  MANYCHAT_CAROUSEL_BODY_FIELD_ID: str({ desc: 'Field ID for carousel body image', default: '' }),
+  MANYCHAT_CAROUSEL_CTA_FIELD_ID: str({ desc: 'Field ID for carousel CTA image', default: '' }),
+
+  // V2 Carousel Array Field - Alternative: Send all 3 images in single array field
+  // Create an Array-type custom field in ManyChat for this
+  MANYCHAT_CAROUSEL_IMAGES_ARRAY_FIELD_ID: str({ desc: 'Field ID for carousel images array (ManyChat Array type)', default: '' }),
 
 
   // Image Services

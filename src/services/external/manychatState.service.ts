@@ -75,6 +75,12 @@ const FIELD_IDS = {
     AI_GENERATED_SCRIPT: (config as any).MANYCHAT_AI_GENERATED_SCRIPT_FIELD_ID || '',
     SCRIPT_IMAGE: (config as any).MANYCHAT_SCRIPT_IMAGE_FIELD_ID || '',
     SCRIPT_COPY_LINK: (config as any).MANYCHAT_SCRIPT_COPY_LINK_FIELD_ID || '',
+    // V2 Carousel Fields - 3 separate images for HOOK, BODY, CTA
+    CAROUSEL_HOOK: (config as any).MANYCHAT_CAROUSEL_HOOK_FIELD_ID || '',
+    CAROUSEL_BODY: (config as any).MANYCHAT_CAROUSEL_BODY_FIELD_ID || '',
+    CAROUSEL_CTA: (config as any).MANYCHAT_CAROUSEL_CTA_FIELD_ID || '',
+    // V2 Carousel Array Field - All 3 images in single array field
+    CAROUSEL_IMAGES_ARRAY: (config as any).MANYCHAT_CAROUSEL_IMAGES_ARRAY_FIELD_ID || '',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -149,13 +155,13 @@ async function setCustomField(
         const fieldIdNum = typeof fieldId === 'string' ? parseInt(fieldId, 10) : fieldId;
 
         // Log the actual value being sent for image fields (helps debug URL issues)
-        const isImageField = fieldIdNum === parseInt(FIELD_IDS.SC_LAST_IMAGE || '0', 10) || 
-                            fieldIdNum === parseInt(FIELD_IDS.SCRIPT_IMAGE || '0', 10);
-        
+        const isImageField = fieldIdNum === parseInt(FIELD_IDS.SC_LAST_IMAGE || '0', 10) ||
+            fieldIdNum === parseInt(FIELD_IDS.SCRIPT_IMAGE || '0', 10);
+
         // CRITICAL: Validate image URL before sending to ManyChat
         if (isImageField) {
             logger.info(`[ManyChatState] Setting image field ${fieldId} to URL: ${fieldValue}`);
-            
+
             // Validate URL format for image fields
             if (!fieldValue || fieldValue === 'undefined' || fieldValue === 'null') {
                 logger.error(`[ManyChatState] ❌ INVALID IMAGE URL: fieldValue is empty/undefined`, {
@@ -165,7 +171,7 @@ async function setCustomField(
                 });
                 return false;
             }
-            
+
             // Check if it's a valid URL
             try {
                 const urlObj = new URL(fieldValue);
@@ -313,9 +319,9 @@ class ManyChatStateService {
         // ManyChat shows "wait message" after external request automatically.
         // We only update fields in setReadyStateV2 when the script is ready.
         // This prevents premature triggering of the "ai_generated_script changed" rule.
-        logger.info('[ManyChatState] V2: Skipping initializeProcessing (no fields to update)', { 
-            subscriberId, 
-            isVariation, 
+        logger.info('[ManyChatState] V2: Skipping initializeProcessing (no fields to update)', {
+            subscriberId,
+            isVariation,
             variationNumber,
             reason: 'V2 flow only updates fields when script is ready'
         });
@@ -375,7 +381,7 @@ class ManyChatStateService {
         // ══════════════════════════════════════════════════════════════════
 
         let allSuccess = true;
-        
+
         // Helper to validate URL
         const isValidImageUrl = (url: string): boolean => {
             if (!url || url === 'undefined' || url === 'null') return false;
@@ -497,7 +503,7 @@ class ManyChatStateService {
             errorCode,
             reason: 'Updating ai_generated_script on error would send wrong message to user'
         });
-        
+
         // Return true since we intentionally skip updates (not a failure)
         return true;
     }
@@ -828,6 +834,200 @@ class ManyChatStateService {
             logger.info('[ManyChatState] ✅ V2 Ready state set successfully', { subscriberId });
         } else {
             logger.warn('[ManyChatState] V2 Ready state set with some failures', { subscriberId });
+        }
+
+        return allSuccess;
+    }
+
+    /**
+     * V2 Ready State with Carousel - Sends 3 carousel images (HOOK, BODY, CTA)
+     * 
+     * This provides a better user experience with swipeable cards:
+     * - carousel_hook_image -> HOOK section image
+     * - carousel_body_image -> BODY section image  
+     * - carousel_cta_image -> CTA section image
+     * 
+     * Falls back to single image if carousel fields not configured.
+     * 
+     * @param subscriberId - The subscriber's ManyChat ID
+     * @param scriptText - The generated script text content
+     * @param carouselImages - Object with hookCard, bodyCard, ctaCard URLs
+     * @param singleImageUrl - Fallback single image URL
+     * @param copyUrl - The webpage URL for copying
+     * @returns true if successful, false otherwise
+     */
+    async setReadyStateV2WithCarousel(
+        subscriberId: string,
+        scriptText: string,
+        carouselImages: { hookCard: string; bodyCard: string; ctaCard: string } | null,
+        singleImageUrl: string,
+        copyUrl?: string
+    ): Promise<boolean> {
+        // Check if carousel fields are configured (individual OR array)
+        const hasCarouselFields = FIELD_IDS.CAROUSEL_HOOK && FIELD_IDS.CAROUSEL_BODY && FIELD_IDS.CAROUSEL_CTA;
+        const hasCarouselArrayField = !!FIELD_IDS.CAROUSEL_IMAGES_ARRAY;
+
+        // If no carousel fields configured at all, fall back to single image
+        if ((!hasCarouselFields && !hasCarouselArrayField) || !carouselImages) {
+            logger.info('[ManyChatState] Carousel fields not configured, falling back to single image');
+            return this.setReadyStateV2(subscriberId, scriptText, singleImageUrl, copyUrl);
+        }
+
+        logger.info('[ManyChatState] Setting V2 ready state with CAROUSEL', {
+            subscriberId,
+            scriptLength: scriptText.length,
+            hasCarousel: !!carouselImages,
+            useArrayField: hasCarouselArrayField,
+            hookCardPreview: carouselImages.hookCard?.substring(0, 50),
+            hasCopyUrl: !!copyUrl
+        });
+
+        let allSuccess = true;
+
+        // Helper to validate URL
+        const isValidImageUrl = (url: string): boolean => {
+            if (!url || url === 'undefined' || url === 'null') return false;
+            try {
+                const parsed = new URL(url);
+                return ['http:', 'https:'].includes(parsed.protocol);
+            } catch {
+                return false;
+            }
+        };
+
+        // ══════════════════════════════════════════════════════════════════
+        // OPTION A: Use single ARRAY field (if configured)
+        // Sends all 3 carousel images as a JSON array string in one field
+        // ManyChat Array fields expect: ["url1", "url2", "url3"]
+        // ══════════════════════════════════════════════════════════════════
+        if (hasCarouselArrayField) {
+            const validImages = [
+                carouselImages.hookCard,
+                carouselImages.bodyCard,
+                carouselImages.ctaCard
+            ].filter(url => isValidImageUrl(url));
+
+            if (validImages.length === 3) {
+                // ManyChat array fields expect JSON string format
+                const arrayValue = JSON.stringify(validImages);
+
+                const success = await setCustomField(
+                    subscriberId,
+                    FIELD_IDS.CAROUSEL_IMAGES_ARRAY,
+                    arrayValue
+                );
+
+                if (success) {
+                    logger.info('[ManyChatState] ✅ Carousel images sent as ARRAY field', {
+                        subscriberId,
+                        imageCount: validImages.length
+                    });
+                } else {
+                    logger.warn('[ManyChatState] V2: Failed to set carousel images array');
+                    allSuccess = false;
+                }
+            } else {
+                logger.warn('[ManyChatState] V2: Not all carousel images valid for array', {
+                    validCount: validImages.length
+                });
+                allSuccess = false;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // OPTION B: Use 3 separate fields (if configured)
+        // ORDER: Set carousel images FIRST, then copy link, then script (trigger)
+        // This ensures all data is available when ManyChat automation fires
+        // ══════════════════════════════════════════════════════════════════
+
+        // STEP 1: Set carousel hook image
+        if (FIELD_IDS.CAROUSEL_HOOK && isValidImageUrl(carouselImages.hookCard)) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.CAROUSEL_HOOK,
+                carouselImages.hookCard
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set carousel hook image');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 2: Set carousel body image
+        if (FIELD_IDS.CAROUSEL_BODY && isValidImageUrl(carouselImages.bodyCard)) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.CAROUSEL_BODY,
+                carouselImages.bodyCard
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set carousel body image');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 3: Set carousel CTA image
+        if (FIELD_IDS.CAROUSEL_CTA && isValidImageUrl(carouselImages.ctaCard)) {
+            const success = await setCustomField(
+                subscriberId,
+                FIELD_IDS.CAROUSEL_CTA,
+                carouselImages.ctaCard
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set carousel CTA image');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 4: Also set single image for backward compatibility (first carousel card)
+        const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
+        if (imageFieldId && isValidImageUrl(carouselImages.hookCard)) {
+            const success = await setCustomField(
+                subscriberId,
+                imageFieldId,
+                carouselImages.hookCard  // Use hook card as the "preview" image
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set script_image (single)');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 5: script_copy_link = copyUrl
+        const copyFieldId = FIELD_IDS.SCRIPT_COPY_LINK || FIELD_IDS.SC_COPY_URL;
+        if (copyFieldId && copyUrl) {
+            const success = await setCustomField(
+                subscriberId,
+                copyFieldId,
+                copyUrl
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set script_copy_link');
+                allSuccess = false;
+            }
+        }
+
+        // STEP 6 (LAST): ai_generated_script = scriptText (triggers ManyChat!)
+        const scriptFieldId = FIELD_IDS.AI_GENERATED_SCRIPT || FIELD_IDS.SC_LAST_SCRIPT;
+        if (scriptFieldId) {
+            const success = await setCustomField(
+                subscriberId,
+                scriptFieldId,
+                scriptText
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set ai_generated_script');
+                allSuccess = false;
+            }
+        }
+
+        if (allSuccess) {
+            logger.info('[ManyChatState] ✅ V2 Ready state with CAROUSEL set successfully', {
+                subscriberId,
+                carouselImagesSet: true
+            });
+        } else {
+            logger.warn('[ManyChatState] V2 Ready state with carousel set with some failures', { subscriberId });
         }
 
         return allSuccess;

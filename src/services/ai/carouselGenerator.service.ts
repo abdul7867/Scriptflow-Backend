@@ -70,33 +70,38 @@ try {
   logger.warn('Fonts not loaded - carousel generation will fail until fonts are available');
 }
 
-/** Color palette matching the main image generator */
+/** Color palette matching Sunset Gold + Electric Violet theme */
 const COLORS = {
   // Backgrounds
-  bgDark: '#09090b',
-  bgCard: '#18181b',
-  bgSection: 'rgba(24, 24, 27, 0.8)',
-  
+  bgDark: '#0a0a0c',
+  bgCard: '#0f0f12',
+  bgSection: 'rgba(15, 15, 18, 0.9)',
+
   // Text
   textMain: '#fafafa',
-  textSecondary: '#d4d4d8',
-  textDim: '#a1a1aa',
-  textMuted: '#52525b',
-  
-  // Accent (cyan theme)
-  accent: '#22d3ee',
-  accentBg: 'rgba(34, 211, 238, 0.15)',
-  accentBorder: 'rgba(34, 211, 238, 0.4)',
-  accentGlow: 'rgba(34, 211, 238, 0.5)',
-  
-  // Section-specific accents
-  hookAccent: '#22d3ee',     // Cyan
-  bodyAccent: '#a78bfa',     // Purple  
-  ctaAccent: '#4ade80',      // Green
-  
+  textSecondary: '#a5a5b0',
+  textDim: '#e4e4e7',
+  textMuted: '#6b6b7a',
+
+  // Primary Accent - Electric Violet
+  accent: '#8b5cf6',
+  accentBg: 'rgba(139, 92, 246, 0.15)',
+  accentBorder: 'rgba(139, 92, 246, 0.4)',
+  accentGlow: 'rgba(139, 92, 246, 0.5)',
+
+  // Section-specific accents (matching demo)
+  hookAccent: '#8b5cf6',     // Electric Violet - primary
+  bodyAccent: '#f59e0b',     // Sunset Gold - secondary  
+  ctaAccent: '#22c55e',      // Green - success
+
+  // Content type colors
+  cameraColor: '#64748b',    // Slate
+  overlayColor: '#f59e0b',   // Sunset Gold
+  dialogueColor: '#a78bfa',  // Light Violet
+
   // Borders
-  border: 'rgba(255, 255, 255, 0.1)',
-  borderStrong: 'rgba(255, 255, 255, 0.15)',
+  border: 'rgba(139, 92, 246, 0.1)',
+  borderStrong: 'rgba(139, 92, 246, 0.15)',
 };
 
 /** Section metadata */
@@ -110,7 +115,7 @@ const SECTION_META = {
     accent: COLORS.hookAccent,
   },
   body: {
-    number: '02', 
+    number: '02',
     title: 'BODY',
     emoji: '📝',
     timing: '3-15 sec',
@@ -148,23 +153,23 @@ function escapeHtml(text: string): string {
  */
 export function parseScriptSections(scriptText: string): ScriptSections {
   const sections: ScriptSections = { hook: [], body: [], cta: [] };
-  
+
   // Split by section headers [HOOK], [BODY], [CTA]
   const parts = scriptText.split(/\[(HOOK|BODY|CTA)\]/i);
-  
+
   for (let i = 1; i < parts.length; i += 2) {
     const header = parts[i]?.toUpperCase();
     const content = parts[i + 1]?.trim() || '';
-    
+
     const lines = content.split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0);
-    
+
     if (header === 'HOOK') sections.hook = lines;
     else if (header === 'BODY') sections.body = lines;
     else if (header === 'CTA') sections.cta = lines;
   }
-  
+
   return sections;
 }
 
@@ -174,11 +179,11 @@ export function parseScriptSections(scriptText: string): ScriptSections {
 function extractVisualAndDialogue(lines: string[]): { visual: string; dialogue: string } {
   let visual = '';
   let dialogue = '';
-  
+
   for (const line of lines) {
     const isVisual = line.includes('🎬') || line.toLowerCase().includes('visual:');
     const isSay = line.includes('💬') || line.toLowerCase().includes('say:');
-    
+
     if (isVisual) {
       const cleaned = line
         .replace(/^🎬\s*/i, '')
@@ -194,7 +199,7 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; dialogue: 
       dialogue += (dialogue ? '\n' : '') + cleaned;
     }
   }
-  
+
   return { visual, dialogue };
 }
 
@@ -220,11 +225,11 @@ function generateCardTemplate(
 ): string {
   const meta = SECTION_META[sectionKey];
   const { visual, dialogue } = extractVisualAndDialogue(lines);
-  
+
   // Truncate for card fit
   const displayVisual = truncateText(visual || 'Visual direction here...', 200);
   const displayDialogue = truncateText(dialogue || 'Dialogue here...', 300);
-  
+
   return `
     <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 48px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgDark} 0%, ${COLORS.bgCard} 100%); color: ${COLORS.textMain};">
       
@@ -291,7 +296,7 @@ function generateCardTemplate(
  */
 async function renderToPng(htmlTemplate: string): Promise<Buffer> {
   const template = html(htmlTemplate);
-  
+
   const svg = await satori(template as any, {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
@@ -316,7 +321,7 @@ async function renderToPng(htmlTemplate: string): Promise<Buffer> {
       },
     ],
   });
-  
+
   const resvg = new Resvg(svg, {
     background: 'rgba(0,0,0,0)',
     fitTo: {
@@ -324,7 +329,7 @@ async function renderToPng(htmlTemplate: string): Promise<Buffer> {
       value: CARD_WIDTH,
     },
   });
-  
+
   const pngData = resvg.render();
   return pngData.asPng();
 }
@@ -340,7 +345,7 @@ async function uploadImage(pngBuffer: Buffer, filename: string): Promise<string>
     // ImgBB fallback
     const formData = new FormData();
     formData.append('image', pngBuffer, { filename });
-    
+
     const response = await axios.post(
       `https://api.imgbb.com/1/upload?key=${config.IMGBB_API_KEY}`,
       formData,
@@ -349,7 +354,7 @@ async function uploadImage(pngBuffer: Buffer, filename: string): Promise<string>
         timeout: 30000,
       }
     );
-    
+
     if (response.data?.data?.url) {
       return response.data.data.url;
     }
@@ -380,47 +385,47 @@ export async function generateCarouselImages(
 ): Promise<CarouselImages> {
   const startTime = Date.now();
   const variationTag = getVariationTag(variationIndex);
-  
+
   logger.info('Generating carousel images', { variationIndex, variationTag });
-  
+
   try {
     // Parse script into sections
     const sections = parseScriptSections(scriptText);
-    
+
     // Generate unique filenames with timestamp
     const timestamp = Date.now();
     const prefix = `carousel_${timestamp}_${variationTag}`;
-    
+
     // Generate all 3 cards in parallel
     const [hookBuffer, bodyBuffer, ctaBuffer] = await Promise.all([
       renderToPng(generateCardTemplate('hook', sections.hook, variationTag)),
       renderToPng(generateCardTemplate('body', sections.body, variationTag)),
       renderToPng(generateCardTemplate('cta', sections.cta, variationTag)),
     ]);
-    
+
     const renderTime = Date.now() - startTime;
     logger.info(`Carousel cards rendered in ${renderTime}ms`);
-    
+
     // Upload all 3 in parallel
     const [hookUrl, bodyUrl, ctaUrl] = await Promise.all([
       uploadImage(hookBuffer, `${prefix}_hook.png`),
       uploadImage(bodyBuffer, `${prefix}_body.png`),
       uploadImage(ctaBuffer, `${prefix}_cta.png`),
     ]);
-    
+
     const totalTime = Date.now() - startTime;
     logger.info(`Carousel images generated and uploaded in ${totalTime}ms`, {
       hookUrl: hookUrl.substring(0, 50) + '...',
       bodyUrl: bodyUrl.substring(0, 50) + '...',
       ctaUrl: ctaUrl.substring(0, 50) + '...',
     });
-    
+
     return {
       hookCard: hookUrl,
       bodyCard: bodyUrl,
       ctaCard: ctaUrl,
     };
-    
+
   } catch (error: any) {
     logger.error('Failed to generate carousel images', { error: error.message });
     throw error;
@@ -438,7 +443,7 @@ export async function generateSectionImage(
 ): Promise<string> {
   const variationTag = getVariationTag(variationIndex);
   const timestamp = Date.now();
-  
+
   const buffer = await renderToPng(generateCardTemplate(sectionKey, lines, variationTag));
   return uploadImage(buffer, `section_${sectionKey}_${timestamp}.png`);
 }

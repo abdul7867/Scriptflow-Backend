@@ -14,6 +14,7 @@ import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
 // LEGACY imports removed: sendToManyChat, sendTextMessage - using pull-based delivery via manychatStateService
 import { manychatStateService } from '../services/external/manychatState.service';
 import { generateScriptImage } from '../utils/imageGenerator';
+import { generateCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
 import { uploadVideoToS3 } from '../services/external/s3.service';
@@ -638,12 +639,43 @@ async function processJobWithTimeout(
     // Check abort signal before image generation
     checkAborted(signal, requestId);
 
-    // D. Generate script image FIRST (so we can cache the URL)
-    logger.info(`[${requestId}] Generating script image...`);
-    const imageUrl = await withCircuitBreaker('cloudinary', async () => {
-      return generateScriptImage(scriptText);
-    });
-    
+    // D. Generate script images - CAROUSEL for V2, single for V3
+    // Carousel provides better UX with swipeable HOOK/BODY/CTA cards
+    let imageUrl: string;
+    let carouselImages: CarouselImages | null = null;
+
+    if (isV2) {
+      // V2: Generate 3-card carousel (reduces system load by parallel generation)
+      logger.info(`[${requestId}] Generating carousel images (3 cards)...`);
+      try {
+        carouselImages = await withCircuitBreaker('cloudinary', async () => {
+          return generateCarouselImages(scriptText, job.data.variationIndex || 0);
+        });
+
+        // Use hook card as the primary image for backward compatibility
+        imageUrl = carouselImages.hookCard;
+
+        logger.info(`[${requestId}] ✅ Carousel generated:`, {
+          hookCard: carouselImages.hookCard.substring(0, 50),
+          bodyCard: carouselImages.bodyCard.substring(0, 50),
+          ctaCard: carouselImages.ctaCard.substring(0, 50)
+        });
+      } catch (carouselError: any) {
+        // Fall back to single image if carousel fails
+        logger.warn(`[${requestId}] Carousel generation failed, falling back to single image: ${carouselError.message}`);
+        imageUrl = await withCircuitBreaker('cloudinary', async () => {
+          return generateScriptImage(scriptText);
+        });
+        carouselImages = null;
+      }
+    } else {
+      // V3: Generate single combined image
+      logger.info(`[${requestId}] Generating script image (single)...`);
+      imageUrl = await withCircuitBreaker('cloudinary', async () => {
+        return generateScriptImage(scriptText);
+      });
+    }
+
     // VALIDATION: Ensure imageUrl is valid before proceeding
     if (!imageUrl || !imageUrl.startsWith('http')) {
       logger.error(`[${requestId}] ❌ CRITICAL: Image generation returned invalid URL`, {
@@ -813,8 +845,20 @@ async function processJobWithTimeout(
     try {
       // Use V2 method if job was from V2 endpoint
       if (isV2) {
-        await manychatStateService.setReadyStateV2(subscriberId, scriptText, imageUrl, scriptUrl);
-        logger.info(`[${requestId}] ✅ ManyChat V2 state set - fields: ai_generated_script, script_image, script_copy_link`);
+        // Use carousel delivery if carousel images were generated
+        if (carouselImages) {
+          await manychatStateService.setReadyStateV2WithCarousel(
+            subscriberId,
+            scriptText,
+            carouselImages,
+            imageUrl,
+            scriptUrl
+          );
+          logger.info(`[${requestId}] ✅ ManyChat V2 state set with CAROUSEL - 3 images sent`);
+        } else {
+          await manychatStateService.setReadyStateV2(subscriberId, scriptText, imageUrl, scriptUrl);
+          logger.info(`[${requestId}] ✅ ManyChat V2 state set - single image`);
+        }
       } else {
         await manychatStateService.setReadyState(subscriberId, scriptText, imageUrl, scriptUrl);
         logger.info(`[${requestId}] ✅ ManyChat state set to Ready - user can pull data`);

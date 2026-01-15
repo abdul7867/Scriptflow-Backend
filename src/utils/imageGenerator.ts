@@ -27,34 +27,45 @@ const fontDataSemiBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Popp
 const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'));
 
 // ============================================
-// UNIFIED STYLING PALETTE
-// Matches copy link webpage exactly
+// UNIFIED STYLING PALETTE - SUNSET GOLD + ELECTRIC VIOLET
+// Matches copy-page-demo.html exactly
 // ============================================
 const COLORS = {
   // Background Gradient (matches webpage)
-  bgGradientStart: '#09090b',
-  bgGradientEnd: '#18181b',
-  
+  bgGradientStart: '#0a0a0c',
+  bgGradientEnd: '#0f0f12',
+
   // Text Colors
   textMain: '#fafafa',
-  textSecondary: '#d4d4d8',
+  textSecondary: '#a5a5b0',
   textDim: '#e4e4e7',
-  textMuted: '#52525b',
-  
-  // Accent Colors (cyan theme)
-  accent: '#22d3ee',
-  accentBg: 'rgba(34, 211, 238, 0.1)',
-  accentBorder: 'rgba(34, 211, 238, 0.3)',
-  accentGlow: 'rgba(34, 211, 238, 0.4)',
-  
+  textMuted: '#6b6b7a',
+
+  // Primary Accent - Electric Violet
+  accent: '#8b5cf6',
+  accentBg: 'rgba(139, 92, 246, 0.1)',
+  accentBorder: 'rgba(139, 92, 246, 0.3)',
+  accentGlow: 'rgba(139, 92, 246, 0.4)',
+
+  // Secondary Accent - Sunset Gold
+  accentSecondary: '#f59e0b',
+  accentSecondaryBg: 'rgba(245, 158, 11, 0.08)',
+  accentSecondaryBorder: 'rgba(245, 158, 11, 0.15)',
+
+  // Content Type Colors (matching demo)
+  accentCamera: '#64748b',      // Slate - camera setup
+  accentOverlay: '#f59e0b',     // Sunset Gold - text overlay
+  accentDialogue: '#a78bfa',    // Light Violet - dialogue
+  accentSuccess: '#22c55e',     // Green - success state
+
   // Card/Section Styling
-  cardBg: 'rgba(24, 24, 27, 0.6)',
-  cardBorder: 'rgba(255, 255, 255, 0.08)',
+  cardBg: 'rgba(15, 15, 18, 0.9)',
+  cardBorder: 'rgba(139, 92, 246, 0.1)',
   cardShadow: 'rgba(0, 0, 0, 0.3)',
-  
+
   // Dividers
-  divider: 'rgba(255, 255, 255, 0.06)',
-  dividerStrong: 'rgba(255, 255, 255, 0.08)',
+  divider: 'rgba(139, 92, 246, 0.1)',
+  dividerStrong: 'rgba(139, 92, 246, 0.15)',
 };
 
 /**
@@ -62,52 +73,76 @@ const COLORS = {
  */
 function parseScript(scriptText: string): { hook: string[], body: string[], cta: string[] } {
   const sections = { hook: [] as string[], body: [] as string[], cta: [] as string[] };
-  
+
   // Split by section headers
   const parts = scriptText.split(/\[(HOOK|BODY|CTA)\]/i);
-  
+
   for (let i = 1; i < parts.length; i += 2) {
     const header = parts[i]?.toUpperCase();
     const content = parts[i + 1]?.trim() || '';
-    
+
     // Split content into lines
     const lines = content.split('\n')
       .map(line => line.trim())
       .filter(line => line.length > 0);
-    
+
     if (header === 'HOOK') sections.hook = lines;
     else if (header === 'BODY') sections.body = lines;
     else if (header === 'CTA') sections.cta = lines;
   }
-  
+
   return sections;
 }
 
 /**
- * Format a line with proper styling based on type (VISUAL vs SAY)
- * ALIGNED: Matches copy link webpage styling exactly
+ * Format a line with proper styling based on type (VISUAL/📝/SAY)
+ * ALIGNED: Matches copy-page-demo.html styling exactly
+ * - Uses CAMERA SETUP (slate), ON-SCREEN TEXT (gold), SPEAK THIS (violet)
  */
 function formatLine(visual: string | null, say: string | null, isLast: boolean = false): string {
   const borderStyle = isLast ? '' : `border-bottom: 1px solid ${COLORS.divider};`;
-  
-  // Generic text fallback
-  if (!visual?.match(/🎬|VISUAL:/i) && !say?.match(/💬|SAY:/i) && visual) {
+
+  // Extract text overlay if present (📝 TEXT OVERLAY: format)
+  let cameraText = visual || '';
+  let overlayText = '';
+
+  // Check if visual contains text overlay
+  const overlayMatch = cameraText.match(/📝\s*TEXT\s*OVERLAY:\s*([^\n]+)/i);
+  if (overlayMatch) {
+    overlayText = overlayMatch[1].trim().replace(/^["']|["']$/g, '');
+    cameraText = cameraText.replace(/📝\s*TEXT\s*OVERLAY:\s*[^\n]+\n?/i, '').trim();
+  }
+
+  // Clean camera text - remove 🎬 VISUAL: prefix
+  cameraText = cameraText.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '').trim();
+
+  // Generic text fallback (no markers)
+  if (!visual?.match(/🎬|VISUAL:|📝/i) && !say?.match(/💬|SAY:/i) && visual) {
     return `<div style="display: flex; padding: 28px; ${borderStyle} color: ${COLORS.textDim}; font-size: 14px; line-height: 2;">${escapeHtml(visual)}</div>`;
   }
 
   return `<div style="display: flex; align-items: stretch; gap: 0; padding: 32px 0; ${borderStyle}">
-    <!-- Visual Side (40%) -->
+    <!-- Visual Side (40%) - Camera Setup + Text Overlay -->
     <div style="display: flex; flex-direction: column; width: 400px; padding-right: 36px; border-right: 2px solid ${COLORS.divider};">
-      <div style="display: flex; font-size: 10px; font-weight: 800; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 2.5px; margin-bottom: 12px;">🎬 VISUAL</div>
-      <div style="display: flex; font-size: 14px; color: ${COLORS.textDim}; line-height: 2; font-style: italic;">${visual ? escapeHtml(visual.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '')) : '—'}</div>
+      <!-- Camera Setup Block -->
+      <div style="display: flex; flex-direction: column; padding: 16px; background: rgba(100, 116, 139, 0.05); border-radius: 8px; margin-bottom: ${overlayText ? '16px' : '0'};">
+        <div style="display: flex; font-size: 9px; font-weight: 700; color: ${COLORS.accentCamera}; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">📹 CAMERA SETUP</div>
+        <div style="display: flex; font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.7;">${cameraText ? escapeHtml(cameraText) : '—'}</div>
+      </div>
+      ${overlayText ? `
+      <!-- On-Screen Text Block -->
+      <div style="display: flex; flex-direction: column; padding-top: 16px; border-top: 1px dashed ${COLORS.accentSecondaryBorder};">
+        <div style="display: flex; font-size: 9px; font-weight: 700; color: ${COLORS.accentOverlay}; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">📝 ON-SCREEN TEXT</div>
+        <div style="display: flex; font-size: 14px; font-weight: 700; color: ${COLORS.accentOverlay}; background: ${COLORS.accentSecondaryBg}; padding: 10px 14px; border-radius: 8px; border: 1px solid ${COLORS.accentSecondaryBorder};">"${escapeHtml(overlayText)}"</div>
+      </div>` : ''}
     </div>
     
-    <!-- Dialogue Side (60%) -->
-    <div style="display: flex; flex-direction: column; flex: 1; padding-left: 44px;">
+    <!-- Dialogue Side (60%) - Speak This -->
+    <div style="display: flex; flex-direction: column; flex: 1; padding: 16px 0 16px 40px; background: rgba(139, 92, 246, 0.03); border-radius: 0 8px 8px 0;">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-        <span style="display: flex; font-size: 10px; font-weight: 900; color: ${COLORS.accent}; text-transform: uppercase; letter-spacing: 3.5px;">💬 DIALOGUE</span>
+        <span style="display: flex; font-size: 9px; font-weight: 900; color: ${COLORS.accentDialogue}; text-transform: uppercase; letter-spacing: 2.5px;">🎤 SPEAK THIS</span>
       </div>
-      <div style="display: flex; font-size: 24px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.45; letter-spacing: -0.5px;">${say ? escapeHtml(say.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '')) : '—'}</div>
+      <div style="display: flex; font-size: 18px; font-weight: 500; color: ${COLORS.textMain}; line-height: 1.8;">${say ? escapeHtml(say.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '').replace(/^["']|["']$/g, '')) : '—'}</div>
     </div>
   </div>`;
 }
@@ -135,12 +170,12 @@ function createSectionHeader(title: string): string {
  */
 function formatSection(lines: string[]): string {
   const paired: { visual: string | null, say: string | null }[] = [];
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const isVisual = line.includes('🎬') || line.toLowerCase().startsWith('visual:');
     const isSay = line.includes('💬') || line.toLowerCase().startsWith('say:');
-    
+
     if (isVisual) {
       // Look ahead for a matching SAY
       const nextLine = lines[i + 1];
@@ -156,7 +191,7 @@ function formatSection(lines: string[]): string {
       paired.push({ visual: line, say: null });
     }
   }
-  
+
   return paired.map((pair, idx) => formatLine(pair.visual, pair.say, idx === paired.length - 1)).join('\n');
 }
 
@@ -166,7 +201,7 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
   try {
     // Parse script sections
     const sections = parseScript(scriptText);
-    
+
     // Build HTML for each section
     const hookHtml = formatSection(sections.hook);
     const bodyHtml = formatSection(sections.body);
@@ -246,13 +281,13 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
 
     // Convert SVG to PNG using Resvg
     const resvg = new Resvg(svg, {
-        background: 'rgba(0,0,0,0)',
-        fitTo: {
-            mode: 'width',
-            value: 1080,
-        },
+      background: 'rgba(0,0,0,0)',
+      fitTo: {
+        mode: 'width',
+        value: 1080,
+      },
     });
-    
+
     const pngData = resvg.render();
     const pngBuffer = pngData.asPng();
     const generationTime = Date.now() - startTime;
@@ -301,7 +336,7 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
           headers: {
             ...formData.getHeaders(),
           },
-          timeout: 30000 
+          timeout: 30000
         }
       );
 
