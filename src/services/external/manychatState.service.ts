@@ -767,39 +767,13 @@ class ManyChatStateService {
         };
 
         // ══════════════════════════════════════════════════════════════════
-        // CRITICAL ORDER: Set ALL fields BEFORE ai_generated_script!
-        // ai_generated_script change triggers ManyChat automation.
-        // If we set it before other fields, ManyChat will read stale values.
+        // CRITICAL ORDER: Set script_image LAST - it triggers the ManyChat Rule!
+        // The Rule fires when script_image changes, so all other data must be set first.
         // 
-        // ⚠️ IMPORTANT: Flow B triggers when image field changes!
-        // We MUST only set image field if URL is valid, otherwise Flow B
-        // will trigger and ManyChat will show "Not valid url" error.
-        // 
-        // ORDER: script_image → script_copy_link → ai_generated_script (LAST!)
+        // ORDER: script_copy_link → ai_generated_script → script_image (LAST!)
         // ══════════════════════════════════════════════════════════════════
 
-        // STEP 1: script_image = imageUrl (set FIRST - ONLY if valid! Triggers Flow B)
-        if (imageFieldId) {
-            if (isValidImageUrl(imageUrl)) {
-                const success = await setCustomField(
-                    subscriberId,
-                    imageFieldId,
-                    imageUrl
-                );
-                if (!success) {
-                    logger.warn('[ManyChatState] V2: Failed to set script_image');
-                    allSuccess = false;
-                }
-            } else {
-                logger.error('[ManyChatState] ⚠️ V2: SKIPPING script_image - invalid URL would trigger Flow B with error', {
-                    subscriberId,
-                    imageUrl
-                });
-                allSuccess = false;
-            }
-        }
-
-        // STEP 2: script_copy_link = copyUrl (set SECOND)
+        // STEP 1: script_copy_link = copyUrl
         if (copyFieldId && copyUrl) {
             const success = await setCustomField(
                 subscriberId,
@@ -812,9 +786,7 @@ class ManyChatStateService {
             }
         }
 
-        // STEP 3: ai_generated_script = scriptText (set LAST - this triggers ManyChat!)
-        // This MUST be last because changing this field triggers the ManyChat automation.
-        // All other fields must be set before this so ManyChat reads correct values.
+        // STEP 2: ai_generated_script = scriptText
         if (scriptFieldId) {
             const success = await setCustomField(
                 subscriberId,
@@ -827,8 +799,30 @@ class ManyChatStateService {
             }
         }
 
-        // NOTE: sc_status is NOT needed for V2 flow since ManyChat triggers on ai_generated_script
-        // Removing to avoid unnecessary API calls
+        // STEP 3 (LAST): script_image = imageUrl (THIS TRIGGERS THE MANYCHAT RULE!)
+        // The Rule fires when script_image changes, so this MUST be set last
+        if (imageFieldId) {
+            if (isValidImageUrl(imageUrl)) {
+                const success = await setCustomField(
+                    subscriberId,
+                    imageFieldId,
+                    imageUrl
+                );
+                if (!success) {
+                    logger.warn('[ManyChatState] V2: Failed to set script_image (TRIGGER)');
+                    allSuccess = false;
+                }
+                logger.info('[ManyChatState] 🎯 script_image set LAST - Rule should fire now');
+            } else {
+                logger.error('[ManyChatState] ⚠️ V2: SKIPPING script_image - invalid URL', {
+                    subscriberId,
+                    imageUrl
+                });
+                allSuccess = false;
+            }
+        }
+
+        // NOTE: sc_status is NOT needed for V2 flow since ManyChat triggers on script_image
 
         if (allSuccess) {
             logger.info('[ManyChatState] ✅ V2 Ready state set successfully', { subscriberId });
@@ -936,8 +930,8 @@ class ManyChatStateService {
 
         // ══════════════════════════════════════════════════════════════════
         // OPTION B: Use 3 separate fields (if configured)
-        // ORDER: Set carousel images FIRST, then copy link, then script (trigger)
-        // This ensures all data is available when ManyChat automation fires
+        // ORDER: Set carousel images → copy link → script text → script_image (LAST!)
+        // script_image triggers the ManyChat Rule, so all other data must be ready first
         // ══════════════════════════════════════════════════════════════════
 
         // STEP 1: Set carousel hook image
@@ -979,21 +973,7 @@ class ManyChatStateService {
             }
         }
 
-        // STEP 4: Also set single image for backward compatibility (first carousel card)
-        const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
-        if (imageFieldId && isValidImageUrl(carouselImages.hookCard)) {
-            const success = await setCustomField(
-                subscriberId,
-                imageFieldId,
-                carouselImages.hookCard  // Use hook card as the "preview" image
-            );
-            if (!success) {
-                logger.warn('[ManyChatState] V2: Failed to set script_image (single)');
-                allSuccess = false;
-            }
-        }
-
-        // STEP 5: script_copy_link = copyUrl
+        // STEP 4: script_copy_link = copyUrl
         const copyFieldId = FIELD_IDS.SCRIPT_COPY_LINK || FIELD_IDS.SC_COPY_URL;
         if (copyFieldId && copyUrl) {
             const success = await setCustomField(
@@ -1007,7 +987,7 @@ class ManyChatStateService {
             }
         }
 
-        // STEP 6 (LAST): ai_generated_script = scriptText (triggers ManyChat!)
+        // STEP 5: ai_generated_script = scriptText
         const scriptFieldId = FIELD_IDS.AI_GENERATED_SCRIPT || FIELD_IDS.SC_LAST_SCRIPT;
         if (scriptFieldId) {
             const success = await setCustomField(
@@ -1019,6 +999,23 @@ class ManyChatStateService {
                 logger.warn('[ManyChatState] V2: Failed to set ai_generated_script');
                 allSuccess = false;
             }
+        }
+
+        // STEP 6 (LAST): script_image = hookCard (THIS TRIGGERS THE MANYCHAT RULE!)
+        // The Rule fires when script_image changes, so this MUST be set last
+        // after all other data is in place
+        const imageFieldId = FIELD_IDS.SCRIPT_IMAGE || FIELD_IDS.SC_LAST_IMAGE;
+        if (imageFieldId && isValidImageUrl(carouselImages.hookCard)) {
+            const success = await setCustomField(
+                subscriberId,
+                imageFieldId,
+                carouselImages.hookCard  // Use hook card as the trigger image
+            );
+            if (!success) {
+                logger.warn('[ManyChatState] V2: Failed to set script_image (TRIGGER)');
+                allSuccess = false;
+            }
+            logger.info('[ManyChatState] 🎯 script_image set LAST - Rule should fire now');
         }
 
         if (allSuccess) {

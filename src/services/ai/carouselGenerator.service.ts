@@ -137,25 +137,45 @@ const SECTION_META = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Escape HTML special characters
+ * Escape HTML special characters and sanitize text for safe rendering
  */
 function escapeHtml(text: string): string {
   return text
+    // Basic HTML entities
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '"')
-    .replace(/'/g, "'");
+
+    // Smart quotes and apostrophes (convert to straight quotes)
+    .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')  // Smart double quotes → "
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")  // Smart single quotes → '
+
+    // Em/En dashes → regular dash
+    .replace(/[\u2013\u2014]/g, '-')
+
+    // Ellipsis
+    .replace(/\u2026/g, '...')
+
+    // Remove any remaining problematic Unicode characters
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')  // Control characters
+
+    // Normalize whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
  * Parse script text into sections
+ * Handles multiple formats:
+ * - [HOOK], [BODY], [CTA]
+ * - 🎬 [HOOK (0-3s)], 📝 [BODY (3-15s)], 🚀 [CTA (15-20s)]
  */
 export function parseScriptSections(scriptText: string): ScriptSections {
   const sections: ScriptSections = { hook: [], body: [], cta: [] };
 
-  // Split by section headers [HOOK], [BODY], [CTA]
-  const parts = scriptText.split(/\[(HOOK|BODY|CTA)\]/i);
+  // More flexible regex to handle emoji prefixes and timing info
+  // Matches: [HOOK], [HOOK (0-3s)], 🎬 [HOOK (0-3s)], etc.
+  const parts = scriptText.split(/(?:🎬|📝|🚀)?\s*\[(HOOK|BODY|CTA)(?:\s*\([^)]*\))?\]/i);
 
   for (let i = 1; i < parts.length; i += 2) {
     const header = parts[i]?.toUpperCase();
@@ -174,7 +194,11 @@ export function parseScriptSections(scriptText: string): ScriptSections {
 }
 
 /**
- * Extract VISUAL, TEXT OVERLAY, and SAY content from lines
+ * Extract VISUAL, TEXT OVERLAY, and DIALOGUE content from lines
+ * Handles multiple formats:
+ * - Visual:, 🎬, Camera:
+ * - On-Screen:, Text Overlay:, 📝
+ * - Dialogue:, Say:, 💬
  */
 function extractVisualAndDialogue(lines: string[]): { visual: string; textOverlay: string; dialogue: string } {
   let visual = '';
@@ -182,27 +206,43 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; textOverla
   let dialogue = '';
 
   for (const line of lines) {
-    const isVisual = line.includes('🎬') || line.toLowerCase().includes('visual:');
-    const isTextOverlay = line.includes('📝') || line.toLowerCase().includes('text overlay:');
-    const isSay = line.includes('💬') || line.toLowerCase().includes('say:');
+    const lowerLine = line.toLowerCase();
+
+    // Check for visual/camera content
+    const isVisual = line.includes('🎬') ||
+      lowerLine.includes('visual:') ||
+      lowerLine.includes('camera:');
+
+    // Check for on-screen/text overlay content
+    const isTextOverlay = line.includes('📝') ||
+      lowerLine.includes('text overlay:') ||
+      lowerLine.includes('on-screen:');
+
+    // Check for dialogue/say content
+    const isDialogue = line.includes('💬') ||
+      lowerLine.includes('say:') ||
+      lowerLine.includes('dialogue:');
 
     if (isVisual) {
       const cleaned = line
         .replace(/^🎬\s*/i, '')
         .replace(/^visual:\s*/i, '')
+        .replace(/^camera:\s*/i, '')
         .trim();
       visual += (visual ? '\n' : '') + cleaned;
     } else if (isTextOverlay) {
       const cleaned = line
         .replace(/^📝\s*/i, '')
         .replace(/^text overlay:\s*/i, '')
+        .replace(/^on-screen:\s*/i, '')
         .replace(/^[""]|[""]$/g, '')  // Remove quotes
         .trim();
       textOverlay += (textOverlay ? ' • ' : '') + cleaned;
-    } else if (isSay) {
+    } else if (isDialogue) {
       const cleaned = line
         .replace(/^💬\s*/i, '')
         .replace(/^say:\s*/i, '')
+        .replace(/^dialogue:\s*/i, '')
         .replace(/^[""]|[""]$/g, '')  // Remove quotes
         .trim();
       dialogue += (dialogue ? '\n' : '') + cleaned;
@@ -222,7 +262,7 @@ function truncateText(text: string, maxLength: number): string {
 
 /**
  * Generate HTML template for a single section card
- * ENHANCED: Matches demo page styling with proper visual hierarchy
+ * MINIMALIST DESIGN: Clean, uncluttered, stylish, Instagram-optimized
  */
 function generateCardTemplate(
   sectionKey: 'hook' | 'body' | 'cta',
@@ -232,84 +272,63 @@ function generateCardTemplate(
   const meta = SECTION_META[sectionKey];
   const { visual, textOverlay, dialogue } = extractVisualAndDialogue(lines);
 
-  // Truncate for card fit - increased limits for 900px card
-  const displayVisual = truncateText(visual || 'Camera setup goes here...', 180);
-  const displayOverlay = truncateText(textOverlay || '', 60);
-  const displayDialogue = truncateText(dialogue || 'Dialogue goes here...', 250);
+  // Smart truncation - handles all content lengths
+  const displayVisual = truncateText(visual || 'Camera setup...', 120);
+  const displayOverlay = truncateText(textOverlay || '', 70);
+  const displayDialogue = truncateText(dialogue || 'Dialogue goes here...', 180);
 
-  // Dynamic font sizes based on content length
-  const dialogueFontSize = displayDialogue.length > 150 ? 20 : displayDialogue.length > 100 ? 22 : 26;
+  // Dynamic font sizing - scales for all content lengths
+  const dialogueFontSize = displayDialogue.length > 130 ? 30 :
+    displayDialogue.length > 100 ? 36 :
+      displayDialogue.length > 60 ? 42 : 48;
 
   return `
-    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgDark} 0%, ${COLORS.bgCard} 100%); color: ${COLORS.textMain};">
+    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 48px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
       
-      <!-- Top Bar: Brand + Variation + Timing -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid rgba(139, 92, 246, 0.15);">
-        
-        <!-- Brand -->
+      <!-- Minimal Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+        <div style="font-size: 14px; font-weight: 700; color: ${COLORS.textSecondary}; letter-spacing: 2px;">SCRIPTFLOW</div>
         <div style="display: flex; align-items: center; gap: 8px;">
-          <div style="display: flex; font-size: 18px; font-weight: 800; color: ${COLORS.textMain}; letter-spacing: -0.5px;">SCRIPT<span style="background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">FLOW</span></div>
-        </div>
-        
-        <!-- Badges -->
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div style="display: flex; background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%); border: 1px solid rgba(139, 92, 246, 0.3); padding: 5px 12px; border-radius: 16px;">
-            <span style="font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${variationTag}</span>
-          </div>
-          <div style="display: flex; background: rgba(255,255,255,0.05); border: 1px solid ${COLORS.border}; padding: 5px 12px; border-radius: 16px;">
-            <span style="font-size: 11px; font-weight: 600; color: ${COLORS.textDim};">⏱ ${meta.timing}</span>
-          </div>
+          <span style="font-size: 11px; font-weight: 600; color: ${meta.accent};">${variationTag}</span>
+          <span style="font-size: 11px; color: ${COLORS.textMuted};">•</span>
+          <span style="font-size: 11px; color: ${COLORS.textMuted};">${meta.timing}</span>
         </div>
       </div>
       
-      <!-- Section Header - Compact -->
-      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding: 16px 20px; background: rgba(${sectionKey === 'hook' ? '139, 92, 246' : sectionKey === 'body' ? '245, 158, 11' : '34, 197, 94'}, 0.1); border-radius: 12px; border: 1px solid ${meta.accent}30;">
-        <span style="font-size: 28px;">${meta.emoji}</span>
-        <div style="display: flex; flex-direction: column;">
-          <span style="font-size: 20px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1px;">${meta.number} / ${meta.title}</span>
-          <span style="font-size: 12px; color: ${COLORS.textMuted}; font-weight: 500;">${meta.subtitle}</span>
-        </div>
+      <!-- Section Title - Clean -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 40px;">
+        <span style="font-size: 32px;">${meta.emoji}</span>
+        <span style="font-size: 24px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1px;">${meta.title}</span>
       </div>
       
-      <!-- Content Area - Flex to fill space -->
-      <div style="display: flex; flex-direction: column; flex: 1; gap: 16px;">
-        
-        <!-- Camera Setup Block -->
-        <div style="display: flex; flex-direction: column; padding: 16px 20px; background: rgba(100, 116, 139, 0.08); border-radius: 10px; border: 1px solid rgba(100, 116, 139, 0.15);">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
-            <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px;">📹 CAMERA SETUP</span>
-          </div>
-          <div style="display: flex; font-size: 14px; color: ${COLORS.textSecondary}; line-height: 1.55;">${escapeHtml(displayVisual)}</div>
-        </div>
+      <!-- HERO: Main Dialogue -->
+      <div style="display: flex; flex: 1; align-items: center; justify-content: center; margin-bottom: 32px;">
+        <div style="font-size: ${dialogueFontSize}px; font-weight: 700; color: ${COLORS.textMain}; line-height: 1.3; letter-spacing: -0.8px; text-align: center;">"${escapeHtml(displayDialogue)}"</div>
+      </div>
+      
+      <!-- Supporting Info - Horizontal Inline Layout -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
         
         ${displayOverlay ? `
-        <!-- On-Screen Text Block (Sunset Gold) -->
-        <div style="display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: rgba(245, 158, 11, 0.1); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.25);">
-          <span style="font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 1.5px;">📝 ON-SCREEN</span>
-          <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">"${escapeHtml(displayOverlay)}"</span>
+        <!-- On-Screen Text - Inline Layout -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(245, 158, 11, 0.08); border-left: 4px solid ${COLORS.bodyAccent}; border-radius: 4px;">
+          <span style="font-size: 10px; font-weight: 700; color: ${COLORS.bodyAccent}; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">ON-SCREEN</span>
+          <span style="font-size: 16px; font-weight: 600; color: #fbbf24;">"${escapeHtml(displayOverlay)}"</span>
         </div>
         ` : ''}
         
-        <!-- Dialogue Block (Main Focus - Electric Violet) -->
-        <div style="display: flex; flex-direction: column; flex: 1; padding: 20px 24px; background: rgba(139, 92, 246, 0.06); border-radius: 12px; border: 2px solid ${meta.accent}40;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
-            <span style="font-size: 10px; font-weight: 900; color: ${meta.accent}; text-transform: uppercase; letter-spacing: 2px;">🎤 SPEAK THIS</span>
-          </div>
-          <div style="display: flex; flex: 1; align-items: center;">
-            <div style="display: flex; font-size: ${dialogueFontSize}px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.5; letter-spacing: -0.3px;">"${escapeHtml(displayDialogue)}"</div>
-          </div>
+        <!-- Camera Setup - Inline Layout -->
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: rgba(100, 116, 139, 0.05); border-left: 4px solid ${COLORS.cameraColor}; border-radius: 4px;">
+          <span style="font-size: 10px; font-weight: 700; color: ${COLORS.cameraColor}; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">CAMERA</span>
+          <span style="font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.5;">${escapeHtml(displayVisual)}</span>
         </div>
         
-      </div>
-      
-      <!-- Footer -->
-      <div style="display: flex; justify-content: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
-        <span style="font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 3px;">SWIPE FOR MORE →</span>
       </div>
       
     </div>
   `;
 }
+
 
 /**
  * Render HTML template to PNG buffer

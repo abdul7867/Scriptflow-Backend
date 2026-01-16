@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { getRedis } from '../queue/redis';
+import { luaScripts } from '../queue/luaScripts';
+import { rateLimitCache } from '../services/cache.service';
 import { logger } from '../utils/logger';
 import { manychatStateService } from '../services/external/manychatState.service';
 
@@ -47,19 +49,27 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
       }
 
       const key = `${keyPrefix}${subscriberId}`;
-      const redis = getRedis();
 
-      // Atomic increment - prevents race conditions
-      const count = await redis.incr(key);
-
-      // Set expiry only on first increment
-      if (count === 1) {
-        await redis.expire(key, windowSeconds);
+      // L1 Cache: Quick check if user is known to be under limit
+      if (rateLimitCache.isKnownUnderLimit(subscriberId, maxRequests)) {
+        logger.debug('Rate limit L1 cache hit (under limit)', { subscriberId });
+        res.setHeader('X-RateLimit-Limit', maxRequests.toString());
+        res.setHeader('X-RateLimit-User', subscriberId);
+        return next();
       }
 
+      // L2: Use Lua script for atomic INCR + EXPIRE + TTL (3 commands → 1)
+      const { count, ttl, allowed } = await luaScripts.checkRateLimit(
+        key,
+        maxRequests,
+        windowSeconds
+      );
+
+      // Update L1 cache for future requests (30s cache)
+      rateLimitCache.updateCount(subscriberId, count);
+
       // Check if over limit
-      if (count > maxRequests) {
-        const ttl = await redis.ttl(key);
+      if (!allowed) {
         const resetTime = new Date(Date.now() + ttl * 1000).toISOString();
         const resetMinutes = Math.ceil(ttl / 60);
 

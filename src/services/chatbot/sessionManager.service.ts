@@ -11,6 +11,8 @@
 
 import { logger } from '../../utils/logger';
 import { getRedis } from '../../queue/redis';
+import { sessionCache } from '../cache.service';
+import { luaScripts } from '../../queue/luaScripts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -119,10 +121,22 @@ class SessionManager {
    */
   async getSession(subscriberId: string): Promise<SessionContext> {
     try {
-      const redis = getRedis();
       const key = getSessionKey(subscriberId);
 
-      const data = await redis.get(key);
+      // L1 Cache: Check in-memory first (reduces Redis calls by ~80%)
+      const cached = sessionCache.get<SessionContext>(key);
+      if (cached) {
+        logger.debug('Session L1 cache hit', { subscriberId });
+        return cached;
+      }
+
+      // L2 Cache: Redis with auto TTL refresh via Lua script
+      const refreshThreshold = Math.floor(SESSION_TTL_SECONDS * 0.2); // Refresh if < 20% TTL remaining
+      const data = await luaScripts.getSessionWithRefresh(
+        key,
+        SESSION_TTL_SECONDS,
+        refreshThreshold
+      );
 
       if (!data) {
         logger.debug('Session not found, creating empty', { subscriberId });
@@ -131,7 +145,10 @@ class SessionManager {
 
       const session = JSON.parse(data) as SessionContext;
 
-      logger.debug('Session retrieved', {
+      // Populate L1 cache for future reads
+      sessionCache.set(key, session, SESSION_TTL_SECONDS * 1000 / 2); // L1 TTL = 50% of Redis TTL
+
+      logger.debug('Session retrieved (L2 hit)', {
         subscriberId,
         state: session.conversationState,
         hasReel: !!session.lastReelUrl,
@@ -156,13 +173,19 @@ class SessionManager {
     updates: Partial<SessionContext>
   ): Promise<void> {
     try {
-      const redis = getRedis();
       const key = getSessionKey(subscriberId);
       const now = Date.now();
 
-      // Get existing session only (skip TTL query - use in-memory cache)
-      const existingData = await redis.get(key);
-      const existing = existingData ? JSON.parse(existingData) : createEmptySession();
+      // Get existing from L1 cache first, fallback to Redis
+      let existing: SessionContext = sessionCache.get<SessionContext>(key) || createEmptySession();
+      const cached = sessionCache.has(key);
+      if (!cached) {
+        const redis = getRedis();
+        const existingData = await redis.get(key);
+        if (existingData) {
+          existing = JSON.parse(existingData) as SessionContext;
+        }
+      }
 
       // Merge updates
       const updated: SessionContext = {
@@ -171,18 +194,21 @@ class SessionManager {
         lastActivityAt: new Date().toISOString(),
       };
 
-      // OPTIMIZATION: Use in-memory cache instead of redis.ttl() call
-      // Check if TTL refresh is needed (>50% of TTL expired)
+      // Update L1 cache immediately (write-through)
+      sessionCache.set(key, updated, SESSION_TTL_SECONDS * 1000 / 2);
+
+      // OPTIMIZED: Check if Redis write is needed based on TTL cache
       const lastRefresh = sessionTTLCache.get(key) || 0;
-      const ttlHalfLifeMs = (SESSION_TTL_SECONDS * 1000) / 2; // 15 minutes in ms
-      const shouldRefreshTTL = (now - lastRefresh) > ttlHalfLifeMs;
+      const ttl80PercentMs = (SESSION_TTL_SECONDS * 1000) * 0.8; // 80% threshold (24 min)
+      const shouldRefreshTTL = (now - lastRefresh) > ttl80PercentMs;
 
       if (shouldRefreshTTL) {
-        // Session TTL needs refresh - use SETEX and update cache
-        await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(updated));
+        // Use Lua script for atomic update with TTL refresh
+        await luaScripts.updateSession(key, JSON.stringify(updated), SESSION_TTL_SECONDS);
         sessionTTLCache.set(key, now);
       } else {
-        // TTL still fresh (>50% remaining) - just update data without TTL refresh
+        // Just update data without TTL refresh
+        const redis = getRedis();
         await redis.set(key, JSON.stringify(updated), 'KEEPTTL');
       }
 

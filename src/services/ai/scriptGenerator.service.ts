@@ -32,6 +32,7 @@ async function fileToGenerativePart(path: string, mimeType: string): Promise<Par
 
 export type ToneHint = 'professional' | 'funny' | 'provocative' | 'educational' | 'casual';
 export type GenerationMode = 'full' | 'hook_only';
+export type StoryFormat = 'story' | 'edgy' | 'tutorial';
 
 /** Summary of a previous variation to help AI avoid repetition */
 export interface VariationSummary {
@@ -51,6 +52,9 @@ export interface ScriptGeneratorOptions {
   languageHint?: string;
   mode?: GenerationMode;
 
+  // Storytelling format for post-delivery restyling
+  storyFormat?: StoryFormat;
+
   // Previous scripts with DIFFERENT ideas (for context/learning)
   previousScripts?: { idea: string; script: string }[];
 
@@ -64,6 +68,80 @@ export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
 }
 
 // ============================================
+// Storytelling Format Prompts
+// ============================================
+
+const STORYTELLING_FORMATS: Record<StoryFormat, string> = {
+  story: `
+⚠️ STORYTELLING MODE: PERSONAL JOURNEY (Hero's Arc)
+Use this EXACT structure instead of default format:
+
+[HOOK] → THE BEFORE
+🎬 VISUAL: Relatable expression, slight frustration or confusion
+📝 TEXT OVERLAY: "I used to think..." or "Before I knew..."
+💬 SAY: "I used to [old belief/struggle]..." - Start with relatable past state
+
+[BODY] → THE TURNING POINT
+🎬 VISUAL: Energy shift, lean forward, eyes widen
+📝 TEXT OVERLAY: "Then I discovered..."
+💬 SAY: "Then I [discovered/realized/learned]... This changed everything because [reason]"
+💬 SAY: "The key insight was [specific revelation]..."
+
+[CTA] → THE AFTER
+🎬 VISUAL: Confident, transformed energy, slight smile
+📝 TEXT OVERLAY: "Now I..." or result
+💬 SAY: "Now I [new state/result]. You can do this too - [specific action]."
+`,
+
+  edgy: `
+⚠️ STORYTELLING MODE: MYTH BUSTER / CONTRARIAN
+Use this EXACT structure instead of default format:
+
+[HOOK] → THE MYTH
+🎬 VISUAL: Skeptical expression, maybe eye roll or head shake
+📝 TEXT OVERLAY: "Everyone says..." or "Common advice:"
+💬 SAY: "Everyone tells you [common belief]... They're completely wrong."
+
+[BODY] → THE TRUTH
+🎬 VISUAL: Serious, authoritative, direct eye contact
+📝 TEXT OVERLAY: "The truth is..."
+💬 SAY: "Here's what actually happens: [reality]. This is true because [evidence/logic]."
+💬 SAY: "The reason this myth persists is [reason]. But smart people do [alternative]."
+
+[CTA] → THE PROOF
+🎬 VISUAL: Confident close, knowing smile
+📝 TEXT OVERLAY: Result or action
+💬 SAY: "I tried this and [specific result]. Stop following bad advice - do this instead."
+`,
+
+  tutorial: `
+⚠️ STORYTELLING MODE: STEP-BY-STEP TUTORIAL
+Use this EXACT structure instead of default format:
+
+[HOOK] → THE PROMISE
+🎬 VISUAL: Excited, helpful energy, maybe holding fingers up for "3 steps"
+📝 TEXT OVERLAY: "How to [outcome] in 60 seconds"
+💬 SAY: "Here's exactly how to [outcome] - takes 60 seconds."
+
+[BODY] → THE STEPS
+🎬 VISUAL: Count on fingers, clear gestures for each step
+📝 TEXT OVERLAY: "Step 1: [action]"
+💬 SAY: "Step 1: [specific action]. This matters because [quick reason]."
+
+📝 TEXT OVERLAY: "Step 2: [action]"
+💬 SAY: "Step 2: [specific action]. Key tip: [insight]."
+
+📝 TEXT OVERLAY: "Step 3: [action]"
+💬 SAY: "Step 3: [specific action]. And that's it."
+
+[CTA] → THE RESULT
+🎬 VISUAL: Thumbs up or confident nod
+📝 TEXT OVERLAY: "Now go do it!"
+💬 SAY: "Now you can [outcome]. Save this and try it today."
+`,
+};
+
+// ============================================
 // Hint Builder (APPENDED to prompt, not replacing)
 // ============================================
 
@@ -74,6 +152,11 @@ export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
  */
 function buildOptionalHints(options: ScriptGeneratorOptions): string {
   const hints: string[] = [];
+
+  // STORYTELLING FORMAT (HIGHEST PRIORITY - changes entire structure)
+  if (options.storyFormat && STORYTELLING_FORMATS[options.storyFormat]) {
+    hints.push(STORYTELLING_FORMATS[options.storyFormat]);
+  }
 
   if (options.toneHint) {
     const toneDescriptions: Record<ToneHint, string> = {

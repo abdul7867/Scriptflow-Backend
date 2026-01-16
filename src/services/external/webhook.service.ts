@@ -51,6 +51,7 @@ import { manychatFlowService, ManyChatFlow } from './manychatFlow.service';
 import { manychatStateService } from './manychatState.service';
 import { loopPrevention } from '../chatbot/loopPrevention.service';
 import { normalizeInstagramUrl, generateRequestHashV2, generateReelHash } from '../../utils/hash';
+import { requestCoalescer } from '../requestCoalescer';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -71,6 +72,8 @@ export interface WebhookRequest {
     source?: string;
     /** Additional metadata from ManyChat */
     metadata?: Record<string, unknown>;
+    /** Storytelling format for post-delivery restyling */
+    storyFormat?: 'story' | 'edgy' | 'tutorial';
 }
 
 /**
@@ -244,6 +247,14 @@ class WebhookService {
                 subscriberId,
                 state: userState
             });
+
+            // ───────────────────────────────────────────────────────────────────────
+            // STEP 3.5: Handle FORMAT_RESTYLE (storytelling format restyling)
+            // This is a special case where user clicked a format button in ManyChat
+            // ───────────────────────────────────────────────────────────────────────
+            if (rawMessage.toUpperCase() === 'FORMAT_RESTYLE' && request.storyFormat) {
+                return this.handleFormatRestyle(requestId, request, userState, rateLimitStatus);
+            }
 
             // ───────────────────────────────────────────────────────────────────────
             // STEP 4: Detect intent
@@ -915,6 +926,74 @@ class WebhookService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // FORMAT RESTYLE HANDLER
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Handle FORMAT_RESTYLE - user clicked a storytelling format button
+     * Uses stored reel+idea from previous generation to restyle the script
+     */
+    private async handleFormatRestyle(
+        requestId: string,
+        request: WebhookRequest,
+        currentState: ChatbotState,
+        rateLimitStatus: any
+    ): Promise<WebhookResult> {
+        const { subscriberId, storyFormat, toneHint, languageHint, mode } = request;
+
+        logger.info(`[Webhook:${requestId}] Processing FORMAT_RESTYLE`, {
+            subscriberId,
+            storyFormat,
+        });
+
+        // Get stored reel + idea from FSM metadata (from previous generation)
+        const context = await chatbotFSM.getState(subscriberId);
+        const storedReelUrl = (context.metadata.reelUrl || context.metadata.lastReelUrl) as string;
+        const storedUserIdea = (context.metadata.userIdea || context.metadata.lastUserIdea) as string;
+
+        if (!storedReelUrl || !storedUserIdea) {
+            logger.warn(`[Webhook:${requestId}] FORMAT_RESTYLE but no stored reel/idea`, {
+                subscriberId,
+                hasReelUrl: !!storedReelUrl,
+                hasUserIdea: !!storedUserIdea,
+            });
+
+            await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.ERROR, {
+                errorMessage: 'No previous script found. Send a reel first!'
+            });
+
+            return {
+                success: false,
+                action: 'error',
+                message: 'No previous script to restyle',
+                data: {
+                    state: currentState,
+                    error: { code: 'NO_PREVIOUS_SCRIPT' }
+                }
+            };
+        }
+
+        // Get variation count for hash uniqueness
+        const variationCount = (context.metadata.variationCount as number || 0) + 1;
+
+        // Update variation count in metadata
+        await chatbotFSM.updateMetadata(subscriberId, { variationCount });
+
+        // Queue job with storytelling format
+        return this.queueScriptJob(requestId, {
+            subscriberId,
+            reelUrl: storedReelUrl,
+            userIdea: storedUserIdea,
+            toneHint,
+            languageHint,
+            mode,
+            isVariation: true,
+            variationIndex: variationCount,
+            storyFormat,
+        }, currentState, rateLimitStatus);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // JOB QUEUING
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -933,11 +1012,12 @@ class WebhookService {
             isVariation: boolean;
             variationIndex: number;
             isCopyMode?: boolean; // When true, extracts exact transcript instead of generating new script
+            storyFormat?: 'story' | 'edgy' | 'tutorial'; // Storytelling format for restyling
         },
         newState: ChatbotState,
         rateLimitStatus: any
     ): Promise<WebhookResult> {
-        const { subscriberId, reelUrl, userIdea, toneHint, languageHint, mode, isVariation, variationIndex, isCopyMode } = params;
+        const { subscriberId, reelUrl, userIdea, toneHint, languageHint, mode, isVariation, variationIndex, isCopyMode, storyFormat } = params;
 
         // Generate request hash
         const requestHash = generateRequestHashV2(
@@ -948,7 +1028,43 @@ class WebhookService {
             mode || 'full'
         );
 
-        // Check for duplicate in-flight jobs
+        // ──────────────────────────────────────────────────────────────────
+        // REQUEST COALESCING: Check if identical request is already processing
+        // If so, add this user to waiting list instead of creating new job
+        // ──────────────────────────────────────────────────────────────────
+        const coalesceCheck = await requestCoalescer.checkCoalesce(requestHash, subscriberId);
+
+        if (coalesceCheck.shouldCoalesce && coalesceCheck.existingJobId) {
+            logger.info(`[Webhook:${requestId}] Request coalesced with existing job`, {
+                subscriberId,
+                existingJobId: coalesceCheck.existingJobId,
+                position: coalesceCheck.position
+            });
+
+            // Set ManyChat status to Processing (user will get result via fan-out)
+            // Note: initializeProcessing is a NO-OP for V2 flow, but we call it for consistency
+            try {
+                await manychatStateService.initializeProcessing(
+                    subscriberId,
+                    false,
+                    coalesceCheck.position || 0
+                );
+            } catch (stateError: any) {
+                logger.warn(`[Webhook:${requestId}] Failed to set coalesced processing state`);
+            }
+
+            return {
+                success: true,
+                action: 'queued',
+                message: `Your script is being created! You're #${coalesceCheck.position} in line.`,
+                data: {
+                    jobId: coalesceCheck.existingJobId,
+                    state: newState,
+                }
+            };
+        }
+
+        // Check for duplicate in-flight jobs (legacy check)
         const existingJob = await Job.findOne({
             requestHash,
             status: { $in: ['queued', 'processing'] }
@@ -1024,15 +1140,20 @@ class WebhookService {
             languageHint,
             mode: mode || 'full',
             isCopyMode, // When true, worker extracts transcript instead of generating
+            storyFormat, // Storytelling format for restyling
         };
 
         await addScriptJob(jobData);
 
-        logger.info(`[Webhook:${requestId}] Job queued`, {
+        // Register this job for coalescing (so future identical requests can join)
+        await requestCoalescer.registerJob(requestHash, requestId, subscriberId);
+
+        logger.info(`[Webhook:${requestId}] Job queued (coalesce-enabled)`, {
             subscriberId,
             reelUrl: reelUrl.substring(0, 50),
             isVariation,
             variationIndex,
+            requestHash: requestHash.substring(0, 16),
         });
 
         // ──────────────────────────────────────────────────────────────────

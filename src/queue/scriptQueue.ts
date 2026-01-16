@@ -14,6 +14,11 @@ import { getRedis } from './redis';
 import { logger } from '../utils/logger';
 
 /**
+ * Storytelling format types for post-delivery restyling
+ */
+export type StoryFormat = 'story' | 'edgy' | 'tutorial';
+
+/**
  * Job data interface for script generation
  */
 export interface ScriptJobData {
@@ -37,6 +42,9 @@ export interface ScriptJobData {
 
   // V2 flag: Use V2 ManyChat field names (ai_generated_script, script_image, script_copy_link)
   isV2?: boolean;
+
+  // Storytelling format for post-delivery restyling
+  storyFormat?: StoryFormat;
 }
 
 /**

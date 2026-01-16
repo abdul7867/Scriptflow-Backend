@@ -16,8 +16,9 @@ import { manychatStateService } from '../services/external/manychatState.service
 import { generateScriptImage } from '../utils/imageGenerator';
 import { generateCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
-import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
+import { generateReelHash, normalizeInstagramUrl, generateRequestHashV2 } from '../utils/hash';
 import { uploadVideoToS3 } from '../services/external/s3.service';
+import { requestCoalescer } from '../services/requestCoalescer';
 
 // FSM for state updates
 import { chatbotFSM, ChatbotEvent, ChatbotState } from '../services/chatbot/chatbotStateMachine.service';
@@ -72,87 +73,91 @@ class JobTimeoutError extends Error {
 }
 
 /**
- * Format a transcript as a structured script (for COPY mode)
- * This takes the exact words from the video and formats them in our script structure
+ * Format a transcript as a structured script (for COPY/EXTRACT mode)
+ * This takes the exact words from the video and formats them with ALL details:
+ * - Exact transcript
+ * - Camera angles
+ * - On-screen captions/text
+ * - B-roll descriptions
+ * - Visual cues
  */
 function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnalysis | null): string {
+  const sceneDescriptions = analysis?.sceneDescriptions || [];
+  const visualCues = analysis?.visualCues || [];
+  const cameraAngles = analysis?.cameraAngles || [];
+  const onScreenText = analysis?.onScreenText || [];
+  const bRollDescriptions = analysis?.bRollDescriptions || [];
+
   if (!transcript || transcript.trim() === '') {
-    // No speech detected - create a visual-only script
-    const visualCues = analysis?.visualCues || [];
-    const sceneDescriptions = analysis?.sceneDescriptions || [];
+    // No speech detected - create a visual-only script with ALL details
+    return `📋 EXACT EXTRACTION FROM ORIGINAL REEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    return `[HOOK]
-🎬 VISUAL: ${sceneDescriptions[0] || visualCues[0] || 'Opening shot as shown in video'}
-💬 SAY: (No speech - this is a visual-only reel)
+🔇 TRANSCRIPT: (No speech - visual-only reel)
 
-[BODY]
-🎬 VISUAL: ${sceneDescriptions.slice(1, 3).join(' → ') || visualCues.slice(1, 3).join(', ') || 'Main content visuals as shown'}
-💬 SAY: (No speech detected in original)
+📸 CAMERA ANGLES:
+${cameraAngles.length > 0
+        ? cameraAngles.map((angle, i) => `  ${i + 1}. ${angle}`).join('\n')
+        : '  • Not specified'}
 
-[CTA]
-🎬 VISUAL: ${sceneDescriptions[sceneDescriptions.length - 1] || 'Final shot as shown'}
-💬 SAY: (No speech - visual ending)
+📝 ON-SCREEN TEXT/CAPTIONS:
+${onScreenText.length > 0
+        ? onScreenText.map((text, i) => `  ${i + 1}. "${text}"`).join('\n')
+        : '  • No on-screen text detected'}
 
----
-📝 Note: This reel has no spoken dialogue. The visuals carry the message.
+🎬 SCENE-BY-SCENE BREAKDOWN:
+${sceneDescriptions.length > 0
+        ? sceneDescriptions.map((scene, i) => `  Scene ${i + 1}: ${scene}`).join('\n')
+        : visualCues.map((cue, i) => `  Scene ${i + 1}: ${cue}`).join('\n') || '  • Opening shot as shown'}
+
+🎞️ B-ROLL / CUTAWAYS:
+${bRollDescriptions.length > 0
+        ? bRollDescriptions.map((broll, i) => `  ${i + 1}. ${broll}`).join('\n')
+        : '  • No B-roll detected'}
+
+✨ VISUAL ELEMENTS:
+${visualCues.map(cue => `  • ${cue}`).join('\n') || '  • No specific visual cues'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 Hook Type: ${analysis?.hookType || 'Visual'}
 🎭 Tone: ${analysis?.tone || 'Unknown'}`;
   }
 
-  // Split transcript into sentences for better formatting
-  const sentences = transcript
-    .replace(/([.!?])\s+/g, '$1|')
-    .split('|')
-    .filter(s => s.trim());
+  // Has speech - format with transcript and ALL visual details
+  return `📋 EXACT EXTRACTION FROM ORIGINAL REEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  const totalSentences = sentences.length;
+💬 TRANSCRIPT (Word-for-Word):
+"${transcript}"
 
-  // Distribute sentences across hook, body, cta
-  let hookSentences: string[];
-  let bodySentences: string[];
-  let ctaSentences: string[];
+📸 CAMERA ANGLES:
+${cameraAngles.length > 0
+      ? cameraAngles.map((angle, i) => `  ${i + 1}. ${angle}`).join('\n')
+      : '  • Talking head / Standard shot'}
 
-  if (totalSentences <= 3) {
-    hookSentences = sentences.slice(0, 1);
-    bodySentences = sentences.slice(1, totalSentences - 1) || [];
-    ctaSentences = sentences.slice(-1);
-  } else {
-    // First ~20% for hook, last ~20% for CTA, rest for body
-    const hookCount = Math.max(1, Math.ceil(totalSentences * 0.2));
-    const ctaCount = Math.max(1, Math.ceil(totalSentences * 0.2));
+📝 ON-SCREEN TEXT/CAPTIONS:
+${onScreenText.length > 0
+      ? onScreenText.map((text, i) => `  ${i + 1}. "${text}"`).join('\n')
+      : '  • No on-screen text detected'}
 
-    hookSentences = sentences.slice(0, hookCount);
-    ctaSentences = sentences.slice(-ctaCount);
-    bodySentences = sentences.slice(hookCount, -ctaCount);
-  }
+🎬 SCENE-BY-SCENE BREAKDOWN:
+${sceneDescriptions.length > 0
+      ? sceneDescriptions.map((scene, i) => `  Scene ${i + 1}: ${scene}`).join('\n')
+      : '  • Single continuous shot'}
 
-  // Build visual descriptions from analysis
-  const sceneDescriptions = analysis?.sceneDescriptions || [];
-  const visualCues = analysis?.visualCues || [];
+🎞️ B-ROLL / CUTAWAYS:
+${bRollDescriptions.length > 0
+      ? bRollDescriptions.map((broll, i) => `  ${i + 1}. ${broll}`).join('\n')
+      : '  • No B-roll (talking head only)'}
 
-  const hookVisual = sceneDescriptions[0] || visualCues[0] || 'Opening shot';
-  const bodyVisual = sceneDescriptions.length > 2
-    ? sceneDescriptions.slice(1, -1).join(' → ')
-    : visualCues.slice(1, -1).join(', ') || 'Main content visuals';
-  const ctaVisual = sceneDescriptions[sceneDescriptions.length - 1] || visualCues[visualCues.length - 1] || 'Closing shot';
+✨ VISUAL ELEMENTS:
+${visualCues.map(cue => `  • ${cue}`).join('\n') || '  • No specific visual cues'}
 
-  return `[HOOK]
-🎬 VISUAL: ${hookVisual}
-💬 SAY: "${hookSentences.join(' ')}"
-
-[BODY]
-🎬 VISUAL: ${bodyVisual}
-💬 SAY: "${bodySentences.join(' ') || '(No additional dialogue)'}"
-
-[CTA]
-🎬 VISUAL: ${ctaVisual}
-💬 SAY: "${ctaSentences.join(' ')}"
-
----
-📝 EXACT COPY from original reel
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 Hook Type: ${analysis?.hookType || 'Unknown'}
 🎭 Tone: ${analysis?.tone || 'Unknown'}
-📊 Visual Cues: ${visualCues.length} detected`;
+📊 Total Scenes: ${sceneDescriptions.length || 1}
+📝 Captions Found: ${onScreenText.length}`;
 }
 
 /**
@@ -311,10 +316,11 @@ async function processJobWithTimeout(
     languageHint,
     mode,
     isCopyMode, // When true, output transcript as-is formatted as script
-    isV2 // When true, use V2 ManyChat field names
+    isV2, // When true, use V2 ManyChat field names
+    storyFormat // Storytelling format for restyling
   } = job.data;
 
-  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}${isV2 ? ' [V2]' : ''}`);
+  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}${isV2 ? ' [V2]' : ''}${storyFormat ? ` [format: ${storyFormat}]` : ''}`);
 
   // Update job status in MongoDB
   await Job.findOneAndUpdate(
@@ -526,6 +532,7 @@ async function processJobWithTimeout(
           toneHint,
           languageHint,
           mode,
+          storyFormat, // Storytelling format for restyling
           previousScripts: previousScripts.map(ps => ({ idea: ps.idea, script: ps.script })),
           previousVariationSummaries: previousScriptSummaries
         });
@@ -593,6 +600,7 @@ async function processJobWithTimeout(
           toneHint,
           languageHint,
           mode,
+          storyFormat, // Storytelling format for restyling
           previousScripts: previousScripts.map(ps => ({ idea: ps.idea, script: ps.script })),
           previousVariationSummaries: previousScriptSummaries
         });
@@ -870,6 +878,35 @@ async function processJobWithTimeout(
       });
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // REQUEST COALESCING: Fan-out results to all waiting users
+    // If other users requested the same reel+idea, deliver to them too
+    // ──────────────────────────────────────────────────────────────────
+    try {
+      const requestHash = generateRequestHashV2(
+        subscriberId,
+        reelUrl,
+        userIdea,
+        job.data.variationIndex || 0,
+        job.data.mode || 'full'
+      );
+
+      const fanOutResult = await requestCoalescer.fanOutResults(
+        requestHash,
+        scriptText,
+        imageUrl,
+        scriptUrl,
+        carouselImages || undefined
+      );
+
+      if (fanOutResult.deliveredCount > 0) {
+        logger.info(`[${requestId}] ✅ Coalesce fan-out: delivered to ${fanOutResult.deliveredCount} additional users`);
+      }
+    } catch (fanOutError: any) {
+      // Non-fatal - primary user already received their result
+      logger.warn(`[${requestId}] Fan-out failed (non-fatal)`, { error: fanOutError.message });
+    }
+
     const totalDuration = Date.now() - startTime;
     recordJobDuration(totalDuration, { status: 'success' });
     logger.info(`[${requestId}] Job completed successfully in ${totalDuration}ms`);
@@ -984,6 +1021,25 @@ async function processJobWithTimeout(
         // Non-fatal - legacy delivery already attempted via sendTextMessage
         logger.warn(`[${requestId}] Failed to set ManyChat error state`, {
           error: stateError.message
+        });
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      // COALESCING: Cancel waiting users if this job was coalesced
+      // Notifies all waiting subscribers that the job failed
+      // ──────────────────────────────────────────────────────────────────
+      try {
+        const requestHash = generateRequestHashV2(
+          subscriberId,
+          reelUrl,
+          userIdea,
+          job.data.variationIndex || 0,
+          job.data.mode || 'full'
+        );
+        await requestCoalescer.cancelCoalesce(requestHash);
+      } catch (cancelError: any) {
+        logger.warn(`[${requestId}] Failed to cancel coalesce group`, {
+          error: cancelError.message
         });
       }
     } else {

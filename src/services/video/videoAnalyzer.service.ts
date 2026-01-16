@@ -11,6 +11,12 @@ export interface VideoAnalysis {
   hookType: string;
   tone: string;
   sceneDescriptions: string[];
+  /** Camera angles/shots used (e.g., 'Close-up', 'Wide shot', 'POV', 'Talking head') */
+  cameraAngles?: string[];
+  /** On-screen text/captions visible in the video */
+  onScreenText?: string[];
+  /** B-roll or cutaway descriptions */
+  bRollDescriptions?: string[];
 }
 
 // Options for the analyzer
@@ -83,7 +89,7 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
   }
 
   const { frames = [], audioPath, includeAudio } = options;
-  
+
   // Input validation
   if (frames.length === 0 && !audioPath) {
     throw new Error('No input provided for analysis (frames or audio)');
@@ -91,13 +97,13 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
 
   // Optimize: Read files into memory ONCE to avoid repeated I/O in the loop
   const frameParts: Part[] = [];
-  
+
   // Read frames in parallel
   if (frames.length > 0) {
     const framePromises = frames
       .filter(f => fs.existsSync(f))
       .map(f => fileToGenerativePart(f, 'image/jpeg'));
-    
+
     frameParts.push(...await Promise.all(framePromises));
   }
 
@@ -107,20 +113,29 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
     audioPart = await fileToGenerativePart(audioPath, 'audio/wav');
   }
 
-  // Prepare prompt
+  // Prepare prompt - Enhanced for complete extraction (camera angles, captions, etc.)
   const prompt = `
-  Analyze this video content (frames and/or audio) to extract structured data for script generation.
+  Analyze this video content (frames and/or audio) to extract COMPLETE structured data.
   
   RETURN JSON ONLY with this structure:
   {
-    "transcript": "Full spoken text from audio (if any). If none, null.",
-    "visualCues": ["List of key visual elements, styles, or actions shown"],
-    "hookType": "The type of psychological hook used (e.g., 'Negative visual', 'Stop scrolling', 'Controversial statement', 'Unknown')",
-    "tone": "The overall emotional tone (e.g., 'High Energy', 'Educational', 'Sarcastic')",
-    "sceneDescriptions": ["Chronological description of visual scenes shown in frames"]
+    "transcript": "Full spoken text from audio word-for-word. If none, null.",
+    "visualCues": ["List of key visual elements, styles, props, or actions shown"],
+    "hookType": "The type of psychological hook used (e.g., 'Negative visual', 'Stop scrolling', 'Controversial statement', 'Pattern interrupt', 'Unknown')",
+    "tone": "The overall emotional tone (e.g., 'High Energy', 'Educational', 'Sarcastic', 'Motivational', 'Casual')",
+    "sceneDescriptions": ["Chronological description of visual scenes shown in each frame"],
+    "cameraAngles": ["Camera angles/shots used for each scene (e.g., 'Close-up face', 'Wide shot', 'POV', 'Talking head', 'Screen recording', 'B-roll cutaway', 'Product shot')"],
+    "onScreenText": ["All text/captions visible on screen in the video, in order of appearance. Include subtitles, titles, labels, memes text, etc."],
+    "bRollDescriptions": ["Description of any B-roll footage or cutaways used (stock footage, illustrations, screen recordings, memes, etc.)"]
   }
   
-  Be precise and detailed.
+  IMPORTANT for EXTRACT mode:
+  - Capture EVERY word spoken in transcript
+  - Note ALL on-screen text/captions exactly as shown
+  - Identify specific camera angles for each scene
+  - Note any B-roll, stock footage, or cutaways
+  
+  Be extremely detailed and precise.
   `;
 
   let lastError: any = null;
@@ -136,7 +151,7 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
         { text: prompt },
         ...frameParts,
       ];
-      
+
       if (audioPart) {
         contentParts.push(audioPart);
       }
@@ -146,17 +161,17 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
       });
       const response = result.response;
       const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      
+
       // Parse JSON
       const jsonStart = text.indexOf('{');
       const jsonEnd = text.lastIndexOf('}') + 1;
       if (jsonStart === -1 || jsonEnd === 0) {
         throw new Error('Invalid JSON response from Gemini');
       }
-      
+
       const jsonStr = text.substring(jsonStart, jsonEnd);
       const data = JSON.parse(jsonStr) as VideoAnalysis;
-      
+
       logger.info(`✅ Analysis successful with ${modelName}`);
       return data;
 
@@ -179,7 +194,7 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
       } else if (isServerError) {
         logger.warn(`Server error on ${modelName}, switching to fallback...`);
       }
-      
+
       // Continue loop to next model
     }
   }
