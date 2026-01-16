@@ -16,6 +16,6 @@ export {
     getQueueDepth,
     QUEUE_CONFIG
 } from './scriptQueue';
-export type { ScriptJobData, ScriptJobResult, CopyJobData, CopyJobResult } from './scriptQueue';
+export type { ScriptJobData, ScriptJobResult, CopyJobData, CopyJobResult, StoryFormat } from './scriptQueue';
 export { startWorker, stopWorker, worker } from './worker';
 export { luaScripts, LuaScripts } from './luaScripts';

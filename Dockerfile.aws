@@ -62,6 +62,10 @@ RUN mkdir -p secrets \
 # Environment Setup
 ENV NODE_ENV=production
 ENV PORT=3000
+# Memory configuration for t3.micro (1GB RAM)
+# Heap limit: 640MB, leaving room for OS + FFmpeg + yt-dlp
+ENV NODE_OPTIONS="--max-old-space-size=640 --expose-gc"
+ENV MEMORY_HEAP_LIMIT_MB=640
 # Redirect yt-dlp to use writable temp directory (prevents read-only filesystem errors)
 ENV HOME=/app/temp
 ENV XDG_CACHE_HOME=/app/temp/.cache
