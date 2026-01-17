@@ -120,24 +120,51 @@ export const generateScriptHandlerV2 = async (req: Request, res: Response): Prom
     }
 
     // 3. Get reel URL - either from request or from session (for restyling)
-    let normalizedUrl = reel_url ? normalizeInstagramUrl(reel_url) : null;
+    // PRIORITY: 1) Request body (ManyChat field), 2) Redis session cache
+    let normalizedUrl: string | null = null;
+    let reelSource: 'request' | 'session' | null = null;
 
-    // If no reel_url provided, try to get from session (for Story/Edgy/Extract/Remix)
+    // Source 1: From request body (ManyChat sends user_reel/reel_url)
+    if (reel_url) {
+      normalizedUrl = normalizeInstagramUrl(reel_url);
+      reelSource = 'request';
+      logger.info(`[V2:${requestId}] Reel URL from request body`, {
+        urlPreview: normalizedUrl.substring(0, 60)
+      });
+    }
+
+    // Source 2: Fallback to session cache (for More Options: Extract/Remix/Story)
     if (!normalizedUrl && subscriber_id) {
       const session = await sessionManager.getSession(subscriber_id);
       if (session?.lastReelUrl) {
         normalizedUrl = session.lastReelUrl;
-        logger.info(`[V2:${requestId}] Using cached reel from session: ${normalizedUrl.substring(0, 50)}`);
+        reelSource = 'session';
+        logger.info(`[V2:${requestId}] Reel URL from session cache (fallback)`, {
+          urlPreview: normalizedUrl.substring(0, 60),
+          sessionAge: session.lastActivityAt
+        });
       }
     }
 
+    // Final check: If no reel URL found from any source, return user-friendly error
     if (!normalizedUrl) {
+      logger.warn(`[V2:${requestId}] No reel URL found in request or session`, {
+        subscriberId: subscriber_id,
+        hasUserIdea: !!user_idea
+      });
       res.status(400).json({
         success: false,
-        message: 'reel_url is required (or send a reel first)'
+        message: '📹 Please send a Reel link first!',
+        code: 'MISSING_REEL_URL',
+        hint: 'Send an Instagram Reel link to get started'
       });
       return;
     }
+
+    logger.info(`[V2:${requestId}] Reel URL resolved`, {
+      source: reelSource,
+      urlPreview: normalizedUrl.substring(0, 50)
+    });
 
     // 4. Parse user_idea for special commands
     const parsed = parseUserIdea(user_idea || '');

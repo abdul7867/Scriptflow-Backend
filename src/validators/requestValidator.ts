@@ -10,7 +10,7 @@ import { z } from 'zod';
 // Converts unreplaced {{...}} placeholders to undefined
 // This allows graceful fallback when custom fields aren't set
 // ============================================
-const manyChatPreprocess = <T>(schema: z.ZodType<T>) => 
+const manyChatPreprocess = <T>(schema: z.ZodType<T>) =>
   z.preprocess((val) => {
     // If it's a string that looks like an unreplaced ManyChat variable, treat as undefined
     if (typeof val === 'string' && val.startsWith('{{') && val.endsWith('}}')) {
@@ -102,9 +102,11 @@ const modeSchema = manyChatPreprocess(
 
 export const scriptGenerationSchema = z.object({
   subscriber_id: subscriberIdSchema,
-  reel_url: instagramReelUrlSchema,
+  // UPDATED: reel_url is now optional to support "More Options" flows (extract, remix, story formats)
+  // When missing, controller falls back to: 1) ManyChat field, 2) Redis session
+  reel_url: manyChatPreprocess(instagramReelUrlSchema.optional()),
   user_idea: userIdeaSchema,
-  
+
   // Optional hints (preserve video originality)
   tone_hint: toneHintSchema,
   language_hint: languageHintSchema,
@@ -120,10 +122,10 @@ export type ScriptGenerationRequest = z.infer<typeof scriptGenerationSchema>;
 export const feedbackSchema = z.object({
   subscriber_id: subscriberIdSchema,
   request_hash: z.string().min(1, "Request hash is required"),
-  
+
   // Overall rating
   overall_rating: z.number().min(1).max(5).optional(),
-  
+
   // Section-level feedback
   section_feedback: z.object({
     hook: z.object({
@@ -139,10 +141,10 @@ export const feedbackSchema = z.object({
       regeneration_reason: z.string().max(200).optional()
     }).optional()
   }).optional(),
-  
+
   // Free text feedback
   feedback_text: z.string().max(1000).optional(),
-  
+
   // Video performance (if user provides)
   video_performance: z.object({
     views: z.number().optional(),

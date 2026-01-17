@@ -33,13 +33,13 @@ const HOOK_ONLY_PATTERNS = [
  */
 function detectModeFromIdea(userIdea: string): GenerationMode {
   const normalizedIdea = userIdea.toLowerCase().trim();
-  
+
   for (const pattern of HOOK_ONLY_PATTERNS) {
     if (pattern.test(normalizedIdea)) {
       return 'hook_only';
     }
   }
-  
+
   return 'full';
 }
 
@@ -49,7 +49,7 @@ function detectModeFromIdea(userIdea: string): GenerationMode {
  */
 function cleanUserIdea(userIdea: string): string {
   let cleaned = userIdea;
-  
+
   // Remove hook-only keywords but keep the rest of the idea
   const removePatterns = [
     /\bhook\s*only\b/gi,
@@ -58,11 +58,11 @@ function cleanUserIdea(userIdea: string): string {
     /\bgive\s*me\s*(the\s*)?hook\s*(for\s*)?/gi,
     /🎣\s*/g
   ];
-  
+
   for (const pattern of removePatterns) {
     cleaned = cleaned.replace(pattern, '');
   }
-  
+
   // Clean up extra whitespace
   return cleaned.trim().replace(/\s+/g, ' ');
 }
@@ -95,24 +95,34 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
     }
 
     const { subscriber_id, reel_url: rawReelUrl, user_idea: rawUserIdea, tone_hint, language_hint, mode: explicitMode } = parseResult.data;
-    
+
+    // LEGACY V1: reel_url is required (no session fallback like V2)
+    if (!rawReelUrl) {
+      logger.warn(`[${requestId}] Legacy V1: Missing reel_url`);
+      return res.status(400).json({
+        status: 'error',
+        code: 'MISSING_REEL_URL',
+        message: 'reel_url is required'
+      });
+    }
+
     // 2. SMART MODE DETECTION
     // Priority: explicit mode > detected from user_idea > default 'full'
-    const detectedMode = detectModeFromIdea(rawUserIdea);
+    const detectedMode = detectModeFromIdea(rawUserIdea || '');
     const finalMode: GenerationMode = explicitMode || detectedMode;
-    
+
     // Clean the user_idea if hook-only mode was detected from keywords
-    const user_idea = detectedMode === 'hook_only' && !explicitMode 
-      ? cleanUserIdea(rawUserIdea) 
-      : rawUserIdea;
-    
+    const user_idea = detectedMode === 'hook_only' && !explicitMode
+      ? cleanUserIdea(rawUserIdea || '')
+      : (rawUserIdea || '');
+
     if (detectedMode === 'hook_only' && !explicitMode) {
       logger.info(`[${requestId}] Smart mode detection: hook_only (detected from keywords)`);
     }
-    
+
     // EXPERT: Normalize URL immediately to ensure consistency across DB and Caches
     const reel_url = normalizeInstagramUrl(rawReelUrl);
-    
+
     // Tier 2 cache key: includes all parameters for full script matching
     const requestHash = generateRequestHash(subscriber_id, reel_url, user_idea, language_hint || undefined, tone_hint || undefined, finalMode);
 
@@ -132,11 +142,11 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
 
 
     // 3. Check if job already exists (prevent duplicate processing)
-    const existingJob = await Job.findOne({ 
-      requestHash, 
-      status: { $in: ['queued', 'processing'] } 
+    const existingJob = await Job.findOne({
+      requestHash,
+      status: { $in: ['queued', 'processing'] }
     });
-    
+
     if (existingJob) {
       logger.info(`Job already in queue: ${existingJob.jobId}`);
       return res.json({
@@ -181,7 +191,7 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     logger.error(`[${requestId}] Failed to queue job:`, error);
-    
+
     res.status(500).json({
       status: 'error',
       code: 'QUEUE_ERROR',
@@ -196,9 +206,9 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
 export const getJobStatusHandler = async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
-    
+
     const job = await Job.findOne({ jobId }).lean();
-    
+
     if (!job) {
       return res.status(404).json({
         status: 'error',
