@@ -80,16 +80,34 @@ function createRateLimiter() {
 // Rate limiter is created lazily to give Redis time to connect
 // In production, Redis should connect before first request
 let _rateLimiter: ReturnType<typeof rateLimit> | null = null;
+let _lastRedisState: boolean = false; // Track Redis state to detect reconnections
 
 // Create the rate limiter instance outside of request handler
 // to avoid express-rate-limit validation warning
 export function initRateLimiter(): void {
   if (!_rateLimiter) {
     _rateLimiter = createRateLimiter();
+    _lastRedisState = isRedisConnected();
   }
 }
 
+/**
+ * Rate limiter middleware with automatic Redis reconnection handling
+ * 
+ * PRODUCTION FIX: If Redis was disconnected and reconnects, we recreate
+ * the rate limiter to use Redis store again. This prevents rate limit
+ * bypass after Redis reconnection.
+ */
 export const rateLimiter = (req: any, res: any, next: any) => {
+  const currentRedisState = isRedisConnected();
+
+  // Detect Redis reconnection - recreate limiter to use Redis store
+  if (currentRedisState && !_lastRedisState) {
+    logger.info('Rate limiter: Redis reconnected, recreating with Redis store');
+    _rateLimiter = createRateLimiter();
+  }
+  _lastRedisState = currentRedisState;
+
   // If not initialized yet, create it (fallback)
   if (!_rateLimiter) {
     _rateLimiter = createRateLimiter();
@@ -133,28 +151,40 @@ export const mongoSanitizeMiddleware = mongoSanitize({
 /**
  * API Key Authentication Middleware
  * For protected admin endpoints
+ * 
+ * SECURITY: Defaults to DENY access unless:
+ * 1. Valid ADMIN_API_KEY is configured and matches, OR
+ * 2. Explicitly in development mode (NODE_ENV === 'development')
  */
 export const apiKeyAuth = (req: Request, res: Response, next: NextFunction) => {
   const apiKey = req.headers['x-api-key'] as string;
   const validApiKey = process.env.ADMIN_API_KEY;
+  const nodeEnv = process.env.NODE_ENV || 'production'; // Default to production for security
 
-  if (!validApiKey) {
-    // SECURITY: In production, API key must be configured
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('ADMIN_API_KEY not configured in production!');
-      return res.status(500).json({
-        status: 'error',
-        code: 'CONFIG_ERROR',
-        message: 'Server configuration error'
-      });
+  // SECURITY: If no API key configured
+  if (!validApiKey || validApiKey.trim() === '') {
+    // ONLY allow bypass in explicit development mode
+    if (nodeEnv === 'development') {
+      logger.warn('⚠️ Admin endpoint accessed without API key (DEVELOPMENT MODE ONLY)');
+      return next();
     }
-    // Only allow unauthenticated access in development
-    logger.warn('Admin endpoint accessed without API key (dev mode)');
-    return next();
+
+    // In production or any other mode, deny access
+    logger.error('CRITICAL: ADMIN_API_KEY not configured! Denying admin endpoint access.');
+    return res.status(500).json({
+      status: 'error',
+      code: 'CONFIG_ERROR',
+      message: 'Server configuration error'
+    });
   }
 
+  // Validate provided API key
   if (!apiKey || apiKey !== validApiKey) {
-    logger.warn(`Unauthorized API access attempt from ${req.ip}`);
+    logger.warn(`Unauthorized API access attempt from ${req.ip}`, {
+      path: req.path,
+      hasKey: !!apiKey,
+      fingerprint: (req as any).fingerprint
+    });
     return res.status(401).json({
       status: 'error',
       code: 'UNAUTHORIZED',
@@ -232,7 +262,7 @@ export const securityLogger = (req: Request, res: Response, next: NextFunction) 
     req.url.includes('..'),
     req.url.includes('<script'),
     req.url.includes('javascript:'),
-    Object.values(req.body || {}).some(v => 
+    Object.values(req.body || {}).some(v =>
       typeof v === 'string' && (v.includes('<script') || v.includes('javascript:'))
     )
   ];

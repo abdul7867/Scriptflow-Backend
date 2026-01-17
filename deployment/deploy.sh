@@ -77,11 +77,12 @@ print_status "All required secrets found"
 echo ""
 echo "Validating .env configuration..."
 
-REQUIRED_VARS=("MONGODB_URI" "REDIS_URL" "GCP_PROJECT_ID" "IMGBB_API_KEY" "MANYCHAT_API_KEY")
+# CRITICAL: These variables must be set for production security and functionality
+REQUIRED_VARS=("MONGODB_URI" "REDIS_URL" "GCP_PROJECT_ID" "IMGBB_API_KEY" "MANYCHAT_API_KEY" "ADMIN_API_KEY" "BASE_URL")
 MISSING_VARS=0
 
 for VAR in "${REQUIRED_VARS[@]}"; do
-    if ! grep -q "^${VAR}=" "$SECRETS_DIR/.env"; then
+    if ! grep -q "^${VAR}=.\+" "$SECRETS_DIR/.env"; then
         print_error "Missing required variable in .env: $VAR"
         MISSING_VARS=1
     fi
@@ -90,6 +91,10 @@ done
 if [ $MISSING_VARS -eq 1 ]; then
     echo ""
     echo "Add the missing variables to $SECRETS_DIR/.env"
+    echo ""
+    echo "CRITICAL VARIABLES:"
+    echo "  ADMIN_API_KEY - Required for admin endpoint security (generate with: openssl rand -hex 32)"
+    echo "  BASE_URL      - Required for script sharing URLs (e.g., https://your-domain.com)"
     exit 1
 fi
 
@@ -109,6 +114,11 @@ if [ $V2_MISSING -eq 1 ]; then
     echo "        MANYCHAT_CAROUSEL_HOOK_FIELD_ID=<field_id>"
     echo "        MANYCHAT_CAROUSEL_BODY_FIELD_ID=<field_id>"
     echo "        MANYCHAT_CAROUSEL_CTA_FIELD_ID=<field_id>"
+fi
+
+# Check for Cloudinary (optional alternative to imgbb)
+if ! grep -q "^CLOUDINARY_URL=.\+" "$SECRETS_DIR/.env"; then
+    print_status "Using imgbb for image hosting (CLOUDINARY_URL not configured)"
 fi
 
 print_status ".env validation passed"

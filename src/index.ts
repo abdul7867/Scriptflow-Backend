@@ -57,6 +57,32 @@ if (process.env.INSTAGRAM_COOKIES) {
  */
 async function bootstrap() {
   try {
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRODUCTION CONFIGURATION VALIDATION
+    // Warn about missing critical configuration at startup
+    // ═══════════════════════════════════════════════════════════════════════
+    if (config.NODE_ENV === 'production') {
+      const warnings: string[] = [];
+
+      if (!process.env.ADMIN_API_KEY || process.env.ADMIN_API_KEY.trim() === '') {
+        warnings.push('⚠️  ADMIN_API_KEY not set - admin endpoints will be inaccessible');
+      }
+
+      if (!config.BASE_URL || config.BASE_URL.trim() === '') {
+        warnings.push('⚠️  BASE_URL not set - script sharing URLs will not work');
+      }
+
+      if (!config.MANYCHAT_API_KEY || config.MANYCHAT_API_KEY.trim() === '') {
+        warnings.push('⚠️  MANYCHAT_API_KEY not set - ManyChat integration will fail');
+      }
+
+      if (warnings.length > 0) {
+        logger.warn('═══ PRODUCTION CONFIGURATION WARNINGS ═══');
+        warnings.forEach(w => logger.warn(w));
+        logger.warn('═══════════════════════════════════════════');
+      }
+    }
+
     // 1. Connect to MongoDB
     logger.info('Connecting to MongoDB...');
     await connectDB();

@@ -247,10 +247,57 @@ export async function healthGate(
         return next();
     }
 
-    // Always allow webhook/API endpoints to pass through - ManyChat needs a response
-    // The services have their own rate limiting and will queue jobs appropriately
-    // V2 and V3 both use BullMQ queue which handles backpressure
-    if (req.path === '/api/v3/webhook' || req.path === '/api/v2/generate-script') {
+    // ─────────────────────────────────────────────────────────────────────────
+    // WEBHOOK ENDPOINTS: Allow with overload protection
+    // These endpoints are critical for ManyChat integration, so we use higher thresholds
+    // before rejecting. Jobs queue has its own backpressure mechanism.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (req.path === '/api/v3/webhook' || req.path === '/api/v2/generate-script' || req.path.startsWith('/api/v2/')) {
+        // Quick memory check - only reject at extreme levels
+        const usage = process.memoryUsage();
+        const heapPercent = usage.heapUsed / usage.heapTotal;
+
+        if (heapPercent > 0.95) { // 95% - critical memory level
+            logger.error('Health gate: Rejecting webhook due to CRITICAL memory', {
+                path: req.path,
+                heapPercent: `${Math.round(heapPercent * 100)}%`,
+            });
+            res.status(503).json({
+                status: 'error',
+                code: 'SYSTEM_CRITICAL',
+                message: '🔥 System is critically overloaded. Please try again in 2 minutes.',
+                retryAfter: 120,
+            });
+            return;
+        }
+
+        // Quick queue depth check
+        try {
+            const stats = await getQueueStats();
+            const queueDepth = (stats?.waiting || 0) + (stats?.delayed || 0);
+
+            // Higher threshold for webhooks (200 vs 150 for normal requests)
+            if (queueDepth > 200) {
+                logger.warn('Health gate: Rejecting webhook due to extreme queue depth', {
+                    path: req.path,
+                    queueDepth,
+                });
+                res.status(503).json({
+                    status: 'error',
+                    code: 'QUEUE_FULL',
+                    message: '📋 Too many requests in queue. Please try again in 2 minutes.',
+                    retryAfter: 120,
+                    queueDepth,
+                });
+                return;
+            }
+        } catch (err) {
+            // Queue stats unavailable - allow through (fail open for webhooks)
+            logger.warn('Health gate: Could not check queue for webhook', {
+                error: (err as Error).message
+            });
+        }
+
         return next();
     }
 

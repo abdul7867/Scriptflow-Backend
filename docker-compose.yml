@@ -9,9 +9,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Memory optimized for t3.micro (1GB RAM) - heap 640MB, expose GC for memory governor
-      - NODE_OPTIONS=--max-old-space-size=640 --expose-gc
-      - MEMORY_HEAP_LIMIT_MB=640
+      # Memory optimized for t3.micro (1GB RAM) - heap 512MB, expose GC for memory governor
+      # CRITICAL: These values MUST match Dockerfile defaults and memoryGovernor config
+      - NODE_OPTIONS=--max-old-space-size=512 --expose-gc
+      - MEMORY_HEAP_LIMIT_MB=512
       # yt-dlp filesystem configuration (prevents read-only errors)
       - HOME=/app/temp
       - XDG_CACHE_HOME=/app/temp/.cache
@@ -52,6 +53,8 @@ services:
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
       # Image Provider: imgbb (recommended for ManyChat) or cloudinary
       - IMAGE_PROVIDER=${IMAGE_PROVIDER:-imgbb}
+      # Cloudinary configuration (optional, if using cloudinary provider)
+      - CLOUDINARY_URL=${CLOUDINARY_URL:-}
       # User limits
       - USER_RATE_LIMIT=${USER_RATE_LIMIT:-10}
       - MAX_BETA_USERS=${MAX_BETA_USERS:-100}

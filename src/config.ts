@@ -73,11 +73,15 @@ export const config = cleanEnv(process.env, {
   FFMPEG_PATH: str({ desc: 'Path to FFmpeg executable', default: ffmpegPath || '' }),
   FFPROBE_PATH: str({ desc: 'Path to FFprobe executable', default: ffprobePath || '' }),
 
-  // Security (optional)
-  ADMIN_API_KEY: str({ desc: 'API key for admin endpoints', default: '' }),
+  // Security (optional in development, REQUIRED in production)
+  ADMIN_API_KEY: str({ desc: 'API key for admin endpoints (REQUIRED in production)', default: '' }),
 
   // Public URLs
-  BASE_URL: str({ desc: 'Base URL for public links (e.g., https://yourapp.onrender.com)', default: '' }),
+  // IMPORTANT: Required in production for script sharing URLs to work correctly
+  BASE_URL: str({
+    desc: 'Base URL for public links (e.g., https://yourapp.onrender.com)',
+    default: process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000'
+  }),
 
   // Analysis
   ANALYSIS_MODE: str({ choices: ['audio', 'frames', 'hybrid'], default: 'hybrid' }),

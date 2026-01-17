@@ -112,6 +112,34 @@ print_warning "Uploading sensitive files to secrets/ folder..."
 
 # Upload .env
 if [ -f "$LOCAL_DIR/.env" ]; then
+    # Validate critical variables before upload
+    echo ""
+    echo "Validating .env for production..."
+    MISSING_CRITICAL=0
+    
+    if ! grep -q "^ADMIN_API_KEY=.\+" "$LOCAL_DIR/.env"; then
+        print_warning "ADMIN_API_KEY not set in .env - admin endpoints will be inaccessible"
+        MISSING_CRITICAL=1
+    fi
+    
+    if ! grep -q "^BASE_URL=.\+" "$LOCAL_DIR/.env"; then
+        print_warning "BASE_URL not set in .env - script sharing URLs won't work"
+        MISSING_CRITICAL=1
+    fi
+    
+    if [ $MISSING_CRITICAL -eq 1 ]; then
+        echo ""
+        echo "Add these critical variables to your .env:"
+        echo "  ADMIN_API_KEY=<generate with: openssl rand -hex 32>"
+        echo "  BASE_URL=https://your-domain.com"
+        echo ""
+        read -p "Continue anyway? (y/N): " CONTINUE
+        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+            print_error "Deployment cancelled. Update your .env and try again."
+            exit 1
+        fi
+    fi
+    
     scp -i "$PEM_KEY" "$LOCAL_DIR/.env" "$EC2_USER@$EC2_IP:$REMOTE_DIR/secrets/.env"
     print_status ".env uploaded to secrets/"
 elif [ -f "$LOCAL_DIR/secrets/.env" ]; then

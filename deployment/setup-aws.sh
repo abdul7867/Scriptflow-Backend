@@ -33,6 +33,8 @@ if [ ! -f .env ]; then
     echo "  - GCP_PROJECT_ID (set to: abdul-content-creation)"
     echo "  - MANYCHAT_API_KEY"
     echo "  - IMGBB_API_KEY"
+    echo "  - ADMIN_API_KEY (generate with: openssl rand -hex 32)"
+    echo "  - BASE_URL (e.g., https://your-domain.com)"
     echo ""
     exit 1
 fi

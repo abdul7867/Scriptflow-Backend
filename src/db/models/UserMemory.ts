@@ -20,52 +20,52 @@ export type ToneHint = 'professional' | 'funny' | 'provocative' | 'educational' 
 export interface IUserMemory extends Document {
   /** ManyChat subscriber ID - primary key */
   subscriberId: string;
-  
+
   /** Learned preferences from usage patterns */
   preferences: {
     /** Most commonly requested/successful tone */
     preferredTone?: ToneHint;
-    
+
     /** Content niches user frequently creates for */
     preferredNiches: string[];
-    
+
     /** Preferred dialogue language */
     preferredLanguage?: string;
-    
+
     /** Average script length user prefers (chars) */
     avgScriptLength: number;
-    
+
     /** Whether user typically wants full scripts or hooks only */
     preferredMode: 'full' | 'hook_only' | 'mixed';
   };
-  
+
   /** Usage statistics for calibration */
   stats: {
     /** Total scripts generated */
     totalGenerations: number;
-    
+
     /** Total redo/variation requests */
     totalRedos: number;
-    
+
     /** Average rating this user gives (for calibration) */
     avgRatingGiven: number;
-    
+
     /** Number of ratings submitted */
     ratingCount: number;
-    
+
     /** Total positive feedbacks */
     positiveCount: number;
-    
+
     /** Total negative feedbacks */
     negativeCount: number;
-    
+
     /** Last active timestamp */
     lastActiveAt: Date;
-    
+
     /** First seen timestamp */
     firstSeenAt: Date;
   };
-  
+
   /** Recent generation history for context */
   recentHistory: Array<{
     reelUrl: string;
@@ -75,10 +75,10 @@ export interface IUserMemory extends Document {
     wasRedo: boolean;
     createdAt: Date;
   }>;
-  
+
   /** Blocked reels (user explicitly said don't use) */
   blockedReels?: string[];
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,28 +89,28 @@ export interface IUserMemory extends Document {
 
 const UserMemorySchema = new Schema<IUserMemory>(
   {
-    subscriberId: { 
-      type: String, 
-      required: true, 
+    subscriberId: {
+      type: String,
+      required: true,
       unique: true,
       index: true,
     },
-    
+
     preferences: {
-      preferredTone: { 
-        type: String, 
-        enum: ['professional', 'funny', 'provocative', 'educational', 'casual'] 
+      preferredTone: {
+        type: String,
+        enum: ['professional', 'funny', 'provocative', 'educational', 'casual']
       },
       preferredNiches: [{ type: String }],
       preferredLanguage: { type: String },
       avgScriptLength: { type: Number, default: 0 },
-      preferredMode: { 
-        type: String, 
-        enum: ['full', 'hook_only', 'mixed'], 
-        default: 'full' 
+      preferredMode: {
+        type: String,
+        enum: ['full', 'hook_only', 'mixed'],
+        default: 'full'
       },
     },
-    
+
     stats: {
       totalGenerations: { type: Number, default: 0 },
       totalRedos: { type: Number, default: 0 },
@@ -121,7 +121,7 @@ const UserMemorySchema = new Schema<IUserMemory>(
       lastActiveAt: { type: Date, default: Date.now },
       firstSeenAt: { type: Date, default: Date.now },
     },
-    
+
     recentHistory: [{
       reelUrl: { type: String, required: true },
       idea: { type: String, required: true },
@@ -130,7 +130,7 @@ const UserMemorySchema = new Schema<IUserMemory>(
       wasRedo: { type: Boolean, default: false },
       createdAt: { type: Date, default: Date.now },
     }],
-    
+
     blockedReels: [{ type: String }],
   },
   {
@@ -149,13 +149,21 @@ UserMemorySchema.index({ 'stats.lastActiveAt': -1 });
 // Cleanup of inactive users
 UserMemorySchema.index({ 'stats.lastActiveAt': 1 });
 
+// TTL index: Automatically delete inactive users after 90 days
+// This prevents unbounded collection growth as user base expands
+// Users who re-engage will get a fresh UserMemory record
+UserMemorySchema.index(
+  { 'stats.lastActiveAt': 1 },
+  { expireAfterSeconds: 7776000 } // 90 days = 90 * 24 * 60 * 60
+);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PRE-SAVE HOOK - CAP HISTORY SIZE
 // ═══════════════════════════════════════════════════════════════════════════
 
 const MAX_HISTORY_SIZE = 50;
 
-UserMemorySchema.pre('save', function() {
+UserMemorySchema.pre('save', function () {
   // Cap recentHistory to prevent unbounded growth
   if (this.recentHistory && this.recentHistory.length > MAX_HISTORY_SIZE) {
     this.recentHistory = this.recentHistory.slice(0, MAX_HISTORY_SIZE);
@@ -169,11 +177,11 @@ UserMemorySchema.pre('save', function() {
 /**
  * Get or create user memory
  */
-UserMemorySchema.statics.getOrCreate = async function(
+UserMemorySchema.statics.getOrCreate = async function (
   subscriberId: string
 ): Promise<IUserMemory> {
   let memory = await this.findOne({ subscriberId });
-  
+
   if (!memory) {
     memory = await this.create({
       subscriberId,
@@ -195,14 +203,14 @@ UserMemorySchema.statics.getOrCreate = async function(
       recentHistory: [],
     });
   }
-  
+
   return memory;
 };
 
 /**
  * Record a new generation
  */
-UserMemorySchema.statics.recordGeneration = async function(
+UserMemorySchema.statics.recordGeneration = async function (
   subscriberId: string,
   reelUrl: string,
   idea: string,
@@ -210,14 +218,14 @@ UserMemorySchema.statics.recordGeneration = async function(
   wasRedo: boolean = false
 ): Promise<void> {
   const memory = await (this as any).getOrCreate(subscriberId);
-  
+
   // Update stats
   memory.stats.totalGenerations += 1;
   if (wasRedo) {
     memory.stats.totalRedos += 1;
   }
   memory.stats.lastActiveAt = new Date();
-  
+
   // Add to history (keep last 10)
   memory.recentHistory.unshift({
     reelUrl,
@@ -226,46 +234,46 @@ UserMemorySchema.statics.recordGeneration = async function(
     wasRedo,
     createdAt: new Date(),
   });
-  
+
   // Trim history to last 50 (pre-save hook also enforces this)
   if (memory.recentHistory.length > 50) {
     memory.recentHistory = memory.recentHistory.slice(0, 50);
   }
-  
+
   await memory.save();
 };
 
 /**
  * Record feedback
  */
-UserMemorySchema.statics.recordFeedback = async function(
+UserMemorySchema.statics.recordFeedback = async function (
   subscriberId: string,
   scriptId: string,
   rating?: number,
   isPositive?: boolean
 ): Promise<void> {
   const memory = await (this as any).getOrCreate(subscriberId);
-  
+
   // Update rating stats
   if (rating !== undefined) {
     const totalRating = memory.stats.avgRatingGiven * memory.stats.ratingCount;
     memory.stats.ratingCount += 1;
     memory.stats.avgRatingGiven = (totalRating + rating) / memory.stats.ratingCount;
-    
+
     // Update history entry
     const historyEntry = memory.recentHistory.find((h: any) => h.scriptId === scriptId);
     if (historyEntry) {
       historyEntry.rating = rating;
     }
   }
-  
+
   // Track positive/negative
   if (isPositive === true) {
     memory.stats.positiveCount += 1;
   } else if (isPositive === false) {
     memory.stats.negativeCount += 1;
   }
-  
+
   memory.stats.lastActiveAt = new Date();
   await memory.save();
 };
@@ -273,14 +281,14 @@ UserMemorySchema.statics.recordFeedback = async function(
 /**
  * Update learned preferences based on usage patterns
  */
-UserMemorySchema.statics.updatePreferences = async function(
+UserMemorySchema.statics.updatePreferences = async function (
   subscriberId: string,
   updates: Partial<IUserMemory['preferences']>
 ): Promise<void> {
   await this.updateOne(
     { subscriberId },
-    { 
-      $set: { 
+    {
+      $set: {
         ...Object.entries(updates).reduce((acc, [key, value]) => {
           acc[`preferences.${key}`] = value;
           return acc;
@@ -295,15 +303,15 @@ UserMemorySchema.statics.updatePreferences = async function(
 /**
  * Learn preferred tone from successful generations
  */
-UserMemorySchema.statics.learnTone = async function(
+UserMemorySchema.statics.learnTone = async function (
   subscriberId: string,
   tone: ToneHint,
   wasSuccessful: boolean
 ): Promise<void> {
   if (!wasSuccessful) return;
-  
+
   const memory = await (this as any).getOrCreate(subscriberId);
-  
+
   // Simple: if user rated highly, adopt their tone
   // More sophisticated: track tone frequency and success rate
   if (!memory.preferences.preferredTone) {
@@ -315,15 +323,15 @@ UserMemorySchema.statics.learnTone = async function(
 /**
  * Learn preferred niche from content patterns
  */
-UserMemorySchema.statics.learnNiche = async function(
+UserMemorySchema.statics.learnNiche = async function (
   subscriberId: string,
   niche: string
 ): Promise<void> {
   if (!niche || niche === 'general') return;
-  
+
   await this.updateOne(
     { subscriberId },
-    { 
+    {
       $addToSet: { 'preferences.preferredNiches': niche },
       $set: { 'stats.lastActiveAt': new Date() }
     },
@@ -334,7 +342,7 @@ UserMemorySchema.statics.learnNiche = async function(
 /**
  * Get user context for personalization
  */
-UserMemorySchema.statics.getUserContext = async function(
+UserMemorySchema.statics.getUserContext = async function (
   subscriberId: string
 ): Promise<{
   tier: string;
@@ -345,10 +353,10 @@ UserMemorySchema.statics.getUserContext = async function(
   recentReels: string[];
 }> {
   const memory = await (this as any).getOrCreate(subscriberId);
-  
+
   return {
-    tier: memory.stats.totalGenerations > 50 ? 'power' : 
-          memory.stats.totalGenerations > 10 ? 'regular' : 'new',
+    tier: memory.stats.totalGenerations > 50 ? 'power' :
+      memory.stats.totalGenerations > 10 ? 'regular' : 'new',
     totalGenerations: memory.stats.totalGenerations,
     avgRating: memory.stats.avgRatingGiven,
     preferredTone: memory.preferences.preferredTone,
@@ -364,20 +372,20 @@ UserMemorySchema.statics.getUserContext = async function(
 interface UserMemoryModel extends Model<IUserMemory> {
   getOrCreate(subscriberId: string): Promise<IUserMemory>;
   recordGeneration(
-    subscriberId: string, 
-    reelUrl: string, 
-    idea: string, 
-    scriptId: string, 
+    subscriberId: string,
+    reelUrl: string,
+    idea: string,
+    scriptId: string,
     wasRedo?: boolean
   ): Promise<void>;
   recordFeedback(
-    subscriberId: string, 
-    scriptId: string, 
-    rating?: number, 
+    subscriberId: string,
+    scriptId: string,
+    rating?: number,
     isPositive?: boolean
   ): Promise<void>;
   updatePreferences(
-    subscriberId: string, 
+    subscriberId: string,
     updates: Partial<IUserMemory['preferences']>
   ): Promise<void>;
   learnTone(subscriberId: string, tone: ToneHint, wasSuccessful: boolean): Promise<void>;
