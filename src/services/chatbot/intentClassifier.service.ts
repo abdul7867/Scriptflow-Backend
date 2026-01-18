@@ -18,6 +18,7 @@ export enum UserIntent {
     NEW_REEL = 'NEW_REEL',
     SUBMIT_IDEA = 'SUBMIT_IDEA',
     VARIATION = 'VARIATION',
+    REMIX = 'REMIX',  // NEW: Dedicated remix (shorter, longer, funnier, etc.)
     COPY = 'COPY',
     EXTRACT_ORIGINAL = 'EXTRACT_ORIGINAL',
     HELP = 'HELP',
@@ -58,26 +59,40 @@ const REEL_URL_PATTERNS: RegExp[] = [
 // ═══════════════════════════════════════════════════════════════════════════
 
 const VARIATION_KEYWORDS: string[] = [
-    // Redo/retry variations
+    // Redo/retry variations (same idea, different output)
     'redo', 'again', 'another', 'different', 'variation', 'new version',
     'try again', 'regenerate', 'rewrite', 'remake', 'retry', 'once more',
     'one more', 'another one', 'make another', 'give me another',
     'create another', 'generate another', 'do it again', 'do again',
     'more', 'next', 'alternative', 'alt',
-    // Remix keywords (user wants to change the style)
-    'remix', 'rework', 'revise', 'modify', 'change', 'edit',
-    // Specific modifications
-    'shorter', 'longer', 'funnier', 'serious', 'casual', 'professional',
-    'simpler', 'detailed', 'engaging', 'punchy', 'snappy',
-    // Emojis
-    '🔄', '🔁', '♻️', '✏️',
+    // Emojis for variation
+    '🔄', '🔁', '♻️',
 ];
 
 const VARIATION_EXACT_PHRASES: string[] = [
     'redo', 'again', 'another', 'more', 'next', 'retry',
     '1 more', '1more', 'one more', 'onemore',
-    // Remix exact matches
-    'remix', 'shorter', 'longer', 'funnier',
+];
+
+// NEW: Dedicated remix keywords - transform the script style/length/tone
+const REMIX_KEYWORDS: string[] = [
+    // Transformation keywords
+    'remix', 'rework', 'revise', 'modify', 'transform',
+    // Length modifications
+    'shorter', 'longer', 'brief', 'detailed', 'expand', 'condense',
+    // Tone modifications  
+    'funnier', 'serious', 'casual', 'professional', 'edgy', 'friendly',
+    // Style modifications
+    'simpler', 'engaging', 'punchy', 'snappy', 'dramatic',
+    // Direct commands
+    'make it shorter', 'make it longer', 'make it funnier',
+    // Edit emoji
+    '✏️',
+];
+
+const REMIX_EXACT_PHRASES: string[] = [
+    'remix', 'shorter', 'longer', 'funnier', 'simpler', 'edgy',
+    'casual', 'professional', 'punchy', 'brief',
 ];
 
 const COPY_KEYWORDS: string[] = [
@@ -250,6 +265,38 @@ export function matchesVariationIntent(normalizedMessage: string): boolean {
     });
 }
 
+// NEW: Check for remix intent (shorter, longer, funnier, etc.)
+export function matchesRemixIntent(normalizedMessage: string): boolean {
+    if (REMIX_EXACT_PHRASES.includes(normalizedMessage)) {
+        return true;
+    }
+
+    return REMIX_KEYWORDS.some(keyword => {
+        const normalizedKeyword = keyword.toLowerCase();
+        const regex = new RegExp(`\\b${escapeRegExp(normalizedKeyword)}\\b`, 'i');
+        return regex.test(normalizedMessage);
+    });
+}
+
+// Helper to extract remix type from message
+export function extractRemixType(normalizedMessage: string): string {
+    const lengthTypes = ['shorter', 'longer', 'brief', 'detailed', 'expand', 'condense'];
+    const toneTypes = ['funnier', 'serious', 'casual', 'professional', 'edgy', 'friendly'];
+    const styleTypes = ['simpler', 'engaging', 'punchy', 'snappy', 'dramatic'];
+
+    for (const type of lengthTypes) {
+        if (normalizedMessage.includes(type)) return type;
+    }
+    for (const type of toneTypes) {
+        if (normalizedMessage.includes(type)) return type;
+    }
+    for (const type of styleTypes) {
+        if (normalizedMessage.includes(type)) return type;
+    }
+
+    return 'remix'; // Default remix type
+}
+
 export function matchesCopyIntent(normalizedMessage: string): boolean {
     if (COPY_EXACT_PHRASES.includes(normalizedMessage)) {
         return true;
@@ -307,6 +354,12 @@ export function getValidStatesForIntent(intent: UserIntent): ChatbotState[] {
             ];
 
         case UserIntent.VARIATION:
+            return [
+                ChatbotState.AWAITING_FEEDBACK,
+                ChatbotState.REDO_REQUESTED,
+            ];
+
+        case UserIntent.REMIX:
             return [
                 ChatbotState.AWAITING_FEEDBACK,
                 ChatbotState.REDO_REQUESTED,
@@ -387,7 +440,26 @@ export class IntentClassifier {
             };
         }
 
-        // Priority 2: Check for variation intent
+        // Priority 2: Check for REMIX intent (shorter, longer, funnier - BEFORE variation)
+        if (matchesRemixIntent(normalizedMessage)) {
+            const intent = UserIntent.REMIX;
+            const validForState = isIntentValidForState(intent, userState);
+            const remixType = extractRemixType(normalizedMessage);
+
+            return {
+                intent,
+                reason: `Message matches remix keyword: ${remixType}`,
+                extractedData: {
+                    normalizedMessage,
+                    userIdea: remixType, // Store remix type as userIdea for handler
+                },
+                matchedRule: 'REMIX_KEYWORD',
+                validForState,
+                validInStates: validForState ? undefined : getValidStatesForIntent(intent),
+            };
+        }
+
+        // Priority 3: Check for variation intent
         if (matchesVariationIntent(normalizedMessage)) {
             const intent = UserIntent.VARIATION;
             const validForState = isIntentValidForState(intent, userState);

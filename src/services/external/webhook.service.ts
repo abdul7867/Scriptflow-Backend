@@ -110,6 +110,7 @@ const INTENT_TO_EVENT: Record<UserIntent, ChatbotEvent | null> = {
     [UserIntent.NEW_REEL]: ChatbotEvent.SUBMIT_REEL,
     [UserIntent.SUBMIT_IDEA]: ChatbotEvent.SUBMIT_IDEA,
     [UserIntent.VARIATION]: ChatbotEvent.REQUEST_REDO,
+    [UserIntent.REMIX]: ChatbotEvent.REQUEST_REDO, // NEW: Remix uses same transition as variation
     [UserIntent.COPY]: null, // COPY doesn't require state transition, just action
     [UserIntent.EXTRACT_ORIGINAL]: null, // EXTRACT doesn't require state transition, queues job
     [UserIntent.HELP]: null, // HELP doesn't require state transition, just send welcome
@@ -306,6 +307,9 @@ class WebhookService {
 
                 case UserIntent.VARIATION:
                     return this.handleVariation(requestId, request, classification, userState, rateLimitStatus);
+
+                case UserIntent.REMIX:
+                    return this.handleRemix(requestId, request, classification, userState, rateLimitStatus);
 
                 case UserIntent.COPY:
                     return this.handleCopy(requestId, request, classification, userState);
@@ -629,6 +633,109 @@ class WebhookService {
             mode,
             isVariation: true,
             variationIndex: variationCount,
+        }, transitionResult.newState, rateLimitStatus);
+    }
+
+    /**
+     * Handle REMIX intent - user wants to transform the script (shorter, longer, funnier, etc.)
+     * Different from VARIATION: Remix applies a specific transformation, variation creates a new version
+     */
+    private async handleRemix(
+        requestId: string,
+        request: WebhookRequest,
+        classification: ClassificationResult,
+        currentState: ChatbotState,
+        rateLimitStatus: any
+    ): Promise<WebhookResult> {
+        const { subscriberId, toneHint, languageHint, mode } = request;
+
+        // Get remix type from classification (e.g., 'shorter', 'funnier', 'edgy')
+        const remixType = classification.extractedData.userIdea || 'remix';
+
+        // Build remix instruction based on type
+        const remixInstructions: Record<string, string> = {
+            'shorter': 'Make it MUCH shorter and punchier. Cut to 15-20 seconds. Remove all filler. Keep only the most impactful points.',
+            'longer': 'Expand with more detail and depth. Add a third insight. Include more examples. Target 40-50 seconds.',
+            'brief': 'Make it MUCH shorter and punchier. Cut to 15-20 seconds. Remove all filler.',
+            'detailed': 'Add more depth, examples, and explanations. Expand each point with supporting details.',
+            'funnier': 'Add humor! Include witty observations, unexpected twists, or self-deprecating jokes. Make it entertaining.',
+            'serious': 'Make it more professional and authoritative. Remove casual language. Add credibility markers.',
+            'casual': 'Make it ultra-casual and friendly. Use slang, contractions, and speak like texting a friend.',
+            'professional': 'Use business/corporate tone. Add data points and professional terminology. Sound like an expert.',
+            'edgy': 'Make it bold and provocative! Add controversial takes, strong opinions, and pattern-breaking statements.',
+            'friendly': 'Make it warm and approachable. Use inclusive language and conversational tone.',
+            'simpler': 'Simplify everything. Use shorter words, simpler concepts. Make it accessible to anyone.',
+            'punchy': 'Make every sentence hit hard. Short. Impactful. No wasted words.',
+            'snappy': 'Quick cuts, fast pacing. Lots of energy in the delivery.',
+            'dramatic': 'Add drama! Build tension, use pauses, create emotional peaks.',
+            'engaging': 'Add more hooks, questions, and calls-to-action. Make viewers want to interact.',
+            'remix': 'Create a fresh version with a different angle or approach. Keep the same topic but change the perspective.',
+        };
+
+        const remixInstruction = remixInstructions[remixType] || remixInstructions['remix'];
+
+        logger.info(`[Webhook:${requestId}] REMIX request: type=${remixType}`, { subscriberId, remixType, remixInstruction });
+
+        // Validate state transition (same as variation)
+        if (!classification.validForState) {
+            const transitionResult: TransitionResult = {
+                success: false,
+                previousState: currentState,
+                newState: currentState,
+                event: ChatbotEvent.REQUEST_REDO,
+                error: new FSMTransitionError(
+                    subscriberId,
+                    currentState,
+                    ChatbotEvent.REQUEST_REDO,
+                    classification.validInStates ? [] : chatbotFSM.getValidEventsForState(currentState)
+                ),
+                context: await chatbotFSM.getState(subscriberId),
+            };
+
+            return this.handleInvalidTransition(requestId, subscriberId, transitionResult, classification);
+        }
+
+        // Transition to REDO_REQUESTED
+        const transitionResult = await chatbotFSM.transition(subscriberId, ChatbotEvent.REQUEST_REDO);
+
+        if (!transitionResult.success) {
+            return this.handleInvalidTransition(requestId, subscriberId, transitionResult, classification);
+        }
+
+        // Get stored context from FSM metadata
+        const context = transitionResult.context;
+        const lastReelUrl = context.metadata.reelUrl as string;
+        const lastUserIdea = context.metadata.userIdea as string;
+
+        if (!lastReelUrl) {
+            // No previous reel - prompt user
+            await manychatFlowService.triggerFlow(subscriberId, ManyChatFlow.NO_PREVIOUS_REEL);
+
+            return {
+                success: false,
+                action: 'prompted',
+                message: 'No previous reel found. Please send a reel first.',
+                data: {
+                    intent: UserIntent.REMIX,
+                    state: transitionResult.newState,
+                    error: { code: 'NO_PREVIOUS_REEL' }
+                }
+            };
+        }
+
+        // Queue remix job with transformation instruction
+        // The remixInstruction will be prepended to the user idea
+        const enhancedIdea = `[REMIX: ${remixType.toUpperCase()}] ${remixInstruction}\n\nOriginal idea: ${lastUserIdea || 'Same topic, new approach'}`;
+
+        return this.queueScriptJob(requestId, {
+            subscriberId,
+            reelUrl: lastReelUrl,
+            userIdea: enhancedIdea,
+            toneHint,
+            languageHint,
+            mode,
+            isVariation: true, // Use variation flow for job processing
+            variationIndex: 1, // Mark as first remix attempt
         }, transitionResult.newState, rateLimitStatus);
     }
 

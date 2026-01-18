@@ -686,28 +686,65 @@ EXAMPLES:
 ❌ WRONG: Mixing देवनागरी or عربي characters in output
 
 ═══════════════════════════════════════════════════════════════════════
-QUALITY REQUIREMENTS V3 (UPGRADED):
+QUALITY REQUIREMENTS V4 (NATURAL + VIRAL):
 ═══════════════════════════════════════════════════════════════════════
 • Every claim needs "BECAUSE" - explain WHY, not just WHAT
 • Hooks must trigger ONE specific emotion from the archetype list above
 • 25-40 seconds total spoken time (punchy, no filler)
 • Each insight must provide ACTIONABLE value, not just information
 • Use SPECIFIC numbers/examples (not "many people" but "73% of creators")
-• Dialogue must sound CONVERSATIONAL, not scripted (use contractions, pauses)
+
+🎯 DIALOGUE NATURALNESS (CRITICAL FOR ENGAGEMENT):
+Dialogue must sound like you're talking to a FRIEND, not reading a script.
+
+✅ NATURAL (Use these patterns):
+• "Look, here's the thing..." (conversational opener)
+• "I'm gonna be honest with you..." (creates trust)
+• "You know what? Most people get this wrong." (relatable challenge)
+• "Here's what changed everything for me..." (story hook)
+• "And honestly? That's the part nobody talks about." (insider knowledge)
+• Use contractions: "I'm", "you're", "don't", "here's", "that's"
+• Short sentences. Punchy. Like this.
+• Questions that make them think: "Sound familiar?", "Right?"
+
+❌ ROBOTIC (Never use these patterns):
+• "It is important to note that..." (formal, boring)
+• "One should consider..." (third person, detached)
+• "This is a significant factor..." (essay language)
+• "In order to achieve success..." (overly formal)
+• Long compound sentences with multiple clauses
+• Perfect grammar that sounds unnatural when spoken
+
+🔥 VIRAL HOOK TECHNIQUES (Use first 3 words to STOP scrolling):
+• "I lost $10,000..." (loss triggers stronger than gain)
+• "Stop doing this..." (pattern interrupt + urgency)
+• "Nobody talks about..." (exclusive insider info)
+• "The real reason..." (conspiracy/truth reveal)
+• "I tested 100..." (curiosity + specific number)
+• "Delete this now..." (urgency + taboo)
+• "Warning: This will..." (threat/promise combo)
+• "They don't want you to know..." (us vs them)
 
 ═══════════════════════════════════════════════════════════════════════
-BANNED PHRASES (NEVER USE):
+BANNED PHRASES (NEVER USE - These kill engagement):
 ═══════════════════════════════════════════════════════════════════════
-❌ "In this video..."
-❌ "Let me tell you..."
-❌ "So basically..."
-❌ "What I'm going to show you..."
-❌ "You might be wondering..."
-❌ "Trust me when I say..."
-❌ "It's important to understand..."
-❌ "The thing is..."
-❌ Starting with "So..." or "Okay so..."
-❌ Ending with "...and that's it" or "...hope this helps"
+❌ "In this video..." (boring YouTuber energy)
+❌ "Let me tell you..." (sounds like a lecture)
+❌ "So basically..." (filler, wastes time)
+❌ "What I'm going to show you..." (kills curiosity)
+❌ "You might be wondering..." (assumes their thoughts)
+❌ "Trust me when I say..." (desperation signal)
+❌ "It's important to understand..." (essay language)
+❌ "The thing is..." (vague, unhelpful)
+❌ Starting with "So..." or "Okay so..." (weak openers)
+❌ Ending with "...and that's it" or "...hope this helps" (flat closings)
+❌ "First of all..." (boring list energy)
+❌ "As you can see..." (obvious, filler)
+❌ "I just wanted to share..." (weak, apologetic)
+❌ "Quick tip:" (overused, generic)
+❌ "Game changer" (buzzword, meaningless)
+❌ "Did you know that..." (trivia energy, not viral)
+
 
 ═══════════════════════════════════════════════════════════════════════
 OUTPUT FORMAT (EXACT - FOLLOW PRECISELY):
