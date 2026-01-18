@@ -68,6 +68,111 @@ export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
 }
 
 // ============================================
+// Language Detection (for Language Lock feature)
+// ============================================
+
+/**
+ * Detect the primary language from a transcript
+ * Returns language info to enforce output language matching
+ * 
+ * Priority: Detect from spoken words in transcript
+ * If romanized (e.g., Hindi in English letters), output must also be romanized
+ */
+interface DetectedLanguage {
+  language: string;          // e.g., 'Hindi', 'Kannada', 'Tamil', 'English', 'Arabic'
+  isRomanized: boolean;      // true if using Latin alphabet for non-English
+  confidence: 'high' | 'medium' | 'low';
+  sampleWords: string[];     // Example words that triggered detection
+}
+
+function detectTranscriptLanguage(transcript: string | null): DetectedLanguage {
+  if (!transcript || transcript.trim().length < 5) {
+    return { language: 'English', isRomanized: false, confidence: 'low', sampleWords: [] };
+  }
+
+  const text = transcript.toLowerCase();
+  const words = text.split(/\s+/);
+
+  // Non-Latin script detection (Devanagari, Arabic, etc.)
+  const hasDevanagari = /[\u0900-\u097F]/.test(transcript);
+  const hasArabic = /[\u0600-\u06FF]/.test(transcript);
+  const hasTamil = /[\u0B80-\u0BFF]/.test(transcript);
+  const hasKannada = /[\u0C80-\u0CFF]/.test(transcript);
+  const hasTelugu = /[\u0C00-\u0C7F]/.test(transcript);
+  const hasBengali = /[\u0980-\u09FF]/.test(transcript);
+
+  if (hasDevanagari) return { language: 'Hindi', isRomanized: false, confidence: 'high', sampleWords: [] };
+  if (hasArabic) return { language: 'Arabic', isRomanized: false, confidence: 'high', sampleWords: [] };
+  if (hasTamil) return { language: 'Tamil', isRomanized: false, confidence: 'high', sampleWords: [] };
+  if (hasKannada) return { language: 'Kannada', isRomanized: false, confidence: 'high', sampleWords: [] };
+  if (hasTelugu) return { language: 'Telugu', isRomanized: false, confidence: 'high', sampleWords: [] };
+  if (hasBengali) return { language: 'Bengali', isRomanized: false, confidence: 'high', sampleWords: [] };
+
+  // Romanized Hindi/Hinglish detection
+  const hindiMarkers = ['hai', 'hain', 'kya', 'kaise', 'kyun', 'kuch', 'bahut', 'aap', 'tum', 'mujhe',
+    'hamara', 'tumhara', 'yeh', 'woh', 'kar', 'karna', 'baat', 'nahi', 'nahin', 'hona', 'matlab',
+    'zaroor', 'zaruri', 'samjho', 'samajh', 'dekho', 'sunao', 'suno', 'padho', 'likho', 'bolo',
+    'apna', 'karo', 'karo', 'raha', 'rahi', 'rahe', 'wala', 'wali', 'wale', 'accha', 'theek',
+    'aaj', 'kal', 'abhi', 'jab', 'tab', 'aur', 'lekin', 'par', 'phir', 'pehle', 'baad'];
+
+  // Romanized Kannada detection
+  const kannadaMarkers = ['idu', 'yenu', 'hege', 'yake', 'yavaga', 'nanage', 'ninage', 'avaru',
+    'ivaru', 'aadre', 'antare', 'maadi', 'maadod', 'ella', 'ashte', 'haagu', 'mathu', 'illa',
+    'beku', 'aagalla', 'nodri', 'kelri', 'heli', 'bandu', 'hogod', 'banni', 'barri'];
+
+  // Romanized Tamil detection
+  const tamilMarkers = ['enna', 'epdi', 'yaar', 'enga', 'enge', 'inga', 'appa', 'amma',
+    'panni', 'pannunga', 'vaanga', 'ponga', 'sollu', 'kelvi', 'paaru', 'kudukka',
+    'iruku', 'illa', 'vandhanga', 'poganum', 'varalaam', 'aana', 'aachu'];
+
+  // Romanized Arabic/Urdu detection
+  const arabicMarkers = ['inshallah', 'mashallah', 'alhamdulillah', 'wallah', 'yalla',
+    'habibi', 'habibti', 'shukran', 'maafi', 'kheir', 'ahlan', 'marhaba'];
+
+  // Count matches
+  const countMatches = (markers: string[]) => {
+    const found: string[] = [];
+    for (const word of words) {
+      if (markers.includes(word)) found.push(word);
+    }
+    return found;
+  };
+
+  const hindiMatches = countMatches(hindiMarkers);
+  const kannadaMatches = countMatches(kannadaMarkers);
+  const tamilMatches = countMatches(tamilMarkers);
+  const arabicMatches = countMatches(arabicMarkers);
+
+  // Return the language with most matches
+  const results = [
+    { lang: 'Hindi', matches: hindiMatches },
+    { lang: 'Kannada', matches: kannadaMatches },
+    { lang: 'Tamil', matches: tamilMatches },
+    { lang: 'Arabic', matches: arabicMatches },
+  ].sort((a, b) => b.matches.length - a.matches.length);
+
+  const best = results[0];
+  if (best.matches.length >= 3) {
+    return {
+      language: best.lang,
+      isRomanized: true,
+      confidence: 'high',
+      sampleWords: best.matches.slice(0, 3)
+    };
+  } else if (best.matches.length >= 1) {
+    return {
+      language: best.lang,
+      isRomanized: true,
+      confidence: 'medium',
+      sampleWords: best.matches
+    };
+  }
+
+  // Default to English
+  return { language: 'English', isRomanized: false, confidence: 'high', sampleWords: [] };
+}
+
+// ============================================
 // Storytelling Format Prompts
 // ============================================
 
@@ -310,10 +415,14 @@ ${ps.script}
 `;
   }
 
+  // Detect language from transcript for Language Lock
+  const detectedLang = detectTranscriptLanguage(options.transcript);
+  const languageOverride = options.languageHint; // User can override if they want different language
+
   // ============================================
   // MASTER PROMPT CONSTRUCTION
   // ============================================
-  const masterPrompt = createMasterPrompt(userIdea, referenceDNA);
+  const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
 
   // Append optional hints (if any) WITHOUT modifying master prompt
   const optionalHints = buildOptionalHints(options);
@@ -412,7 +521,12 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
   Extract the pacing, tone, hook psychological structure, and language style from this media.
   THIS IS YOUR REFERENCE DNA.`;
 
-  const masterPrompt = createMasterPrompt(userIdea, referenceDNA);
+  // For One-Shot, we detect language from audio if provided
+  // Since we don't have transcript yet in One-Shot, we pass null and let AI detect from audio
+  const detectedLang = detectTranscriptLanguage(options.transcript);
+  const languageOverride = options.languageHint;
+
+  const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
 
   // Hints & Context
   const optionalHints = buildOptionalHints(options);
@@ -458,15 +572,51 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
  * SHARED MASTER PROMPT BUILDER
  * "Steal Like an Artist" framework with enhanced quality directives
  * 
- * ENHANCED V3:
+ * ENHANCED V4:
+ * - LANGUAGE LOCK at TOP (highest priority - preserves spoken language)
  * - TEXT OVERLAY separated from VISUAL for easy shooting
  * - "BECAUSE" explanations for every insight
  * - Psychological hook engineering with 10 hook archetypes
  * - Niche-specific tone calibration
  * - Anti-generic language filter
  */
-function createMasterPrompt(userIdea: string, referenceDNA: string): string {
-  return `
+function createMasterPrompt(
+  userIdea: string,
+  referenceDNA: string,
+  detectedLang: DetectedLanguage,
+  languageOverride?: string
+): string {
+  // Build LANGUAGE LOCK section - appears FIRST in prompt for highest priority
+  const effectiveLanguage = languageOverride || detectedLang.language;
+  const isRomanized = !languageOverride && detectedLang.isRomanized;
+
+  const languageLockSection = `
+🔒🔒🔒 LANGUAGE LOCK (HIGHEST PRIORITY - READ FIRST!) 🔒🔒🔒
+═══════════════════════════════════════════════════════════════════════
+DETECTED LANGUAGE: ${detectedLang.language}${detectedLang.isRomanized ? ' (Romanized/Transliterated)' : ''}
+${detectedLang.sampleWords.length > 0 ? `DETECTED FROM: "${detectedLang.sampleWords.join('", "')}"` : ''}
+${languageOverride ? `USER OVERRIDE: ${languageOverride}` : ''}
+
+⚠️ OUTPUT LANGUAGE: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED using Latin alphabet A-Z)' : ''}
+
+STRICT RULES:
+• ALL spoken dialogue (💬 SAY:) MUST be in ${effectiveLanguage}${isRomanized ? ' using ONLY Latin letters (A-Z)' : ''}
+• If source is romanized Hindi/Kannada/Tamil/etc → output MUST also be romanized
+• DO NOT translate to English unless user explicitly requested English
+• DO NOT switch languages mid-script
+• Technical labels (🎬 VISUAL, 📝 TEXT OVERLAY) are always in English
+• When in doubt, match the SOURCE language exactly
+
+EXAMPLE:
+${effectiveLanguage === 'Hindi' && isRomanized ?
+      '✅ CORRECT: "Aap yeh galti mat karo - yeh bahut important hai"\n❌ WRONG: "Don\'t make this mistake - it\'s very important"' :
+      effectiveLanguage === 'Kannada' && isRomanized ?
+        '✅ CORRECT: "Idu tumba important - nodri please"\n❌ WRONG: "This is very important - please watch"' :
+        '✅ CORRECT: Preserve the exact language style from the reference'}
+═══════════════════════════════════════════════════════════════════════
+
+`;
+  return `${languageLockSection}
 ═══════════════════════════════════════════════════════════════════════
 "STEAL LIKE AN ARTIST" - SURGICAL SCRIPT TRANSFORMATION V3
 ═══════════════════════════════════════════════════════════════════════

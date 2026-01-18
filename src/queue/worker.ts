@@ -80,6 +80,8 @@ class JobTimeoutError extends Error {
  * - On-screen captions/text
  * - B-roll descriptions
  * - Visual cues
+ * 
+ * ENHANCED: Better handling for empty analysis and clearer error messages
  */
 function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnalysis | null): string {
   const sceneDescriptions = analysis?.sceneDescriptions || [];
@@ -87,18 +89,62 @@ function formatTranscriptAsScript(transcript: string | null, analysis: VideoAnal
   const cameraAngles = analysis?.cameraAngles || [];
   const onScreenText = analysis?.onScreenText || [];
   const bRollDescriptions = analysis?.bRollDescriptions || [];
+  const hookType = analysis?.hookType || 'Unknown';
+  const tone = analysis?.tone || 'Unknown';
 
+  // Log what we received for debugging
+  logger.info('[formatTranscriptAsScript] Processing extract request', {
+    hasTranscript: !!transcript && transcript.trim().length > 0,
+    transcriptLength: transcript?.length || 0,
+    cameraAnglesCount: cameraAngles.length,
+    onScreenTextCount: onScreenText.length,
+    sceneDescriptionsCount: sceneDescriptions.length,
+    visualCuesCount: visualCues.length,
+    bRollCount: bRollDescriptions.length,
+    hookType,
+    tone
+  });
+
+  // Check if we have NOTHING at all (completely failed analysis)
+  const hasAnyContent =
+    (transcript && transcript.trim().length > 0) ||
+    cameraAngles.length > 0 ||
+    onScreenText.length > 0 ||
+    sceneDescriptions.length > 0 ||
+    visualCues.length > 0 ||
+    bRollDescriptions.length > 0 ||
+    (hookType !== 'Unknown' && hookType !== null);
+
+  if (!hasAnyContent) {
+    logger.warn('[formatTranscriptAsScript] No content extracted from video - analysis may have failed');
+    return `📋 EXTRACTION RESULT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ LIMITED CONTENT DETECTED
+
+We analyzed this reel but couldn't extract detailed content.
+This may happen with:
+• Very short reels (< 3 seconds)
+• Reels with only music (no speech)
+• Heavily edited/filtered content
+• Reels with no text overlays
+
+💡 TIP: Try sending the reel again, or use "reel + your idea" to generate a custom script based on the video's style!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  }
+
+  // No speech but has visual content
   if (!transcript || transcript.trim() === '') {
-    // No speech detected - create a visual-only script with ALL details
     return `📋 EXACT EXTRACTION FROM ORIGINAL REEL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔇 TRANSCRIPT: (No speech - visual-only reel)
+🔇 TRANSCRIPT: (No speech detected - this is a visual-only reel)
 
 📸 CAMERA ANGLES:
 ${cameraAngles.length > 0
         ? cameraAngles.map((angle, i) => `  ${i + 1}. ${angle}`).join('\n')
-        : '  • Not specified'}
+        : '  • Not specified in analysis'}
 
 📝 ON-SCREEN TEXT/CAPTIONS:
 ${onScreenText.length > 0
@@ -108,7 +154,9 @@ ${onScreenText.length > 0
 🎬 SCENE-BY-SCENE BREAKDOWN:
 ${sceneDescriptions.length > 0
         ? sceneDescriptions.map((scene, i) => `  Scene ${i + 1}: ${scene}`).join('\n')
-        : visualCues.map((cue, i) => `  Scene ${i + 1}: ${cue}`).join('\n') || '  • Opening shot as shown'}
+        : visualCues.length > 0
+          ? visualCues.map((cue, i) => `  Scene ${i + 1}: ${cue}`).join('\n')
+          : '  • Visual scenes detected (details in hook type below)'}
 
 🎞️ B-ROLL / CUTAWAYS:
 ${bRollDescriptions.length > 0
@@ -116,11 +164,15 @@ ${bRollDescriptions.length > 0
         : '  • No B-roll detected'}
 
 ✨ VISUAL ELEMENTS:
-${visualCues.map(cue => `  • ${cue}`).join('\n') || '  • No specific visual cues'}
+${visualCues.length > 0
+        ? visualCues.map(cue => `  • ${cue}`).join('\n')
+        : '  • See scene breakdown above'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 Hook Type: ${analysis?.hookType || 'Visual'}
-🎭 Tone: ${analysis?.tone || 'Unknown'}`;
+🎯 Hook Type: ${hookType}
+🎭 Tone: ${tone}
+
+💡 This reel uses visual storytelling. To create YOUR script in this style, reply with your topic/idea!`;
   }
 
   // Has speech - format with transcript and ALL visual details
@@ -151,11 +203,13 @@ ${bRollDescriptions.length > 0
       : '  • No B-roll (talking head only)'}
 
 ✨ VISUAL ELEMENTS:
-${visualCues.map(cue => `  • ${cue}`).join('\n') || '  • No specific visual cues'}
+${visualCues.length > 0
+      ? visualCues.map(cue => `  • ${cue}`).join('\n')
+      : '  • No specific visual cues'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 Hook Type: ${analysis?.hookType || 'Unknown'}
-🎭 Tone: ${analysis?.tone || 'Unknown'}
+🎯 Hook Type: ${hookType}
+🎭 Tone: ${tone}
 📊 Total Scenes: ${sceneDescriptions.length || 1}
 📝 Captions Found: ${onScreenText.length}`;
 }
