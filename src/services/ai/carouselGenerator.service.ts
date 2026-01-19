@@ -47,6 +47,8 @@ export interface CarouselConfig {
   variationIndex: number;
   showTimings: boolean;
   theme: 'dark' | 'light';
+  storyFormat?: 'story' | 'edgy' | 'tutorial' | 'default';  // Format for layout
+  remixType?: string;  // For remix badge (shorter, funnier, etc.)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -104,7 +106,7 @@ const COLORS = {
   borderStrong: 'rgba(139, 92, 246, 0.15)',
 };
 
-/** Section metadata */
+/** Section metadata (DEFAULT format) */
 const SECTION_META = {
   hook: {
     number: '01',
@@ -113,6 +115,8 @@ const SECTION_META = {
     timing: '0-3 sec',
     subtitle: 'Opening pattern interrupt',
     accent: COLORS.hookAccent,
+    tip: 'Hook in first 3 words',
+    progressDots: '• ○ ○',
   },
   body: {
     number: '02',
@@ -121,6 +125,8 @@ const SECTION_META = {
     timing: '3-15 sec',
     subtitle: 'Main content delivery',
     accent: COLORS.bodyAccent,
+    tip: 'Explain the WHY',
+    progressDots: '○ • ○',
   },
   cta: {
     number: '03',
@@ -129,8 +135,124 @@ const SECTION_META = {
     timing: '15-20 sec',
     subtitle: 'Call to action',
     accent: COLORS.ctaAccent,
+    tip: 'Clear single action',
+    progressDots: '○ ○ •',
   },
 };
+
+/** FORMAT-SPECIFIC SECTION CONFIGS */
+const FORMAT_CONFIGS: Record<string, typeof SECTION_META> = {
+  // Default format - HOOK/BODY/CTA
+  default: SECTION_META,
+
+  // STORY FORMAT - Hero's Arc
+  story: {
+    hook: {
+      number: '01',
+      title: 'THE BEFORE',
+      emoji: '📖',
+      timing: '0-5 sec',
+      subtitle: 'Your starting point',
+      accent: '#8b5cf6',
+      tip: 'Show vulnerability',
+      progressDots: '• ○ ○',
+    },
+    body: {
+      number: '02',
+      title: 'THE TURNING POINT',
+      emoji: '💡',
+      timing: '5-15 sec',
+      subtitle: 'The discovery',
+      accent: '#f59e0b',
+      tip: 'Eyes widen here',
+      progressDots: '○ • ○',
+    },
+    cta: {
+      number: '03',
+      title: 'THE AFTER',
+      emoji: '✨',
+      timing: '15-20 sec',
+      subtitle: 'Your transformation',
+      accent: '#22c55e',
+      tip: 'Confidence is key',
+      progressDots: '○ ○ •',
+    },
+  },
+
+  // EDGY FORMAT - Myth Buster
+  edgy: {
+    hook: {
+      number: '01',
+      title: 'THE MYTH',
+      emoji: '❌',
+      timing: '0-5 sec',
+      subtitle: 'What everyone believes',
+      accent: '#ef4444',
+      tip: 'Sound frustrated',
+      progressDots: '• ○ ○',
+    },
+    body: {
+      number: '02',
+      title: 'THE TRUTH',
+      emoji: '✅',
+      timing: '5-15 sec',
+      subtitle: 'What actually works',
+      accent: '#22c55e',
+      tip: 'Drop the truth bomb',
+      progressDots: '○ • ○',
+    },
+    cta: {
+      number: '03',
+      title: 'THE PROOF',
+      emoji: '🔥',
+      timing: '15-20 sec',
+      subtitle: 'Your evidence',
+      accent: '#f59e0b',
+      tip: 'Be confident',
+      progressDots: '○ ○ •',
+    },
+  },
+
+  // TUTORIAL FORMAT - Step by Step
+  tutorial: {
+    hook: {
+      number: '①',
+      title: 'STEP 1',
+      emoji: '📝',
+      timing: '0-7 sec',
+      subtitle: 'First action',
+      accent: '#10b981',
+      tip: 'Be enthusiastic',
+      progressDots: '① ○ ○',
+    },
+    body: {
+      number: '②',
+      title: 'STEP 2',
+      emoji: '📝',
+      timing: '7-14 sec',
+      subtitle: 'Second action',
+      accent: '#3b82f6',
+      tip: 'Show the how',
+      progressDots: '○ ② ○',
+    },
+    cta: {
+      number: '③',
+      title: 'STEP 3 + RESULT',
+      emoji: '🎯',
+      timing: '14-20 sec',
+      subtitle: 'Final action + outcome',
+      accent: '#8b5cf6',
+      tip: 'End with energy',
+      progressDots: '○ ○ ③',
+    },
+  },
+};
+
+/** Get section config for format */
+function getSectionMeta(format: string | undefined, sectionKey: 'hook' | 'body' | 'cta') {
+  const formatConfig = FORMAT_CONFIGS[format || 'default'] || FORMAT_CONFIGS.default;
+  return formatConfig[sectionKey];
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
@@ -262,14 +384,18 @@ function truncateText(text: string, maxLength: number): string {
 
 /**
  * Generate HTML template for a single section card
+ * FORMAT-AWARE: Uses format-specific section titles, tips, and progress dots
  * MINIMALIST DESIGN: Clean, uncluttered, stylish, Instagram-optimized
  */
 function generateCardTemplate(
   sectionKey: 'hook' | 'body' | 'cta',
   lines: string[],
-  variationTag: string
+  variationTag: string,
+  format?: string,
+  remixType?: string
 ): string {
-  const meta = SECTION_META[sectionKey];
+  // Get format-specific metadata
+  const meta = getSectionMeta(format, sectionKey);
   const { visual, textOverlay, dialogue } = extractVisualAndDialogue(lines);
 
   // Smart truncation - handles all content lengths
@@ -282,12 +408,19 @@ function generateCardTemplate(
     displayDialogue.length > 100 ? 36 :
       displayDialogue.length > 60 ? 42 : 48;
 
+  // Format badge (shows STORY/EDGY/TUTORIAL or remix type like SHORTER)
+  const formatBadge = remixType ? remixType.toUpperCase() :
+    (format && format !== 'default' ? format.toUpperCase() : '');
+
   return `
     <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 48px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
       
-      <!-- Minimal Header -->
+      <!-- Header with format badge -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-        <div style="font-size: 14px; font-weight: 700; color: ${COLORS.textSecondary}; letter-spacing: 2px;">SCRIPTFLOW</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textSecondary}; letter-spacing: 2px;">SCRIPTFLOW</span>
+          ${formatBadge ? `<span style="font-size: 9px; font-weight: 700; color: ${meta.accent}; background: rgba(139, 92, 246, 0.15); padding: 3px 8px; border-radius: 4px; letter-spacing: 1px;">${formatBadge}</span>` : ''}
+        </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 11px; font-weight: 600; color: ${meta.accent};">${variationTag}</span>
           <span style="font-size: 11px; color: ${COLORS.textMuted};">•</span>
@@ -295,7 +428,7 @@ function generateCardTemplate(
         </div>
       </div>
       
-      <!-- Section Title - Clean -->
+      <!-- Section Title - Format-specific -->
       <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 40px;">
         <span style="font-size: 32px;">${meta.emoji}</span>
         <span style="font-size: 24px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1px;">${meta.title}</span>
@@ -323,6 +456,12 @@ function generateCardTemplate(
           <span style="font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.5;">${escapeHtml(displayVisual)}</span>
         </div>
         
+      </div>
+      
+      <!-- Footer: Progress dots + Filming tip -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+        <span style="font-size: 16px; letter-spacing: 6px; color: ${COLORS.textMuted};">${meta.progressDots}</span>
+        <span style="font-size: 11px; color: ${COLORS.textMuted}; font-style: italic;">💡 ${meta.tip}</span>
       </div>
       
     </div>
@@ -410,22 +549,26 @@ async function uploadImage(pngBuffer: Buffer, filename: string): Promise<string>
  * 
  * @param scriptText - Full script text with [HOOK], [BODY], [CTA] sections
  * @param variationIndex - Which variation this is (0, 1, 2...)
+ * @param format - Story format: 'story', 'edgy', 'tutorial', or 'default'
+ * @param remixType - Remix type for badge: 'shorter', 'funnier', etc.
  * @returns CarouselImages with URLs for each card
  * 
  * @example
- * const images = await generateCarouselImages(scriptText, 0);
- * // images.hookCard = "https://..."
- * // images.bodyCard = "https://..."
- * // images.ctaCard = "https://..."
+ * const images = await generateCarouselImages(scriptText, 0, 'story');
+ * // images.hookCard = "https://..." (shows THE BEFORE)
+ * // images.bodyCard = "https://..." (shows THE TURNING POINT)
+ * // images.ctaCard = "https://..." (shows THE AFTER)
  */
 export async function generateCarouselImages(
   scriptText: string,
-  variationIndex: number = 0
+  variationIndex: number = 0,
+  format?: string,
+  remixType?: string
 ): Promise<CarouselImages> {
   const startTime = Date.now();
   const variationTag = getVariationTag(variationIndex);
 
-  logger.info('Generating carousel images', { variationIndex, variationTag });
+  logger.info('Generating carousel images', { variationIndex, variationTag, format, remixType });
 
   try {
     // Parse script into sections
@@ -435,11 +578,11 @@ export async function generateCarouselImages(
     const timestamp = Date.now();
     const prefix = `carousel_${timestamp}_${variationTag}`;
 
-    // Generate all 3 cards in parallel
+    // Generate all 3 cards in parallel - pass format and remixType
     const [hookBuffer, bodyBuffer, ctaBuffer] = await Promise.all([
-      renderToPng(generateCardTemplate('hook', sections.hook, variationTag)),
-      renderToPng(generateCardTemplate('body', sections.body, variationTag)),
-      renderToPng(generateCardTemplate('cta', sections.cta, variationTag)),
+      renderToPng(generateCardTemplate('hook', sections.hook, variationTag, format, remixType)),
+      renderToPng(generateCardTemplate('body', sections.body, variationTag, format, remixType)),
+      renderToPng(generateCardTemplate('cta', sections.cta, variationTag, format, remixType)),
     ]);
 
     const renderTime = Date.now() - startTime;

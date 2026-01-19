@@ -13,7 +13,7 @@ import { generateScript, generateScriptFromVideo } from '../services/ai/scriptGe
 import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
 // LEGACY imports removed: sendToManyChat, sendTextMessage - using pull-based delivery via manychatStateService
 import { manychatStateService } from '../services/external/manychatState.service';
-import { generateScriptImage } from '../utils/imageGenerator';
+import { generateScriptImage, generateExtractImage } from '../utils/imageGenerator';
 import { generateCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl, generateRequestHashV2 } from '../utils/hash';
@@ -703,15 +703,23 @@ async function processJobWithTimeout(
 
     // D. Generate script images - CAROUSEL for V2, single for V3
     // Carousel provides better UX with swipeable HOOK/BODY/CTA cards
+    // EXCEPTION: Extract mode (isCopyMode) uses different format, skip carousel
     let imageUrl: string;
     let carouselImages: CarouselImages | null = null;
 
-    if (isV2) {
+    if (isCopyMode) {
+      // EXTRACT MODE: Use special extract image generator
+      // The extract format doesn't have [HOOK]/[BODY]/[CTA] sections
+      logger.info(`[${requestId}] EXTRACT MODE - Using extract-specific image generator`);
+      imageUrl = await withCircuitBreaker('cloudinary', async () => {
+        return generateExtractImage(scriptText);
+      });
+    } else if (isV2) {
       // V2: Generate 3-card carousel (reduces system load by parallel generation)
       logger.info(`[${requestId}] Generating carousel images (3 cards)...`);
       try {
         carouselImages = await withCircuitBreaker('cloudinary', async () => {
-          return generateCarouselImages(scriptText, job.data.variationIndex || 0);
+          return generateCarouselImages(scriptText, job.data.variationIndex || 0, storyFormat);
         });
 
         // Use hook card as the primary image for backward compatibility

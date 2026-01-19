@@ -361,3 +361,198 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     }
   }
 }
+
+/**
+ * Generate an image specifically for EXTRACT mode
+ * This handles the different format (📋💬📸) used by formatTranscriptAsScript()
+ * Instead of parsing [HOOK]/[BODY]/[CTA], it displays the transcript as-is
+ */
+export async function generateExtractImage(scriptText: string): Promise<string> {
+  const startTime = Date.now();
+  logger.info(`Starting EXTRACT image generation using provider: ${config.IMAGE_PROVIDER}`);
+
+  try {
+    // Parse the extract text to get key sections
+    const lines = scriptText.split('\n').filter(line => line.trim());
+
+    // Find transcript line
+    const transcriptMatch = scriptText.match(/💬\s*TRANSCRIPT[^:]*:\s*\n?"?([^"]+)"?/i);
+    const transcript = transcriptMatch ? transcriptMatch[1].trim() : 'No speech detected';
+
+    // Check if it's a visual-only reel
+    const isVisualOnly = scriptText.includes('🔇') || scriptText.includes('No speech');
+
+    // Find camera angles
+    const cameraMatch = scriptText.match(/📸\s*CAMERA ANGLES?:\s*([\s\S]*?)(?=\n[📝🎬🎞️✨📋🎯🎭]|$)/i);
+    const cameraAngles = cameraMatch ? cameraMatch[1].trim() : '';
+
+    // Find on-screen text
+    const textMatch = scriptText.match(/📝\s*ON-SCREEN TEXT[^:]*:\s*([\s\S]*?)(?=\n[📸🎬🎞️✨📋🎯🎭]|$)/i);
+    const onScreenText = textMatch ? textMatch[1].trim() : '';
+
+    // Find hook type and tone
+    const hookTypeMatch = scriptText.match(/🎯\s*Hook Type:\s*([^\n]+)/i);
+    const hookType = hookTypeMatch ? hookTypeMatch[1].trim() : 'Unknown';
+
+    const toneMatch = scriptText.match(/🎭\s*Tone:\s*([^\n]+)/i);
+    const tone = toneMatch ? toneMatch[1].trim() : 'Unknown';
+
+    const template = html(`
+      <div style="display: flex; flex-direction: column; width: 1080px; padding: 64px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgGradientStart} 0%, ${COLORS.bgGradientEnd} 100%); color: ${COLORS.textMain};">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 48px; border-bottom: 2px solid ${COLORS.dividerStrong}; padding-bottom: 24px;">
+          <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; font-size: 32px; font-weight: 900; color: ${COLORS.textMain}; letter-spacing: -1.2px;">SCRIPT<span style="color: ${COLORS.accent}; text-shadow: 0 0 20px ${COLORS.accentGlow};">FLOW</span></div>
+            <div style="display: flex; font-size: 10px; color: ${COLORS.textMuted}; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; margin-top: 6px;">Original Extract</div>
+          </div>
+          <div style="display: flex; align-items: center; background: ${COLORS.accentBg}; border: 1px solid ${COLORS.accentBorder}; padding: 8px 16px; border-radius: 8px;">
+            <div style="display: flex; font-size: 11px; font-weight: 800; color: ${COLORS.accent}; letter-spacing: 2px;">📋 EXTRACT</div>
+          </div>
+        </div>
+
+        <!-- Transcript Section -->
+        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px ${COLORS.cardShadow};">
+          <div style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid ${COLORS.divider};">
+            <div style="display: flex; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 4px; color: ${isVisualOnly ? COLORS.textMuted : COLORS.accent};">${isVisualOnly ? '🔇 VISUAL-ONLY REEL' : '💬 TRANSCRIPT'}</div>
+          </div>
+          <div style="display: flex; font-size: 18px; font-weight: 500; color: ${isVisualOnly ? COLORS.textSecondary : COLORS.textMain}; line-height: 1.8; font-style: ${isVisualOnly ? 'italic' : 'normal'};">
+            ${isVisualOnly ? 'No speech detected - this reel uses visual storytelling' : `"${escapeHtml(transcript)}"`}
+          </div>
+        </div>
+
+        <!-- Visual Details Row -->
+        <div style="display: flex; gap: 24px; margin-bottom: 32px;">
+          <!-- Camera Angles -->
+          <div style="display: flex; flex-direction: column; flex: 1; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 24px;">
+            <div style="display: flex; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; color: ${COLORS.accentCamera}; margin-bottom: 12px;">📸 CAMERA</div>
+            <div style="display: flex; font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.6;">
+              ${cameraAngles ? escapeHtml(cameraAngles.substring(0, 150)) : 'Standard shot'}
+            </div>
+          </div>
+          
+          <!-- On-Screen Text -->
+          <div style="display: flex; flex-direction: column; flex: 1; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 24px;">
+            <div style="display: flex; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; color: ${COLORS.accentOverlay}; margin-bottom: 12px;">📝 TEXT</div>
+            <div style="display: flex; font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.6;">
+              ${onScreenText ? escapeHtml(onScreenText.substring(0, 150)) : 'No text detected'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Hook Type & Tone Footer -->
+        <div style="display: flex; justify-content: center; gap: 48px; padding: 24px; background: rgba(139, 92, 246, 0.05); border-radius: 12px; margin-bottom: 32px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; font-size: 11px; font-weight: 700; color: ${COLORS.textMuted};">🎯 HOOK:</div>
+            <div style="display: flex; font-size: 13px; font-weight: 600; color: ${COLORS.accent};">${escapeHtml(hookType)}</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; font-size: 11px; font-weight: 700; color: ${COLORS.textMuted};">🎭 TONE:</div>
+            <div style="display: flex; font-size: 13px; font-weight: 600; color: ${COLORS.accentSecondary};">${escapeHtml(tone)}</div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="display: flex; justify-content: center; margin-top: 16px;">
+          <div style="display: flex; font-size: 11px; font-weight: 600; color: ${COLORS.textMuted}; letter-spacing: 2px; opacity: 0.5;">POWERED BY SCRIPTFLOW AI</div>
+        </div>
+
+      </div>
+    `);
+
+    // Generate SVG with Satori
+    const svg = await satori(template as any, {
+      width: 1080,
+      fonts: [
+        {
+          name: 'Poppins',
+          data: fontDataRegular,
+          weight: 400,
+          style: 'normal',
+        },
+        {
+          name: 'Poppins',
+          data: fontDataSemiBold,
+          weight: 600,
+          style: 'normal',
+        },
+        {
+          name: 'Poppins',
+          data: fontDataBold,
+          weight: 700,
+          style: 'normal',
+        },
+      ],
+    });
+
+    // Convert SVG to PNG using Resvg
+    const resvg = new Resvg(svg, {
+      background: 'rgba(0,0,0,0)',
+      fitTo: {
+        mode: 'width',
+        value: 1080,
+      },
+    });
+
+    const pngData = resvg.render();
+    const pngBuffer = pngData.asPng();
+    const generationTime = Date.now() - startTime;
+    logger.info(`Extract image generated in ${generationTime}ms (Satori)`);
+
+    // Upload to Cloudinary (primary provider)
+    if (config.IMAGE_PROVIDER === 'cloudinary') {
+      return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'manychat_automation',
+            resource_type: 'image',
+          },
+          (error, result) => {
+            if (error) {
+              logger.error('Cloudinary upload failed:', error);
+              return reject(error);
+            }
+            if (!result || !result.secure_url) {
+              return reject(new Error('Cloudinary upload success but no secure_url found'));
+            }
+            logger.info(`Extract image uploaded to Cloudinary: ${result.secure_url}`);
+            resolve(result.secure_url);
+          }
+        );
+
+        uploadStream.end(pngBuffer);
+      });
+    } else {
+      // Fallback to ImgBB
+      const formData = new FormData();
+      formData.append('image', pngBuffer, { filename: 'extract.png' });
+
+      const uploadResponse = await axios.post(
+        `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+          },
+          timeout: 30000
+        }
+      );
+
+      if (uploadResponse.data && uploadResponse.data.data && uploadResponse.data.data.url) {
+        return uploadResponse.data.data.url;
+      } else {
+        throw new Error('ImgBB response did not contain URL');
+      }
+    }
+
+  } catch (error: any) {
+    logger.error('Failed to generate or upload extract image: ' + (error.message || error));
+    throw error;
+  } finally {
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
+  }
+}
