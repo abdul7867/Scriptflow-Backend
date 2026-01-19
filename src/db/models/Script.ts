@@ -21,6 +21,7 @@ export interface IScript extends Document {
   };
   // Variation tracking
   variationIndex?: number;  // 0 = original, 1+ = regenerations
+  storyFormat?: string;     // Format: 'story', 'edgy', 'tutorial', or undefined for default
   // ML-relevant metadata
   modelVersion?: string;
   generationTimeMs?: number;
@@ -30,11 +31,11 @@ export interface IScript extends Document {
 }
 
 const ScriptSchema = new Schema<IScript>({
-  requestHash: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    index: true 
+  requestHash: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
   },
   publicId: {
     type: String,
@@ -42,23 +43,23 @@ const ScriptSchema = new Schema<IScript>({
     sparse: true,  // Allow null/undefined (backward compatibility)
     index: true
   },
-  manychatUserId: { 
-    type: String, 
-    required: true, 
-    index: true 
-  },
-  reelUrl: { 
-    type: String, 
+  manychatUserId: {
+    type: String,
     required: true,
-    index: true 
+    index: true
   },
-  userIdea: { 
-    type: String, 
-    required: true 
+  reelUrl: {
+    type: String,
+    required: true,
+    index: true
   },
-  scriptText: { 
-    type: String, 
-    required: true 
+  userIdea: {
+    type: String,
+    required: true
+  },
+  scriptText: {
+    type: String,
+    required: true
   },
   imageUrl: {
     type: String
@@ -75,17 +76,21 @@ const ScriptSchema = new Schema<IScript>({
     type: Number,
     default: 0
   },
-  modelVersion: { 
-    type: String, 
-    default: 'gemini-2.5-flash' 
+  storyFormat: {
+    type: String,
+    enum: ['story', 'edgy', 'tutorial', 'default', null]
   },
-  generationTimeMs: { 
-    type: Number 
+  modelVersion: {
+    type: String,
+    default: 'gemini-2.5-flash'
   },
-  feedbackScore: { 
-    type: Number, 
-    min: 1, 
-    max: 5 
+  generationTimeMs: {
+    type: Number
+  },
+  feedbackScore: {
+    type: Number,
+    min: 1,
+    max: 5
   }
 }, {
   timestamps: true // Automatically adds createdAt and updatedAt

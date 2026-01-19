@@ -775,6 +775,7 @@ async function processJobWithTimeout(
         imageUrl,
         scriptUrl,
         generationTimeMs,
+        storyFormat, // Track format for HTML view page
         modelVersion: 'gemini-2.5-flash' // 2.5 Flash
       },
       { upsert: true, new: true }

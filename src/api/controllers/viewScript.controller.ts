@@ -76,7 +76,7 @@ export const viewScriptHandler = async (req: Request, res: Response) => {
     // SECURITY: X-Content-Type-Options to prevent MIME sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
-    res.send(generateScriptPage(script.scriptText, script.userIdea));
+    res.send(generateScriptPage(script.scriptText, script.userIdea, script.storyFormat));
 
   } catch (error) {
     logger.error('Failed to view script:', error);
@@ -263,12 +263,30 @@ function generateSectionHtml(section: ParsedSection, title: string, number: stri
 }
 
 /**
+ * FORMAT-SPECIFIC SECTION TITLES
+ * Matches carousel card layout for consistency
+ */
+const FORMAT_SECTION_TITLES: Record<string, { hook: string; body: string; cta: string }> = {
+  default: { hook: 'HOOK', body: 'BODY', cta: 'CALL TO ACTION' },
+  story: { hook: 'THE BEFORE', body: 'THE TURNING POINT', cta: 'THE AFTER' },
+  edgy: { hook: 'THE MYTH', body: 'THE TRUTH', cta: 'THE PROOF' },
+  tutorial: { hook: 'STEP 1', body: 'STEP 2', cta: 'STEP 3 + RESULT' },
+};
+
+/**
  * Generate the HTML page for viewing and copying the script
  * ENHANCED: Clean visual/dialogue separation with proper hierarchy
+ * FORMAT-AWARE: Uses format-specific section titles
  */
-function generateScriptPage(scriptText: string, userIdea: string): string {
+function generateScriptPage(scriptText: string, userIdea: string, storyFormat?: string): string {
   const escapedIdea = escapeHtml(userIdea);
   const sections = parseScriptSections(scriptText);
+
+  // Get format-specific section titles
+  const titles = FORMAT_SECTION_TITLES[storyFormat || 'default'] || FORMAT_SECTION_TITLES.default;
+
+  // Format badge for UI
+  const formatBadge = storyFormat && storyFormat !== 'default' ? storyFormat.toUpperCase() : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -328,6 +346,17 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
       border-radius: 4px;
       font-weight: 700;
       letter-spacing: 1.5px;
+    }
+    
+    .format-badge {
+      font-size: 8px;
+      background: rgba(139, 92, 246, 0.2);
+      color: #a78bfa;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-left: 8px;
     }
     
     .idea {
@@ -598,7 +627,10 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
 <body>
   <div class="header">
     <div class="logo">SCRIPT<span>FLOW</span></div>
-    <div class="badge">✦ V0.8</div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div class="badge">✦ V0.9</div>
+      ${formatBadge ? `<div class="format-badge">${formatBadge}</div>` : ''}
+    </div>
   </div>
   
   <div class="idea">
@@ -606,9 +638,9 @@ function generateScriptPage(scriptText: string, userIdea: string): string {
     ${escapedIdea}
   </div>
   
-  ${generateSectionHtml(sections.hook, 'HOOK', '01', 'hook')}
-  ${generateSectionHtml(sections.body, 'BODY', '02', 'body')}
-  ${generateSectionHtml(sections.cta, 'CALL TO ACTION', '03', 'cta')}
+  ${generateSectionHtml(sections.hook, titles.hook, '01', 'hook')}
+  ${generateSectionHtml(sections.body, titles.body, '02', 'body')}
+  ${generateSectionHtml(sections.cta, titles.cta, '03', 'cta')}
   
   <button class="copy-all-button" id="copyAllBtn" onclick="copyAll()">
     <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">

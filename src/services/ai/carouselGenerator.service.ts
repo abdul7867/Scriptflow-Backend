@@ -106,6 +106,19 @@ const COLORS = {
   borderStrong: 'rgba(139, 92, 246, 0.15)',
 };
 
+/** Custom SVG Icons for a premium look */
+const ICON_SVGS = {
+  camera: (color: string) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>`,
+  text: (color: string) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg>`,
+  tip: (color: string) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`,
+  hook: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3z"/></svg>`,
+  body: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
+  cta: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+  story: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>`,
+  edgy: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2h-2z" transform="rotate(45, 12, 12)"/></svg>`,
+  tutorial: (color: string) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>`,
+};
+
 /** Section metadata (DEFAULT format) */
 const SECTION_META = {
   hook: {
@@ -317,10 +330,10 @@ export function parseScriptSections(scriptText: string): ScriptSections {
 
 /**
  * Extract VISUAL, TEXT OVERLAY, and DIALOGUE content from lines
- * Handles multiple formats:
- * - Visual:, 🎬, Camera:
- * - On-Screen:, Text Overlay:, 📝
- * - Dialogue:, Say:, 💬
+ * Handles multiple formats and properly sanitizes content:
+ * - Visual:, 🎬 VISUAL:, Camera:
+ * - On-Screen:, 📝 TEXT OVERLAY:, Text Overlay:
+ * - Dialogue:, 💬 SAY:, Say:
  */
 function extractVisualAndDialogue(lines: string[]): { visual: string; textOverlay: string; dialogue: string } {
   let visual = '';
@@ -328,46 +341,55 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; textOverla
   let dialogue = '';
 
   for (const line of lines) {
-    const lowerLine = line.toLowerCase();
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+
+    const lowerLine = trimmedLine.toLowerCase();
 
     // Check for visual/camera content
-    const isVisual = line.includes('🎬') ||
-      lowerLine.includes('visual:') ||
-      lowerLine.includes('camera:');
+    const isVisual = trimmedLine.includes('🎬') ||
+      lowerLine.startsWith('visual:') ||
+      lowerLine.startsWith('camera:');
 
     // Check for on-screen/text overlay content
-    const isTextOverlay = line.includes('📝') ||
-      lowerLine.includes('text overlay:') ||
-      lowerLine.includes('on-screen:');
+    const isTextOverlay = trimmedLine.includes('📝') ||
+      lowerLine.startsWith('text overlay:') ||
+      lowerLine.startsWith('on-screen:') ||
+      lowerLine.startsWith('text:');
 
     // Check for dialogue/say content
-    const isDialogue = line.includes('💬') ||
-      lowerLine.includes('say:') ||
-      lowerLine.includes('dialogue:');
+    const isDialogue = trimmedLine.includes('💬') ||
+      lowerLine.startsWith('say:') ||
+      lowerLine.startsWith('dialogue:');
 
     if (isVisual) {
-      const cleaned = line
+      // Remove ALL possible visual labels
+      let cleaned = trimmedLine
         .replace(/^🎬\s*/i, '')
-        .replace(/^visual:\s*/i, '')
-        .replace(/^camera:\s*/i, '')
+        .replace(/^VISUAL\s*:\s*/i, '')
+        .replace(/^Camera\s*:\s*/i, '')
+        .replace(/^[\"""]|[\"""]$/g, '')  // Remove all quote types
         .trim();
-      visual += (visual ? '\n' : '') + cleaned;
+      if (cleaned) visual += (visual ? ' ' : '') + cleaned;
     } else if (isTextOverlay) {
-      const cleaned = line
+      // Remove ALL possible text overlay labels
+      let cleaned = trimmedLine
         .replace(/^📝\s*/i, '')
-        .replace(/^text overlay:\s*/i, '')
-        .replace(/^on-screen:\s*/i, '')
-        .replace(/^[""]|[""]$/g, '')  // Remove quotes
+        .replace(/^TEXT\s*OVERLAY\s*:\s*/i, '')
+        .replace(/^ON-SCREEN\s*:\s*/i, '')
+        .replace(/^TEXT\s*:\s*/i, '')
+        .replace(/^[\"""]|[\"""]$/g, '')  // Remove all quote types
         .trim();
-      textOverlay += (textOverlay ? ' • ' : '') + cleaned;
+      if (cleaned) textOverlay += (textOverlay ? ' • ' : '') + cleaned;
     } else if (isDialogue) {
-      const cleaned = line
+      // Remove ALL possible dialogue labels
+      let cleaned = trimmedLine
         .replace(/^💬\s*/i, '')
-        .replace(/^say:\s*/i, '')
-        .replace(/^dialogue:\s*/i, '')
-        .replace(/^[""]|[""]$/g, '')  // Remove quotes
+        .replace(/^SAY\s*:\s*/i, '')
+        .replace(/^DIALOGUE\s*:\s*/i, '')
+        .replace(/^[\"""]|[\"""]$/g, '')  // Remove all quote types
         .trim();
-      dialogue += (dialogue ? '\n' : '') + cleaned;
+      if (cleaned) dialogue += (dialogue ? ' ' : '') + cleaned;
     }
   }
 
@@ -398,10 +420,10 @@ function generateCardTemplate(
   const meta = getSectionMeta(format, sectionKey);
   const { visual, textOverlay, dialogue } = extractVisualAndDialogue(lines);
 
-  // Smart truncation - handles all content lengths
-  const displayVisual = truncateText(visual || 'Camera setup...', 120);
-  const displayOverlay = truncateText(textOverlay || '', 70);
-  const displayDialogue = truncateText(dialogue || 'Dialogue goes here...', 180);
+  // Smart truncation - INCREASED limits for better readability
+  const displayVisual = truncateText(visual || 'Camera setup...', 180);
+  const displayOverlay = truncateText(textOverlay || '', 100);
+  const displayDialogue = truncateText(dialogue || 'Dialogue goes here...', 200);
 
   // Dynamic font sizing - scales for all content lengths
   const dialogueFontSize = displayDialogue.length > 130 ? 30 :
@@ -413,55 +435,62 @@ function generateCardTemplate(
     (format && format !== 'default' ? format.toUpperCase() : '');
 
   return `
-    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 48px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
+    <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
       
-      <!-- Header with format badge -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textSecondary}; letter-spacing: 2px;">SCRIPTFLOW</span>
-          ${formatBadge ? `<span style="font-size: 9px; font-weight: 700; color: ${meta.accent}; background: rgba(139, 92, 246, 0.15); padding: 3px 8px; border-radius: 4px; letter-spacing: 1px;">${formatBadge}</span>` : ''}
-        </div>
+      <!-- Compact Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 11px; font-weight: 600; color: ${meta.accent};">${variationTag}</span>
-          <span style="font-size: 11px; color: ${COLORS.textMuted};">•</span>
-          <span style="font-size: 11px; color: ${COLORS.textMuted};">${meta.timing}</span>
+          <span style="font-size: 12px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">SCRIPTFLOW</span>
+          ${formatBadge ? `<span style="font-size: 8px; font-weight: 700; color: ${meta.accent}; background: rgba(139, 92, 246, 0.2); padding: 3px 6px; border-radius: 3px; letter-spacing: 1px;">${formatBadge}</span>` : ''}
         </div>
+        <span style="font-size: 10px; color: ${COLORS.textMuted};">${variationTag} • ${meta.timing}</span>
       </div>
       
-      <!-- Section Title - Format-specific -->
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 40px;">
-        <span style="font-size: 32px;">${meta.emoji}</span>
-        <span style="font-size: 24px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1px;">${meta.title}</span>
+      <!-- Section Title - More Prominent -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 12px 16px; background: rgba(139, 92, 246, 0.08); border-radius: 8px;">
+        <div style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: rgba(139, 92, 246, 0.12); border-radius: 8px;">
+          ${sectionKey === 'hook' ? ICON_SVGS.hook(meta.accent) : sectionKey === 'body' ? ICON_SVGS.body(meta.accent) : ICON_SVGS.cta(meta.accent)}
+        </div>
+        <span style="font-size: 20px; font-weight: 800; color: ${meta.accent}; letter-spacing: 1.5px;">${meta.title}</span>
       </div>
       
-      <!-- HERO: Main Dialogue -->
-      <div style="display: flex; flex: 1; align-items: center; justify-content: center; margin-bottom: 32px;">
-        <div style="font-size: ${dialogueFontSize}px; font-weight: 700; color: ${COLORS.textMain}; line-height: 1.3; letter-spacing: -0.8px; text-align: center;">"${escapeHtml(displayDialogue)}"</div>
+      <!-- Main Dialogue - Priority but not overwhelming -->
+      <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 280px; margin-bottom: 20px;">
+        <div style="font-size: ${dialogueFontSize}px; font-weight: 700; color: ${COLORS.textMain}; line-height: 1.35; letter-spacing: -0.5px; text-align: center;">"${escapeHtml(displayDialogue)}"</div>
       </div>
       
-      <!-- Supporting Info - Horizontal Inline Layout -->
-      <div style="display: flex; flex-direction: column; gap: 10px;">
+      <!-- Supporting Info - LARGER and more readable -->
+      <div style="display: flex; flex-direction: column; gap: 12px; flex: 1;">
         
         ${displayOverlay ? `
-        <!-- On-Screen Text - Inline Layout -->
-        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(245, 158, 11, 0.08); border-left: 4px solid ${COLORS.bodyAccent}; border-radius: 4px;">
-          <span style="font-size: 10px; font-weight: 700; color: ${COLORS.bodyAccent}; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">ON-SCREEN</span>
-          <span style="font-size: 16px; font-weight: 600; color: #fbbf24;">"${escapeHtml(displayOverlay)}"</span>
+        <!-- On-Screen Text - LARGER -->
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid ${COLORS.bodyAccent}; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 2px;">
+            ${ICON_SVGS.text(COLORS.bodyAccent)}
+            <span style="font-size: 11px; font-weight: 700; color: ${COLORS.bodyAccent}; text-transform: uppercase; letter-spacing: 1.5px;">ON-SCREEN TEXT</span>
+          </div>
+          <span style="font-size: 18px; font-weight: 600; color: #fbbf24; line-height: 1.4;">"${escapeHtml(displayOverlay)}"</span>
         </div>
         ` : ''}
         
-        <!-- Camera Setup - Inline Layout -->
-        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; background: rgba(100, 116, 139, 0.05); border-left: 4px solid ${COLORS.cameraColor}; border-radius: 4px;">
-          <span style="font-size: 10px; font-weight: 700; color: ${COLORS.cameraColor}; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">CAMERA</span>
-          <span style="font-size: 13px; color: ${COLORS.textSecondary}; line-height: 1.5;">${escapeHtml(displayVisual)}</span>
+        <!-- Camera Setup - LARGER -->
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; background: rgba(100, 116, 139, 0.08); border-left: 4px solid ${COLORS.cameraColor}; border-radius: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 2px;">
+            ${ICON_SVGS.camera(COLORS.cameraColor)}
+            <span style="font-size: 11px; font-weight: 700; color: ${COLORS.cameraColor}; text-transform: uppercase; letter-spacing: 1.5px;">CAMERA SETUP</span>
+          </div>
+          <span style="font-size: 14px; color: ${COLORS.textSecondary}; line-height: 1.5;">${escapeHtml(displayVisual)}</span>
         </div>
         
       </div>
       
-      <!-- Footer: Progress dots + Filming tip -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
-        <span style="font-size: 16px; letter-spacing: 6px; color: ${COLORS.textMuted};">${meta.progressDots}</span>
-        <span style="font-size: 11px; color: ${COLORS.textMuted}; font-style: italic;">💡 ${meta.tip}</span>
+      <!-- Footer: Progress dots -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+        <span style="font-size: 14px; letter-spacing: 4px; color: ${COLORS.textMuted};">${meta.progressDots}</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${ICON_SVGS.tip(COLORS.textMuted)}
+          <span style="font-size: 10px; color: ${COLORS.textMuted}; font-style: italic;">${meta.tip}</span>
+        </div>
       </div>
       
     </div>
