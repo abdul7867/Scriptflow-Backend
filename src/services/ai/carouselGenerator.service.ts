@@ -59,6 +59,16 @@ export interface CarouselConfig {
 const CARD_WIDTH = 900;
 const CARD_HEIGHT = 900;
 
+/** EXTRACT MODE CONSTANTS */
+const EXTRACT_COLORS = {
+  transcript: '#fafafa',
+  camera: '#94a3b8',      // Light Slate
+  text: '#fbbf24',        // Amber/Gold
+  hook: '#a78bfa',        // Light Violet
+  tone: '#f472b6',        // Pink
+  bgCard: '#18181b',      // Slightly lighter than black
+};
+
 /** Load fonts (same as imageGenerator) */
 let fontDataBold: Buffer;
 let fontDataSemiBold: Buffer;
@@ -141,6 +151,37 @@ const SECTION_META = {
     tip: 'Explain the WHY',
     progressDots: '○ • ○',
   },
+  // EXTRACT MODE SECTIONS
+  extract1: {
+    number: '01',
+    title: 'TRANSCRIPT',
+    emoji: '💬',
+    timing: 'Verbatim',
+    subtitle: 'Original audio',
+    accent: COLORS.accent, // Violet
+    tip: 'Original speech',
+    progressDots: '• ○ ○',
+  },
+  extract2: {
+    number: '02',
+    title: 'VISUALS',
+    emoji: '📸',
+    timing: 'Camera & Text',
+    subtitle: 'Visual breakdown',
+    accent: '#f59e0b', // Gold
+    tip: 'Visual direction',
+    progressDots: '○ • ○',
+  },
+  extract3: {
+    number: '03',
+    title: 'ANALYSIS',
+    emoji: '🎯',
+    timing: 'Hook & Tone',
+    subtitle: 'Strategic analysis',
+    accent: '#ef4444', // Red/Pink
+    tip: 'Why it worked',
+    progressDots: '○ ○ •',
+  },
   cta: {
     number: '03',
     title: 'CTA',
@@ -190,6 +231,9 @@ const FORMAT_CONFIGS: Record<string, typeof SECTION_META> = {
       tip: 'Confidence is key',
       progressDots: '○ ○ •',
     },
+    extract1: SECTION_META.extract1,
+    extract2: SECTION_META.extract2,
+    extract3: SECTION_META.extract3,
   },
 
   // EDGY FORMAT - Myth Buster
@@ -224,6 +268,9 @@ const FORMAT_CONFIGS: Record<string, typeof SECTION_META> = {
       tip: 'Be confident',
       progressDots: '○ ○ •',
     },
+    extract1: SECTION_META.extract1,
+    extract2: SECTION_META.extract2,
+    extract3: SECTION_META.extract3,
   },
 
   // TUTORIAL FORMAT - Step by Step
@@ -258,6 +305,9 @@ const FORMAT_CONFIGS: Record<string, typeof SECTION_META> = {
       tip: 'End with energy',
       progressDots: '○ ○ ③',
     },
+    extract1: SECTION_META.extract1,
+    extract2: SECTION_META.extract2,
+    extract3: SECTION_META.extract3,
   },
 };
 
@@ -397,6 +447,60 @@ function extractVisualAndDialogue(lines: string[]): { visual: string; textOverla
 }
 
 /**
+ * Parsed extract script structure
+ */
+interface ExtractScriptData {
+  transcript: string;
+  isVisualOnly: boolean;
+  cameraAngles: string;
+  onScreenText: string;
+  hookType: string;
+  tone: string;
+  visualCues: string; // Scene breakdown
+}
+
+/**
+ * Parse extract script format (📋💬📸)
+ */
+function parseExtractScript(scriptText: string): ExtractScriptData {
+  // Find transcript line
+  const transcriptMatch = scriptText.match(/💬\s*(?:TRANSCRIPT|VISUAL-ONLY REEL)[^:]*:\s*\n?"?([^"]+)"?/i);
+  const transcript = transcriptMatch ? transcriptMatch[1].trim() : 'No speech detected';
+
+  // Check if it's a visual-only reel
+  const isVisualOnly = scriptText.includes('🔇') || scriptText.includes('No speech');
+
+  // Find camera angles (allow multiline)
+  const cameraMatch = scriptText.match(/📸\s*CAMERA ANGLES?:\s*([\s\S]*?)(?=\n[📝🎬🎞️✨📋🎯🎭]|$)/i);
+  const cameraAngles = cameraMatch ? cameraMatch[1].trim() : '';
+
+  // Find on-screen text
+  const textMatch = scriptText.match(/📝\s*(?:ON-SCREEN TEXT|CAPTIONS)[^:]*:\s*([\s\S]*?)(?=\n[📸🎬🎞️✨📋🎯🎭]|$)/i);
+  const onScreenText = textMatch ? textMatch[1].trim() : '';
+
+  // Find visual/scene breakdown
+  const sceneMatch = scriptText.match(/(?:🎬 SCENE-BY-SCENE BREAKDOWN|✨ VISUAL ELEMENTS):\s*([\s\S]*?)(?=\n[📸🎬🎞️✨📋🎯🎭]|$)/i);
+  const visualCues = sceneMatch ? sceneMatch[1].trim() : '';
+
+  // Find hook type and tone
+  const hookTypeMatch = scriptText.match(/🎯\s*Hook Type:\s*([^\n]+)/i);
+  const hookType = hookTypeMatch ? hookTypeMatch[1].trim() : 'Unknown';
+
+  const toneMatch = scriptText.match(/🎭\s*Tone:\s*([^\n]+)/i);
+  const tone = toneMatch ? toneMatch[1].trim() : 'Unknown';
+
+  return {
+    transcript,
+    isVisualOnly,
+    cameraAngles,
+    onScreenText,
+    hookType,
+    tone,
+    visualCues
+  };
+}
+
+/**
  * Truncate text to fit in card while keeping it readable
  */
 function truncateText(text: string, maxLength: number): string {
@@ -433,6 +537,170 @@ function generateCardTemplate(
   // Format badge (shows STORY/EDGY/TUTORIAL or remix type like SHORTER)
   const formatBadge = remixType ? remixType.toUpperCase() :
     (format && format !== 'default' ? format.toUpperCase() : '');
+
+  // EXTRACT MODE RENDERING
+  // -------------------------------------------------------------------------
+  if (format === 'extract') {
+    // Card 1: TRANSCRIPT (using hook template structure)
+    if (sectionKey === 'hook') {
+      const displayTranscript = truncateText(lines[0] || 'No transcript', 450); // Larger limit for transcript
+      // Adjust font size based on length
+      const transcriptSize = displayTranscript.length > 300 ? 24 :
+        displayTranscript.length > 200 ? 28 :
+          displayTranscript.length > 100 ? 32 : 38;
+
+      return `
+        <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
+          <!-- Compact Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">SCRIPTFLOW</span>
+              <span style="font-size: 10px; font-weight: 700; color: ${COLORS.accent}; background: rgba(139, 92, 246, 0.2); padding: 4px 8px; border-radius: 4px; letter-spacing: 1px;">EXTRACT</span>
+            </div>
+            <span style="font-size: 12px; color: ${COLORS.textMuted};">${variationTag} • Verbatim</span>
+          </div>
+
+          <!-- Title -->
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px; padding: 12px 16px; background: rgba(139, 92, 246, 0.08); border-radius: 8px;">
+            <div style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: rgba(139, 92, 246, 0.12); border-radius: 8px;">
+              ${ICON_SVGS.text(COLORS.accent)}
+            </div>
+            <span style="font-size: 20px; font-weight: 800; color: ${COLORS.accent}; letter-spacing: 1.5px;">TRANSCRIPT</span>
+          </div>
+
+          <!-- Transcript Content -->
+          <div style="display: flex; align-items: flex-start; justify-content: flex-start; flex: 1; padding: 0 16px;">
+             <div style="font-size: ${transcriptSize}px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.6; letter-spacing: -0.2px;">"${escapeHtml(displayTranscript)}"</div>
+          </div>
+
+          <!-- Footer -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+            <span style="font-size: 14px; letter-spacing: 4px; color: ${COLORS.textMuted};">• ○ ○</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: ${COLORS.textMuted}; font-style: italic;">Original audio content</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card 2: VISUALS (Camera + Text)
+    if (sectionKey === 'body') {
+      const cameraContent = truncateText(lines[0] || 'Standard shot', 250);
+      const textContent = truncateText(lines[1] || 'No text detected', 150);
+
+      return `
+        <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
+          <!-- Compact Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">SCRIPTFLOW</span>
+              <span style="font-size: 10px; font-weight: 700; color: ${COLORS.accent}; background: rgba(139, 92, 246, 0.2); padding: 4px 8px; border-radius: 4px; letter-spacing: 1px;">EXTRACT</span>
+            </div>
+            <span style="font-size: 12px; color: ${COLORS.textMuted};">${variationTag} • Visuals</span>
+          </div>
+
+          <!-- Title -->
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px; padding: 12px 16px; background: rgba(245, 158, 11, 0.08); border-radius: 8px;">
+            <div style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: rgba(245, 158, 11, 0.12); border-radius: 8px;">
+              ${ICON_SVGS.camera('#f59e0b')}
+            </div>
+            <span style="font-size: 20px; font-weight: 800; color: #f59e0b; letter-spacing: 1.5px;">VISUAL BREAKDOWN</span>
+          </div>
+
+          <!-- Content Split -->
+          <div style="display: flex; flex-direction: column; gap: 24px; flex: 1;">
+            
+            <!-- Camera Section - ENHANCED SIZE -->
+            <div style="display: flex; flex-direction: column; gap: 12px; padding: 24px; background: rgba(100, 116, 139, 0.08); border-left: 6px solid ${COLORS.cameraColor}; border-radius: 8px; flex: 1;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                ${ICON_SVGS.camera(COLORS.cameraColor)}
+                <span style="font-size: 14px; font-weight: 800; color: ${COLORS.cameraColor}; text-transform: uppercase; letter-spacing: 2px;">CAMERA SETUP</span>
+              </div>
+              <span style="font-size: 20px; color: ${COLORS.textMain}; line-height: 1.5;">${escapeHtml(cameraContent)}</span>
+            </div>
+
+            <!-- Text Overlay Section - ENHANCED SIZE -->
+            <div style="display: flex; flex-direction: column; gap: 12px; padding: 24px; background: rgba(245, 158, 11, 0.1); border-left: 6px solid #f59e0b; border-radius: 8px; flex: 1;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                ${ICON_SVGS.text('#f59e0b')}
+                <span style="font-size: 14px; font-weight: 800; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px;">ON-SCREEN TEXT</span>
+              </div>
+              <span style="font-size: 24px; font-weight: 700; color: #fbbf24; line-height: 1.4;">${textContent ? `"${escapeHtml(textContent)}"` : 'None'}</span>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+            <span style="font-size: 14px; letter-spacing: 4px; color: ${COLORS.textMuted};">○ • ○</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: ${COLORS.textMuted}; font-style: italic;">Visual composition</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Card 3: ANALYSIS (Hook + Tone)
+    if (sectionKey === 'cta') {
+      const hookType = lines[0] || 'Unknown';
+      const tone = lines[1] || 'Unknown';
+      const visualCues = truncateText(lines[2] || 'Standard elements', 150);
+
+      return `
+        <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
+          <!-- Compact Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">SCRIPTFLOW</span>
+              <span style="font-size: 10px; font-weight: 700; color: ${COLORS.accent}; background: rgba(139, 92, 246, 0.2); padding: 4px 8px; border-radius: 4px; letter-spacing: 1px;">EXTRACT</span>
+            </div>
+            <span style="font-size: 12px; color: ${COLORS.textMuted};">${variationTag} • Analysis</span>
+          </div>
+
+          <!-- Title -->
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px; padding: 12px 16px; background: rgba(239, 68, 68, 0.08); border-radius: 8px;">
+            <div style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: rgba(239, 68, 68, 0.12); border-radius: 8px;">
+              ${ICON_SVGS.cta('#ef4444')}
+            </div>
+            <span style="font-size: 20px; font-weight: 800; color: #ef4444; letter-spacing: 1.5px;">STRATEGIC ANALYSIS</span>
+          </div>
+
+          <!-- Content Split -->
+          <div style="display: flex; flex-direction: column; gap: 24px; flex: 1;">
+            
+            <!-- Hook Type -->
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 24px; background: rgba(139, 92, 246, 0.05); border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.1);">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 1.5px;">HOOK STRATEGY</span>
+              <span style="font-size: 24px; font-weight: 700; color: ${COLORS.accent};">${escapeHtml(hookType)}</span>
+            </div>
+
+            <!-- Tone -->
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 24px; background: rgba(245, 158, 11, 0.05); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.1);">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 1.5px;">TONE & VIBE</span>
+              <span style="font-size: 24px; font-weight: 700; color: #f59e0b;">${escapeHtml(tone)}</span>
+            </div>
+
+            <!-- Key Visual Elements -->
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 16px;">
+              <span style="font-size: 14px; font-weight: 700; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 1.5px;">KEY VISUAL ELEMENTS</span>
+              <span style="font-size: 16px; color: ${COLORS.textSecondary}; line-height: 1.5;">${escapeHtml(visualCues)}</span>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(139, 92, 246, 0.1);">
+            <span style="font-size: 14px; letter-spacing: 4px; color: ${COLORS.textMuted};">○ ○ •</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; color: ${COLORS.textMuted}; font-style: italic;">Why it works</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
 
   return `
     <div style="display: flex; flex-direction: column; width: ${CARD_WIDTH}px; height: ${CARD_HEIGHT}px; padding: 40px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
@@ -658,6 +926,85 @@ export async function generateCarouselImages(
 }
 
 /**
+ * Generate 3-card carousel for EXTRACT mode
+ * Replaces the old single-image generateExtractImage()
+ */
+export async function generateExtractCarouselImages(
+  scriptText: string
+): Promise<CarouselImages> {
+  const startTime = Date.now();
+
+  // Use "EXTRACT" as variation tag
+  const variationTag = "EXTRACT";
+
+  logger.info('Generating extract carousel images (3 cards)');
+
+  try {
+    // Parse the extract text
+    const data = parseExtractScript(scriptText);
+
+    // Prepare content for each card
+    // Card 1: Transcript
+    const card1Content = [data.transcript];
+
+    // Card 2: Visuals (Camera, Text)
+    const card2Content = [data.cameraAngles, data.onScreenText];
+
+    // Card 3: Analysis (Hook, Tone, Cues)
+    const card3Content = [data.hookType, data.tone, data.visualCues];
+
+    // Generate unique filenames
+    const timestamp = Date.now();
+    const prefix = `extract_${timestamp}`;
+
+    // Generate cards in parallel
+    // We reuse the section keys 'hook', 'body', 'cta' but map them to 'transcript', 'visuals', 'analysis'
+    // in the template generator when format='extract'
+    const [hookBuffer, bodyBuffer, ctaBuffer] = await Promise.all([
+      renderToPng(generateCardTemplate('hook', card1Content, variationTag, 'extract')),
+      renderToPng(generateCardTemplate('body', card2Content, variationTag, 'extract')),
+      renderToPng(generateCardTemplate('cta', card3Content, variationTag, 'extract')),
+    ]);
+
+    const renderTime = Date.now() - startTime;
+    logger.info(`Extract carousel cards rendered in ${renderTime}ms`);
+
+    // Upload sequentially
+    const hookUrl = await uploadImage(hookBuffer, `${prefix}_transcript.png`);
+    // @ts-ignore
+    let hook = null; // GC hint
+
+    const bodyUrl = await uploadImage(bodyBuffer, `${prefix}_visuals.png`);
+    // @ts-ignore
+    let body = null; // GC hint
+
+    const ctaUrl = await uploadImage(ctaBuffer, `${prefix}_analysis.png`);
+    // @ts-ignore
+    let cta = null; // GC hint
+
+    const totalTime = Date.now() - startTime;
+    logger.info(`Extract carousel images generated and uploaded in ${totalTime}ms`);
+
+    // Hint GC
+    if (global.gc) {
+      setImmediate(() => {
+        try { global.gc!(); } catch (e) { /* ignore */ }
+      });
+    }
+
+    return {
+      hookCard: hookUrl,
+      bodyCard: bodyUrl,
+      ctaCard: ctaUrl,
+    };
+
+  } catch (error: any) {
+    logger.error('Failed to generate extract carousel images', { error: error.message });
+    throw error;
+  }
+}
+
+/**
  * Generate a single section card image
  * Useful for partial regeneration
  */
@@ -687,6 +1034,7 @@ export function isCarouselAvailable(): boolean {
 
 export default {
   generateCarouselImages,
+  generateExtractCarouselImages,
   generateSectionImage,
   parseScriptSections,
   isCarouselAvailable,

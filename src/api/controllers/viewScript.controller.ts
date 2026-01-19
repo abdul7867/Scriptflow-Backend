@@ -76,7 +76,12 @@ export const viewScriptHandler = async (req: Request, res: Response) => {
     // SECURITY: X-Content-Type-Options to prevent MIME sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
-    res.send(generateScriptPage(script.scriptText, script.userIdea, script.storyFormat));
+    // Check for EXTRACT format
+    if (isExtractFormat(script.scriptText)) {
+      res.send(generateExtractPage(script.scriptText, script.userIdea));
+    } else {
+      res.send(generateScriptPage(script.scriptText, script.userIdea, script.storyFormat));
+    }
 
   } catch (error) {
     logger.error('Failed to view script:', error);
@@ -113,6 +118,15 @@ interface VisualDialoguePair {
 interface ParsedSection {
   pairs: VisualDialoguePair[];
   rawText: string;
+}
+
+/**
+ * Check if the script is in EXTRACT format
+ */
+function isExtractFormat(scriptText: string): boolean {
+  return scriptText.includes('📋 EXACT EXTRACTION') ||
+    scriptText.includes('💬 TRANSCRIPT') ||
+    scriptText.includes('🔇 VISUAL-ONLY REEL');
 }
 
 /**
@@ -274,6 +288,191 @@ const FORMAT_SECTION_TITLES: Record<string, { hook: string; body: string; cta: s
 };
 
 /**
+ * Generate extract format HTML page
+ */
+function generateExtractPage(scriptText: string, userIdea: string): string {
+  const escapedIdea = escapeHtml(userIdea);
+
+  // Parse extract sections
+  const transcriptMatch = scriptText.match(/💬\s*(?:TRANSCRIPT|VISUAL-ONLY REEL)[^:]*:\s*\n?"?([^"]+)"?/i);
+  const transcript = transcriptMatch ? transcriptMatch[1].trim() : 'No speech detected';
+
+  const cameraMatch = scriptText.match(/📸\s*CAMERA ANGLES?:\s*([\s\S]*?)(?=\n[📝🎬🎞️✨📋🎯🎭]|$)/i);
+  const cameraAngles = cameraMatch ? cameraMatch[1].trim() : 'Standard shot';
+
+  const textMatch = scriptText.match(/📝\s*(?:ON-SCREEN TEXT|CAPTIONS)[^:]*:\s*([\s\S]*?)(?=\n[📸🎬🎞️✨📋🎯🎭]|$)/i);
+  const onScreenText = textMatch ? textMatch[1].trim() : 'No text';
+
+  const analysisMatch = scriptText.match(/(?:🎯 Hook Type|🎭 Tone|✨ VISUAL ELEMENTS)[\s\S]*/i);
+  const analysis = analysisMatch ? analysisMatch[0].trim() : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Your Extract | ScriptFlow</title>
+  <style>
+    /* Reuse core styles */
+    ${getCommonCss()}
+    
+    .extract-card {
+      background: rgba(15, 15, 18, 0.9);
+      border: 1px solid rgba(139, 92, 246, 0.1);
+      border-radius: 16px;
+      margin-bottom: 20px;
+      padding: 24px;
+    }
+    
+    .extract-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #8b5cf6;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .extract-content {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #fafafa;
+      white-space: pre-wrap;
+    }
+    
+    .copy-btn-sm {
+      background: rgba(139, 92, 246, 0.1);
+      color: #8b5cf6;
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">SCRIPT<span>FLOW</span></div>
+    <div class="badge">EXTRACT</div>
+  </div>
+
+  <div class="idea">
+    <div class="idea-label">💡 Original Reel</div>
+    ${escapedIdea}
+  </div>
+
+  <!-- Transcript Section -->
+  <div class="extract-card">
+    <div class="extract-label">
+      <span>💬 TRANSCRIPT</span>
+      <button class="copy-btn-sm" onclick="copyContent('transcript')">
+        <span id="btn-transcript">COPY</span>
+      </button>
+    </div>
+    <div class="extract-content" id="view-transcript">${escapeHtml(transcript)}</div>
+    <textarea class="hidden-text" id="text-transcript">${escapeHtml(transcript)}</textarea>
+  </div>
+
+  <!-- Visuals Section -->
+  <div class="extract-card">
+    <div class="extract-label">
+      <span>📸 VISUALS & TEXT</span>
+      <button class="copy-btn-sm" onclick="copyContent('visuals')">
+        <span id="btn-visuals">COPY</span>
+      </button>
+    </div>
+    <div class="extract-content" id="view-visuals">
+<strong>CAMERA:</strong>
+${escapeHtml(cameraAngles)}
+
+<strong>TEXT OVERLAY:</strong>
+${escapeHtml(onScreenText)}
+    </div>
+    <textarea class="hidden-text" id="text-visuals">CAMERA:
+${escapeHtml(cameraAngles)}
+
+TEXT OVERLAY:
+${escapeHtml(onScreenText)}</textarea>
+  </div>
+
+  <!-- Analysis Section -->
+  <div class="extract-card">
+    <div class="extract-label">
+      <span>🎯 ANALYSIS</span>
+      <button class="copy-btn-sm" onclick="copyContent('analysis')">
+        <span id="btn-analysis">COPY</span>
+      </button>
+    </div>
+    <div class="extract-content" id="view-analysis">${escapeHtml(analysis)}</div>
+    <textarea class="hidden-text" id="text-analysis">${escapeHtml(analysis)}</textarea>
+  </div>
+
+  <button class="copy-all-button" onclick="copyContent('transcript')">
+    <svg class="copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+    </svg>
+    <span>COPY TRANSCRIPT</span>
+  </button>
+
+  <div class="footer">POWERED BY SCRIPTFLOW AI</div>
+
+  <script>
+    async function copyContent(id) {
+      const text = document.getElementById('text-' + id).value;
+      const btnText = document.getElementById('btn-' + id);
+      
+      // If clicking main button, target transcript button label if available
+      const targetLabel = btnText || document.querySelector('.copy-all-button span');
+
+      try {
+        await navigator.clipboard.writeText(text);
+        if (targetLabel) {
+           const original = targetLabel.innerText;
+           targetLabel.innerText = '✓ COPIED';
+           setTimeout(() => targetLabel.innerText = original, 2000);
+        }
+      } catch (err) {
+        // Fallback
+        const textarea = document.getElementById('text-' + id);
+        textarea.select();
+        document.execCommand('copy');
+        if (targetLabel) {
+           targetLabel.innerText = '✓ COPIED';
+           setTimeout(() => targetLabel.innerText = 'COPY', 2000);
+        }
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * Common CSS to share between pages
+ */
+function getCommonCss(): string {
+  return `
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #0a0a0c; color: #fafafa; padding: 16px; padding-bottom: 100px; min-height: 100vh; }
+    .header { display: flex; justify-content: space-between; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px; }
+    .logo { font-weight: 900; letter-spacing: -0.5px; }
+    .logo span { color: #8b5cf6; }
+    .badge { font-size: 9px; background: rgba(139, 92, 246, 0.2); color: #a78bfa; padding: 4px 8px; border-radius: 4px; font-weight: 700; }
+    .idea { background: rgba(15,15,18,0.9); padding: 12px 16px; border-radius: 8px; border-left: 3px solid #8b5cf6; margin-bottom: 24px; font-size: 13px; color: #a1a1aa; }
+    .idea-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #8b5cf6; margin-bottom: 6px; }
+    .hidden-text { position: absolute; left: -9999px; opacity: 0; }
+    .copy-all-button { position: fixed; bottom: 16px; left: 16px; right: 16px; background: #8b5cf6; color: white; border: none; border-radius: 12px; padding: 16px; font-weight: 700; display: flex; justify-content: center; gap: 10px; box-shadow: 0 8px 20px rgba(139,92,246,0.3); cursor: pointer; }
+    .copy-icon { width: 20px; }
+    .footer { text-align: center; font-size: 10px; color: #3f3f46; margin-top: 24px; letter-spacing: 2px; }
+  `;
+}
+
+/**
  * Generate the HTML page for viewing and copying the script
  * ENHANCED: Clean visual/dialogue separation with proper hierarchy
  * FORMAT-AWARE: Uses format-specific section titles
@@ -301,34 +500,11 @@ function generateScriptPage(scriptText: string, userIdea: string, storyFormat?: 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    ${getCommonCss()}
     
+    /* Page specific overrides */
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #0a0a0c;
-      color: #fafafa;
-      min-height: 100vh;
       padding: 16px;
-      padding-bottom: 100px;
-    }
-    
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    
-    .logo {
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: -0.5px;
     }
     
     .logo span {
@@ -336,16 +512,7 @@ function generateScriptPage(scriptText: string, userIdea: string, storyFormat?: 
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-    }
-    
-    .badge {
-      font-size: 9px;
-      background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
+      color: transparent; /* Override common css */
     }
     
     .format-badge {
@@ -360,25 +527,16 @@ function generateScriptPage(scriptText: string, userIdea: string, storyFormat?: 
     }
     
     .idea {
-      font-size: 13px;
-      color: #a1a1aa;
-      margin-bottom: 24px;
-      padding: 12px 16px;
-      background: rgba(15, 15, 18, 0.9);
-      border-radius: 8px;
+      /* Overrides common css for gradient border */
       border-left: 3px solid #8b5cf6;
     }
     
     .idea-label {
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 2px;
       background: linear-gradient(135deg, #8b5cf6 0%, #f59e0b 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 6px;
+      color: transparent;
     }
     
     .section-card {
@@ -575,12 +733,7 @@ function generateScriptPage(scriptText: string, userIdea: string, storyFormat?: 
       height: 20px;
     }
     
-    .footer {
-      text-align: center;
-      font-size: 10px;
-      color: #3f3f46;
-      margin-top: 24px;
-      letter-spacing: 2px;
+      /* Removed footer duplicate since it's in common css but kept styles here if needed specific */
     }
 
     /* Desktop: Side-by-side layout */
