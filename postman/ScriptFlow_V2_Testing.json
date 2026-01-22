@@ -1,0 +1,683 @@
+{
+    "info": {
+        "_postman_id": "scriptflow-v2-testing",
+        "name": "ScriptFlow V2 Testing",
+        "description": "Dedicated testing collection for V2 API endpoints with video-responsive script generation.\n\n## Features Tested\n- Dynamic script length matching (15s-60s videos)\n- Tone hints (professional, funny, provocative, educational, casual)\n- Language hints (en, hi, etc.)\n- Mode selection (full, hook_only)\n- Storytelling formats (story, edgy, tutorial)\n\n## Environment Variables\nUse `ScriptFlow_Local_Environment.json` for local testing.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "2.0.0"
+    },
+    "variable": [
+        {
+            "key": "BASE_URL",
+            "value": "http://localhost:3000",
+            "type": "string"
+        },
+        {
+            "key": "SUBSCRIBER_ID",
+            "value": "test_user_12345",
+            "type": "string"
+        },
+        {
+            "key": "TEST_REEL_REAL",
+            "value": "https://www.instagram.com/reel/C_wqgJOSJ-o/",
+            "type": "string",
+            "description": "Real public reel for testing (productivity tips)"
+        },
+        {
+            "key": "TEST_REEL_SHORT",
+            "value": "https://www.instagram.com/reel/C_wqgJOSJ-o/",
+            "type": "string",
+            "description": "Real Instagram reel for testing short scripts"
+        },
+        {
+            "key": "TEST_REEL_MEDIUM",
+            "value": "https://www.instagram.com/reel/DCb2BEjyUjF/",
+            "type": "string",
+            "description": "Real Instagram reel for testing medium scripts"
+        },
+        {
+            "key": "TEST_REEL_LONG",
+            "value": "https://www.instagram.com/reel/DD3iVKkyA-e/",
+            "type": "string",
+            "description": "Real Instagram reel for testing long scripts"
+        }
+    ],
+    "item": [
+        {
+            "name": "V2 Script Generation",
+            "description": "Test V2 script generation with dynamic length matching",
+            "item": [
+                {
+                    "name": "Generate Script - Short Video (15s)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_SHORT}}\",\n  \"user_idea\": \"Quick productivity tip for morning routines\",\n  \"tone_hint\": \"professional\",\n  \"mode\": \"full\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Test with 15-second video.\n\n**Expected:**\n- Total words: 33-41\n- Body scenes: 1\n- Hook: 6-9 words\n- CTA: 6-10 words"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Generate Script - Medium Video (25s)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Tech tips for developers working remotely\",\n  \"tone_hint\": \"educational\",\n  \"language_hint\": \"en\",\n  \"mode\": \"full\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Test with 25-second video (Instagram optimal).\n\n**Expected:**\n- Total words: 55-68\n- Body scenes: 2\n- Hook: 10-15 words\n- CTA: 10-17 words"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Generate Script - Long Video (45s)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_LONG}}\",\n  \"user_idea\": \"Complete guide to content creation workflow\",\n  \"tone_hint\": \"casual\",\n  \"mode\": \"full\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Test with 45-second video.\n\n**Expected:**\n- Total words: 99-122\n- Body scenes: 2\n- Hook: 18-27 words\n- CTA: 18-31 words"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Generate Script - Hook Only Mode",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Attention-grabbing hook for fitness content\",\n  \"mode\": \"hook_only\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Test hook-only generation mode.\n\n**Expected:**\n- Only [HOOK] section\n- No [BODY] or [CTA]"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Tone Hints Testing",
+            "description": "Test different tone hints with same video",
+            "item": [
+                {
+                    "name": "Professional Tone",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Business strategy for startups\",\n  \"tone_hint\": \"professional\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Business-focused, authoritative tone"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Funny Tone",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Relatable struggles of working from home\",\n  \"tone_hint\": \"funny\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Humorous with clever wordplay"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Provocative Tone",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Why most productivity advice is wrong\",\n  \"tone_hint\": \"provocative\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Edgy and attention-grabbing"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Educational Tone",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"How to use Instagram analytics effectively\",\n  \"tone_hint\": \"educational\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Informative and teaching-focused"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Casual Tone",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"My favorite coffee brewing method\",\n  \"tone_hint\": \"casual\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Friendly and conversational"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Storytelling Formats",
+            "description": "Test storytelling format variations",
+            "item": [
+                {
+                    "name": "Story Format (Hero's Arc)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"How I overcame creative block\",\n  \"story_format\": \"story\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Personal journey format: Before → Turning Point → After"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Edgy Format (Myth Buster)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Why 'hustle culture' is destroying your productivity\",\n  \"story_format\": \"edgy\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Contrarian format: Myth → Truth → Proof"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Tutorial Format (Step-by-Step)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"How to edit Instagram reels in 3 steps\",\n  \"story_format\": \"tutorial\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Tutorial format: Promise → Steps → Result"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Language Testing",
+            "description": "Test language hint functionality",
+            "item": [
+                {
+                    "name": "English Script",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Content creation tips\",\n  \"language_hint\": \"en\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Force English output"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Hindi Script (Romanized)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Content creation tips for Indian creators\",\n  \"language_hint\": \"hi\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Force Hindi output (romanized)"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "V2 Feedback",
+            "description": "Test V2 feedback endpoints",
+            "item": [
+                {
+                    "name": "Submit Detailed Feedback",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"test_hash_12345\",\n  \"rating\": 5,\n  \"feedback_text\": \"Perfect script! Matched my video length exactly.\",\n  \"section_feedback\": {\n    \"hook\": { \"rating\": 5, \"comment\": \"Very engaging\" },\n    \"body\": { \"rating\": 5, \"comment\": \"Right length, good pacing\" },\n    \"cta\": { \"rating\": 4, \"comment\": \"Could be stronger\" }\n  }\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/feedback",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "feedback"
+                            ]
+                        },
+                        "description": "Submit section-level feedback"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Quick Feedback - Thumbs Up",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"test_hash_12345\",\n  \"reaction\": \"thumbs_up\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/feedback/quick",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "feedback",
+                                "quick"
+                            ]
+                        },
+                        "description": "One-tap positive feedback"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Quick Feedback - Thumbs Down",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"request_hash\": \"test_hash_12345\",\n  \"reaction\": \"thumbs_down\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/feedback/quick",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "feedback",
+                                "quick"
+                            ]
+                        },
+                        "description": "One-tap negative feedback"
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Edge Cases",
+            "description": "Test edge cases and error handling",
+            "item": [
+                {
+                    "name": "Missing Required Fields",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Should return validation error"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Invalid Tone Hint",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"Test idea\",\n  \"tone_hint\": \"invalid_tone\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Should handle gracefully or return error"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Very Long User Idea (500 chars)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"subscriber_id\": \"{{SUBSCRIBER_ID}}\",\n  \"reel_url\": \"{{TEST_REEL_MEDIUM}}\",\n  \"user_idea\": \"This is a very long user idea that tests the system's ability to handle extended input text. It should still generate a properly sized script based on the video duration, not the idea length. The script generator should extract the core concept and create a concise, video-matched script regardless of how verbose the user's input is. This tests the robustness of the word limit calculator and ensures it prioritizes video duration over idea complexity.\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{BASE_URL}}/api/v2/script/generate",
+                            "host": [
+                                "{{BASE_URL}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v2",
+                                "script",
+                                "generate"
+                            ]
+                        },
+                        "description": "Test with verbose user input"
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}
+

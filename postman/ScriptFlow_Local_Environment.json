@@ -1,0 +1,34 @@
+{
+    "id": "scriptflow-local-env",
+    "name": "ScriptFlow Local",
+    "values": [
+        {
+            "key": "BASE_URL",
+            "value": "http://localhost:3000",
+            "type": "default",
+            "enabled": true
+        },
+        {
+            "key": "SUBSCRIBER_ID",
+            "value": "12345678",
+            "type": "default",
+            "enabled": true,
+            "description": "ManyChat subscriber ID for testing"
+        },
+        {
+            "key": "ADMIN_API_KEY",
+            "value": "",
+            "type": "secret",
+            "enabled": true,
+            "description": "Admin API key for protected endpoints"
+        },
+        {
+            "key": "TEST_REEL_URL",
+            "value": "https://www.instagram.com/reel/C_wqgJOSJ-o/",
+            "type": "default",
+            "enabled": true,
+            "description": "Real public Instagram reel URL for testing"
+        }
+    ],
+    "_postman_variable_scope": "environment"
+}
