@@ -1,0 +1,88 @@
+name: Production Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. TEST PHASE (CI)
+  # Runs on GitHub's servers. If this fails, code is REJECTED.
+  quality-check:
+    name: 🛡️ Quality Assurance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Check TypeScript Build (Dry Run)
+        run: npm run build
+      
+      # Uncomment this line once you have actual tests!
+      # - name: Run Tests
+      #   run: npm test
+
+  # 2. DEPLOY PHASE (CD)
+  # Only runs if 'quality-check' passes AND it is a push to main (not a PR)
+  deploy:
+    name: 🚀 Deploy to AWS
+    needs: quality-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      # A. Build & Push Docker Image to Docker Hub
+      # This moves the heavy "Building" work to GitHub, saving your server CPU.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.aws
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/scriptflow-backend:latest
+      
+      # B. Update the Live Server
+      # Logs into your EC2 via SSH and tells it to pull the new image.
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Navigate to project folder
+            cd ~/Scriptflow-Backend || git clone https://github.com/abdul7867/Scriptflow-Backend.git ~/Scriptflow-Backend
+            cd ~/Scriptflow-Backend
+            
+            # Pull latest code configuration (docker-compose.yml updates)
+            git pull origin main
+
+            # Login to Docker (to pull private image)
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+            
+            # Pull the new image we just built
+            docker-compose pull app
+
+            # Restart the app (Zero Downtime if you had load balancer, minimal downtime without)
+            # Recreates only containers that changed
+            docker-compose up -d --remove-orphans
+            
+            # Prune old images to save disk space
+            docker image prune -f
