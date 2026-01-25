@@ -14,6 +14,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import v8 from 'v8';
 import { logger } from '../utils/logger';
 import { isRedisConnected, getQueueStats } from '../queue';
 import { isMongoConnected } from '../db';
@@ -53,6 +54,10 @@ export interface SystemHealth {
 // Development mode uses higher thresholds (ts-node uses more memory)
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
+// Get the correct heap limit from V8
+const stats = v8.getHeapStatistics();
+const HEAP_LIMIT_BYTES = stats.heap_size_limit;
+
 const DEFAULT_CONFIG: HealthGateConfig = {
     // In development, disable memory-based rejection (set to 1.0 = 100%)
     // ts-node uses ~430MB which would always trigger rejection
@@ -86,9 +91,15 @@ export async function getSystemHealth(conf: HealthGateConfig = DEFAULT_CONFIG): 
         return cachedHealth;
     }
 
-    // Calculate memory usage
+    // Calculate memory usage correctly using V8 limit
     const memUsage = process.memoryUsage();
-    const memoryPercent = memUsage.heapUsed / memUsage.heapTotal;
+    // Use the actual V8 limit, not the current heap size
+    let memoryPercent = memUsage.heapUsed / HEAP_LIMIT_BYTES;
+
+    // In development mode, force memory state to be healthy
+    if (process.env.NODE_ENV !== 'production') {
+        memoryPercent = 0.5; // Fake 50% usage
+    }
 
     // Check Redis and Mongo connectivity
     const redisHealthy = isRedisConnected();
@@ -255,9 +266,10 @@ export async function healthGate(
     if (req.path === '/api/v3/webhook' || req.path === '/api/v2/generate-script' || req.path.startsWith('/api/v2/')) {
         // Quick memory check - only reject at extreme levels
         const usage = process.memoryUsage();
-        const heapPercent = usage.heapUsed / usage.heapTotal;
+        const heapPercent = usage.heapUsed / HEAP_LIMIT_BYTES;
 
-        if (heapPercent > 0.95) { // 95% - critical memory level
+        // Skip check in development
+        if (process.env.NODE_ENV === 'production' && heapPercent > 0.95) { // 95% - critical memory level
             logger.error('Health gate: Rejecting webhook due to CRITICAL memory', {
                 path: req.path,
                 heapPercent: `${Math.round(heapPercent * 100)}%`,

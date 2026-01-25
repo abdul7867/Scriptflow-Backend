@@ -93,8 +93,8 @@ const QUEUE_CONFIG = {
   warningQueueDepth: parseInt(process.env.QUEUE_WARNING_DEPTH || '150', 10),
   /** Redis key for backpressure flag */
   backpressureKey: 'queue:backpressure',
-  /** How often to check queue depth (ms) - Optimized: 60s instead of 10s */
-  checkInterval: parseInt(process.env.QUEUE_CHECK_INTERVAL || '60000', 10),
+  /** How often to check queue depth (ms) - Optimized: 5 min for idle efficiency */
+  checkInterval: parseInt(process.env.QUEUE_CHECK_INTERVAL || '300000', 10),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -106,6 +106,9 @@ let scriptQueue: Queue<ScriptJobData, ScriptJobResult> | null = null;
 
 // Queue monitoring interval
 let queueMonitorInterval: NodeJS.Timeout | null = null;
+
+// Local backpressure tracking to avoid redundant Redis writes
+let isBackpressureActive = false;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // QUEUE INITIALIZATION
@@ -183,11 +186,21 @@ export function startQueueMonitoring(): void {
 
       if (totalPending > QUEUE_CONFIG.maxQueueDepth) {
         // Enable backpressure - reject new requests
-        await redis.set(QUEUE_CONFIG.backpressureKey, '1', 'EX', 60);
-        logger.warn(`Queue backpressure ENABLED: ${totalPending} pending jobs (max: ${QUEUE_CONFIG.maxQueueDepth})`);
+        if (!isBackpressureActive) {
+          await redis.set(QUEUE_CONFIG.backpressureKey, '1', 'EX', 600); // 10 min expiry
+          isBackpressureActive = true;
+          logger.warn(`Queue backpressure ENABLED: ${totalPending} pending jobs (max: ${QUEUE_CONFIG.maxQueueDepth})`);
+        } else {
+          // Refresh TTL if still high
+          await redis.expire(QUEUE_CONFIG.backpressureKey, 600);
+        }
       } else if (totalPending < QUEUE_CONFIG.warningQueueDepth) {
         // Disable backpressure
-        await redis.del(QUEUE_CONFIG.backpressureKey);
+        if (isBackpressureActive) {
+          await redis.del(QUEUE_CONFIG.backpressureKey);
+          isBackpressureActive = false;
+          logger.info('Queue backpressure DISABLED');
+        }
       }
 
       // Log warning when approaching limit

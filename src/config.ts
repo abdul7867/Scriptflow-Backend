@@ -19,7 +19,7 @@ export const config = cleanEnv(process.env, {
   REDIS_URL: str({ desc: 'Redis connection URL', default: 'redis://localhost:6379' }),
 
   // Queue
-  QUEUE_CONCURRENCY: num({ desc: 'Number of concurrent job workers', default: 5 }),
+  QUEUE_CONCURRENCY: num({ desc: 'Number of concurrent job workers', default: 8 }),
 
   // Rate Limiting
   RATE_LIMIT_MAX: num({ desc: 'Max requests per 15min window (IP-based)', default: 100 }),
@@ -90,6 +90,7 @@ export const config = cleanEnv(process.env, {
   AWS_ACCESS_KEY_ID: str({ desc: 'AWS Access Key ID', default: '' }),
   AWS_SECRET_ACCESS_KEY: str({ desc: 'AWS Secret Access Key', default: '' }),
   S3_BUCKET_NAME: str({ desc: 'S3 Bucket Name for images', default: '' }),
+  AWS_LAMBDA_FUNCTION_NAME: str({ desc: 'Name of the Image Generation Lambda', default: 'scriptflow-image-generator' }),
 
   // Image Provider Selection
   IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb', 'cloudinary'], default: 'cloudinary' }),

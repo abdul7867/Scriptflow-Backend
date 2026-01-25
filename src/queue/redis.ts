@@ -30,11 +30,11 @@ export function getRedis(): Redis {
         logger.warn(`Redis: Retrying connection in ${delay}ms (attempt ${times}/20)`);
         return delay;
       },
-      enableReadyCheck: true,
-      connectTimeout: 15000, // Increased to 15s for Upstash
+      enableReadyCheck: false, // DISABLED for Upstash to save commands (avoids INFO command)
+      connectTimeout: 30000, // Increased to 30s
       // Connection pooling for 50-100 concurrent users
       lazyConnect: false,
-      keepAlive: 60000, // Keep alive for 60 seconds (prevent Upstash timeout)
+      keepAlive: 30000, // Keep alive 30s
       family: 0, // Auto-detect IPv4/IPv6
       // CRITICAL: Enable offline queue to buffer commands during reconnection
       enableOfflineQueue: true, // Queue commands when disconnected (prevents failures)
@@ -49,7 +49,7 @@ export function getRedis(): Redis {
         return false;
       },
       // Connection pool settings for high concurrency
-      commandTimeout: 30000, // 30s timeout per command (increased for Upstash latency)
+      commandTimeout: 30000, // 30s timeout per command
       autoResubscribe: true, // Auto-resubscribe to channels on reconnect
       autoResendUnfulfilledCommands: true, // Resend commands that were sent but not fulfilled
     });

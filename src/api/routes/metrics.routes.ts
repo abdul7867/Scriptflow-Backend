@@ -46,83 +46,83 @@ class MetricsStore {
   private histogramSums: Map<string, Map<string, number>> = new Map();
   private histogramCounts: Map<string, Map<string, number>> = new Map();
   private histogramBuckets: Map<string, Map<string, Map<string, number>>> = new Map();
-  
+
   // Default histogram buckets for latency (in ms)
   private readonly LATENCY_BUCKETS = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000];
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Counters
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   incrementCounter(name: string, labels: Record<string, string> = {}, value: number = 1): void {
     const key = this.labelsToKey(labels);
-    
+
     if (!this.counters.has(name)) {
       this.counters.set(name, new Map());
     }
-    
+
     const counter = this.counters.get(name)!;
     counter.set(key, (counter.get(key) || 0) + value);
   }
-  
+
   getCounter(name: string): Map<string, number> {
     return this.counters.get(name) || new Map();
   }
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Gauges
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   setGauge(name: string, value: number, labels: Record<string, string> = {}): void {
     const key = this.labelsToKey(labels);
-    
+
     if (!this.gauges.has(name)) {
       this.gauges.set(name, new Map());
     }
-    
+
     this.gauges.get(name)!.set(key, value);
   }
-  
+
   incrementGauge(name: string, labels: Record<string, string> = {}, value: number = 1): void {
     const key = this.labelsToKey(labels);
-    
+
     if (!this.gauges.has(name)) {
       this.gauges.set(name, new Map());
     }
-    
+
     const gauge = this.gauges.get(name)!;
     gauge.set(key, (gauge.get(key) || 0) + value);
   }
-  
+
   decrementGauge(name: string, labels: Record<string, string> = {}, value: number = 1): void {
     this.incrementGauge(name, labels, -value);
   }
-  
+
   getGauge(name: string): Map<string, number> {
     return this.gauges.get(name) || new Map();
   }
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Histograms
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   observeHistogram(name: string, value: number, labels: Record<string, string> = {}): void {
     const key = this.labelsToKey(labels);
-    
+
     // Initialize if needed
     if (!this.histogramSums.has(name)) {
       this.histogramSums.set(name, new Map());
       this.histogramCounts.set(name, new Map());
       this.histogramBuckets.set(name, new Map());
     }
-    
+
     // Update sum and count
     const sums = this.histogramSums.get(name)!;
     const counts = this.histogramCounts.get(name)!;
-    
+
     sums.set(key, (sums.get(key) || 0) + value);
     counts.set(key, (counts.get(key) || 0) + 1);
-    
+
     // Update buckets
     const buckets = this.histogramBuckets.get(name)!;
     if (!buckets.has(key)) {
@@ -133,7 +133,7 @@ class MetricsStore {
       }
       buckets.get(key)!.set('+Inf', 0);
     }
-    
+
     const labelBuckets = buckets.get(key)!;
     for (const bucket of this.LATENCY_BUCKETS) {
       if (value <= bucket) {
@@ -142,7 +142,7 @@ class MetricsStore {
     }
     labelBuckets.set('+Inf', (labelBuckets.get('+Inf') || 0) + 1);
   }
-  
+
   getHistogram(name: string): {
     sums: Map<string, number>;
     counts: Map<string, number>;
@@ -154,11 +154,11 @@ class MetricsStore {
       buckets: this.histogramBuckets.get(name) || new Map(),
     };
   }
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   private labelsToKey(labels: Record<string, string>): string {
     if (Object.keys(labels).length === 0) return '';
     return Object.entries(labels)
@@ -166,7 +166,7 @@ class MetricsStore {
       .map(([k, v]) => `${k}="${v}"`)
       .join(',');
   }
-  
+
   keyToLabels(key: string): Record<string, string> {
     if (!key) return {};
     const labels: Record<string, string> = {};
@@ -208,7 +208,7 @@ const METRIC_DEFINITIONS: Record<string, { help: string; type: MetricSample['typ
     help: 'Total feedback received by type',
     type: 'counter',
   },
-  
+
   // Gauges
   scriptflow_queue_depth: {
     help: 'Current number of jobs in queue',
@@ -226,7 +226,7 @@ const METRIC_DEFINITIONS: Record<string, { help: string; type: MetricSample['typ
     help: 'Number of active user sessions',
     type: 'gauge',
   },
-  
+
   // Histograms
   scriptflow_request_duration_ms: {
     help: 'Request duration in milliseconds',
@@ -252,11 +252,11 @@ const METRIC_DEFINITIONS: Record<string, { help: string; type: MetricSample['typ
 
 function formatPrometheusMetrics(): string {
   const lines: string[] = [];
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Counters
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   for (const name of [
     'scriptflow_requests_total',
     'scriptflow_errors_total',
@@ -266,11 +266,11 @@ function formatPrometheusMetrics(): string {
   ]) {
     const def = METRIC_DEFINITIONS[name];
     const counter = metrics.getCounter(name);
-    
+
     if (counter.size > 0 || name === 'scriptflow_requests_total') {
       lines.push(`# HELP ${name} ${def.help}`);
       lines.push(`# TYPE ${name} ${def.type}`);
-      
+
       if (counter.size === 0) {
         lines.push(`${name} 0`);
       } else {
@@ -282,11 +282,11 @@ function formatPrometheusMetrics(): string {
       lines.push('');
     }
   }
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Gauges
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   for (const name of [
     'scriptflow_queue_depth',
     'scriptflow_active_jobs',
@@ -295,10 +295,10 @@ function formatPrometheusMetrics(): string {
   ]) {
     const def = METRIC_DEFINITIONS[name];
     const gauge = metrics.getGauge(name);
-    
+
     lines.push(`# HELP ${name} ${def.help}`);
     lines.push(`# TYPE ${name} ${def.type}`);
-    
+
     if (gauge.size === 0) {
       lines.push(`${name} 0`);
     } else {
@@ -309,11 +309,11 @@ function formatPrometheusMetrics(): string {
     }
     lines.push('');
   }
-  
+
   // ─────────────────────────────────────────────────────────────────────────
   // Histograms
   // ─────────────────────────────────────────────────────────────────────────
-  
+
   for (const name of [
     'scriptflow_request_duration_ms',
     'scriptflow_job_duration_ms',
@@ -322,24 +322,24 @@ function formatPrometheusMetrics(): string {
   ]) {
     const def = METRIC_DEFINITIONS[name];
     const { sums, counts, buckets } = metrics.getHistogram(name);
-    
+
     if (buckets.size > 0) {
       lines.push(`# HELP ${name} ${def.help}`);
       lines.push(`# TYPE ${name} ${def.type}`);
-      
+
       for (const [labelKey, bucketMap] of buckets) {
         const labels = metrics.keyToLabels(labelKey);
         const baseLabels = labelKey ? `${labelKey},` : '';
-        
+
         // Output bucket values
         for (const [le, value] of bucketMap) {
           lines.push(`${name}_bucket{${baseLabels}le="${le}"} ${value}`);
         }
-        
+
         // Output sum and count
         const sum = sums.get(labelKey) || 0;
         const count = counts.get(labelKey) || 0;
-        
+
         const labelStr = labelKey ? `{${labelKey}}` : '';
         lines.push(`${name}_sum${labelStr} ${sum}`);
         lines.push(`${name}_count${labelStr} ${count}`);
@@ -347,7 +347,7 @@ function formatPrometheusMetrics(): string {
       lines.push('');
     }
   }
-  
+
   return lines.join('\n');
 }
 
@@ -355,28 +355,37 @@ function formatPrometheusMetrics(): string {
 // UPDATE DYNAMIC METRICS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Cache metrics to reduce Redis load (Upstash optimization)
+let lastMetricsUpdate = 0;
+const METRICS_CACHE_TTL = 60000; // 1 minute
+
 async function updateDynamicMetrics(): Promise<void> {
+  const now = Date.now();
+
+  // Use cached values if within TTL
+  if (now - lastMetricsUpdate < METRICS_CACHE_TTL) {
+    return;
+  }
+
   try {
     // Queue metrics
     const queueStats = await getQueueStats();
     metrics.setGauge('scriptflow_queue_depth', queueStats.waiting + queueStats.delayed);
     metrics.setGauge('scriptflow_active_jobs', queueStats.active);
-    
-    // Circuit breaker metrics
+
+    // Circuit breaker metrics (No Redis call needed, in-memory)
     const circuitStats = getAllCircuitStats();
     for (const [service, stats] of Object.entries(circuitStats)) {
       const stateValue = stats.state === 'CLOSED' ? 0 : stats.state === 'HALF_OPEN' ? 1 : 2;
       metrics.setGauge('scriptflow_circuit_breaker_state', stateValue, { service });
     }
-    
-    // Active sessions from Redis
-    try {
-      const redis = getRedis();
-      const sessionKeys = await redis.keys('session:*');
-      metrics.setGauge('scriptflow_active_sessions', sessionKeys.length);
-    } catch (e) {
-      // Redis might not be available
-    }
+
+    // Active sessions - OPTIMIZED: Estimate or remove cost-heavy 'keys' scan
+    // Calculating exact active sessions via keys(*) is too expensive for Upstash
+    // We will track this via a counter in sessionManager if needed, or omit for now
+    // metrics.setGauge('scriptflow_active_sessions', 0); 
+
+    lastMetricsUpdate = now;
   } catch (error) {
     logger.error('Failed to update dynamic metrics', { error });
   }
@@ -393,7 +402,7 @@ async function updateDynamicMetrics(): Promise<void> {
 router.get('/', async (req: Request, res: Response) => {
   try {
     await updateDynamicMetrics();
-    
+
     res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.send(formatPrometheusMetrics());
   } catch (error) {
@@ -409,10 +418,10 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/json', async (req: Request, res: Response) => {
   try {
     await updateDynamicMetrics();
-    
+
     const circuitStats = getAllCircuitStats();
     const queueStats = await getQueueStats();
-    
+
     res.json({
       queue: queueStats,
       circuits: circuitStats,

@@ -7,16 +7,23 @@ import fs from 'fs';
 // Define the interface for video analysis results
 export interface VideoAnalysis {
   transcript: string | null;
+  spokenLanguage: string;
   visualCues: string[];
   hookType: string;
   tone: string;
+  pacing: string;
   sceneDescriptions: string[];
-  /** Camera angles/shots used (e.g., 'Close-up', 'Wide shot', 'POV', 'Talking head') */
-  cameraAngles?: string[];
-  /** On-screen text/captions visible in the video */
-  onScreenText?: string[];
-  /** B-roll or cutaway descriptions */
-  bRollDescriptions?: string[];
+  cameraAngles: string[];
+  onScreenText: string[];
+  bRollDescriptions: string[];
+  handGestures: string[];
+  transitionStyles: string[];
+  credibilitySignals: string[];
+  emotionalTriggers: string[];
+  callToAction: string | null;
+  targetAudience: string;
+  keyTakeaway: string;
+  scriptStructure: string;
 }
 
 // Options for the analyzer
@@ -113,29 +120,83 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
     audioPart = await fileToGenerativePart(audioPath, 'audio/wav');
   }
 
-  // Prepare prompt - Enhanced for complete extraction (camera angles, captions, etc.)
+  // Prepare prompt - Enhanced for complete extraction (V2.0 System Prompts)
   const prompt = `
-  Analyze this video content (frames and/or audio) to extract COMPLETE structured data.
-  
-  RETURN JSON ONLY with this structure:
+  You are analyzeing a video to extract detailed information for script generation.
+
+  Watch the video carefully and extract EVERYTHING into JSON format.
+
+  RETURN ONLY JSON - NO OTHER TEXT:
+
   {
-    "transcript": "Full spoken text from audio word-for-word. If none, null.",
-    "visualCues": ["List of key visual elements, styles, props, or actions shown"],
-    "hookType": "The type of psychological hook used (e.g., 'Negative visual', 'Stop scrolling', 'Controversial statement', 'Pattern interrupt', 'Unknown')",
-    "tone": "The overall emotional tone (e.g., 'High Energy', 'Educational', 'Sarcastic', 'Motivational', 'Casual')",
-    "sceneDescriptions": ["Chronological description of visual scenes shown in each frame"],
-    "cameraAngles": ["Camera angles/shots used for each scene (e.g., 'Close-up face', 'Wide shot', 'POV', 'Talking head', 'Screen recording', 'B-roll cutaway', 'Product shot')"],
-    "onScreenText": ["All text/captions visible on screen in the video, in order of appearance. Include subtitles, titles, labels, memes text, etc."],
-    "bRollDescriptions": ["Description of any B-roll footage or cutaways used (stock footage, illustrations, screen recordings, memes, etc.)"]
+    "transcript": "Every word spoken in the video, exactly as said. Include um, uh, like. If no audio or unclear, put null.",
+    
+    "spokenLanguage": "What language are they SPEAKING (not caption language). Examples: English, Hindi, Spanish, Hinglish, Arabic",
+    
+    "visualCues": [
+      "List everything you SEE in order",
+      "Include: props, clothes, background, graphics, animations",
+      "Note the style: clean/messy/professional/casual/meme-heavy"
+    ],
+    
+    "hookType": "What hook style is used? Choose ONE: Shock stat, Pattern interrupt, Loss aversion, Insider secret, Urgent warning, Identity call-out, Myth buster, Transformation tease, Story cold open, Question hook, Greeting (weak), Unknown",
+    
+    "tone": "What's the overall energy? Choose ONE: High-energy, Educational-calm, Sarcastic-edgy, Motivational-intense, Casual-friendly, Professional-authoritative, Vulnerable-personal, Humorous-playful",
+    
+    "pacing": "How fast do they talk? Choose ONE: Fast-punchy (quick cuts, high energy), Moderate-clear (normal conversation), Slow-deliberate (emphasis on every word), Variable (mix of speeds)",
+    
+    "sceneDescriptions": [
+      "Scene 1 (0-5s): What's shown",
+      "Scene 2 (6-10s): Next visual",
+      "Continue for all scenes"
+    ],
+    
+    "cameraAngles": [
+      "List every camera angle used in order",
+      "Examples: Close-up face/eye level, Medium waist-up, Wide shot, Screen recording, POV angle, B-roll cutaway"
+    ],
+    
+    "onScreenText": [
+      "Every text/caption shown on screen, in order",
+      "Include: subtitles, titles, labels, meme text, any written words",
+      "Note when text appears if important"
+    ],
+    
+    "bRollDescriptions": [
+      "Any footage that's NOT the person talking",
+      "Examples: Stock footage of [X], Screen recording of [Y], Meme showing [Z], Animation of [W]"
+    ],
+    
+    "handGestures": [
+      "Important hand movements",
+      "Examples: Pointing at camera, Counting on fingers, Open palms, Arms crossed, Waving"
+    ],
+    
+    "transitionStyles": [
+      "How scenes connect",
+      "Examples: Jump cuts, Smooth fades, Zoom transitions, Swipe effects, Hard cuts"
+    ],
+    
+    "credibilitySignals": [
+      "What makes them trustworthy?",
+      "Examples: Shows stats/data, Shares personal results (100K in 6 months), References authority (I worked with X), Shows proof (screenshots), Has credentials"
+    ],
+    
+    "emotionalTriggers": [
+      "What emotions are created?",
+      "Examples: FOMO (fear of missing out), Fear of failure, Hope for change, Curiosity, Feeling validated, Anger at injustice, Shock/surprise"
+    ],
+    
+    "callToAction": "What action do they ask for at the end? Examples: Follow, Like, Share, Comment, Try this, Save this, Buy this, Click link, null if none",
+    
+    "targetAudience": "Who is this for? Be specific. Examples: Small business owners, Fitness beginners, Broke college students, New creators under 10K, Parents of toddlers",
+    
+    "keyTakeaway": "The ONE main point of the video in 10 words or less",
+    
+    "scriptStructure": "How is it organized? Examples: Problem-Solution, Myth-Truth, Story-Lesson, Hook-Value-CTA, List (3 tips), Before-After, Question-Answer"
   }
-  
-  IMPORTANT for EXTRACT mode:
-  - Capture EVERY word spoken in transcript
-  - Note ALL on-screen text/captions exactly as shown
-  - Identify specific camera angles for each scene
-  - Note any B-roll, stock footage, or cutaways
-  
-  Be extremely detailed and precise.
+
+  Be extremely detailed and accurate. This data will be used to create new scripts.
   `;
 
   let lastError: any = null;

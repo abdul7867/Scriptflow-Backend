@@ -6,24 +6,34 @@ import { config } from '../../config';
 
 // Initialize Vertex AI
 const vertexAI = new VertexAI({
-  project: config.GCP_PROJECT_ID,
-  location: config.GCP_LOCATION,
-  googleAuthOptions: {
-    keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
-  },
+    project: config.GCP_PROJECT_ID,
+    location: config.GCP_LOCATION,
+    googleAuthOptions: {
+        keyFilename: config.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+    },
 });
 
 /**
  * Helper to convert file to GenerativePart
  */
 async function fileToGenerativePart(path: string, mimeType: string): Promise<Part> {
-  const data = await fs.promises.readFile(path);
-  return {
-    inlineData: {
-      data: data.toString('base64'),
-      mimeType
-    },
-  };
+    const data = await fs.promises.readFile(path);
+    return {
+        inlineData: {
+            data: data.toString('base64'),
+            mimeType
+        },
+    };
+}
+
+/**
+ * Truncate transcript to prevent token explosion
+ */
+function truncateTranscript(text: string | null, maxWords: number = 750): string {
+    if (!text) return '';
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ') + '... [TRUNCATED for token safety]';
 }
 
 // ============================================
@@ -34,142 +44,122 @@ export type ToneHint = 'professional' | 'funny' | 'provocative' | 'educational' 
 export type GenerationMode = 'full' | 'hook_only';
 export type StoryFormat = 'story' | 'edgy' | 'tutorial';
 
-/** Summary of a previous variation to help AI avoid repetition */
 export interface VariationSummary {
-  idea: string;
-  hookSummary: string;
-  angleSummary: string;
-  isSameIdea: boolean;
+    idea: string;
+    hookSummary: string;
+    angleSummary: string;
+    isSameIdea: boolean;
 }
 
 export interface ScriptGeneratorOptions {
-  userIdea: string;
-  transcript: string | null;
-  visualAnalysis?: VideoAnalysis | null;
+    userIdea: string;
+    transcript: string | null;
+    visualAnalysis?: VideoAnalysis | null;
 
-  // NEW: Optional hints (work WITH video DNA, not override)
-  toneHint?: ToneHint;
-  languageHint?: string;
-  mode?: GenerationMode;
+    toneHint?: ToneHint;
+    languageHint?: string;
+    mode?: GenerationMode;
+    storyFormat?: StoryFormat;
 
-  // Storytelling format for post-delivery restyling
-  storyFormat?: StoryFormat;
-
-  // Previous scripts with DIFFERENT ideas (for context/learning)
-  previousScripts?: { idea: string; script: string }[];
-
-  // Previous variation SUMMARIES with SAME idea (for avoiding repetition)
-  previousVariationSummaries?: VariationSummary[];
+    previousScripts?: { idea: string; script: string }[];
+    previousVariationSummaries?: VariationSummary[];
 }
 
 export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
-  frames: string[];
-  audioPath?: string | null;
+    frames: string[];
+    audioPath?: string | null;
 }
 
 // ============================================
-// Language Detection (for Language Lock feature)
+// Language Detection
 // ============================================
 
-/**
- * Detect the primary language from a transcript
- * Returns language info to enforce output language matching
- * 
- * Priority: Detect from spoken words in transcript
- * If romanized (e.g., Hindi in English letters), output must also be romanized
- */
 interface DetectedLanguage {
-  language: string;          // e.g., 'Hindi', 'Kannada', 'Tamil', 'English', 'Arabic'
-  isRomanized: boolean;      // true if using Latin alphabet for non-English
-  confidence: 'high' | 'medium' | 'low';
-  sampleWords: string[];     // Example words that triggered detection
+    language: string;
+    isRomanized: boolean;
+    confidence: 'high' | 'medium' | 'low';
+    sampleWords: string[];
 }
 
 function detectTranscriptLanguage(transcript: string | null): DetectedLanguage {
-  if (!transcript || transcript.trim().length < 5) {
-    return { language: 'English', isRomanized: false, confidence: 'low', sampleWords: [] };
-  }
-
-  const text = transcript.toLowerCase();
-  const words = text.split(/\s+/);
-
-  // Non-Latin script detection (Devanagari, Arabic, etc.)
-  const hasDevanagari = /[\u0900-\u097F]/.test(transcript);
-  const hasArabic = /[\u0600-\u06FF]/.test(transcript);
-  const hasTamil = /[\u0B80-\u0BFF]/.test(transcript);
-  const hasKannada = /[\u0C80-\u0CFF]/.test(transcript);
-  const hasTelugu = /[\u0C00-\u0C7F]/.test(transcript);
-  const hasBengali = /[\u0980-\u09FF]/.test(transcript);
-
-  if (hasDevanagari) return { language: 'Hindi', isRomanized: false, confidence: 'high', sampleWords: [] };
-  if (hasArabic) return { language: 'Arabic', isRomanized: false, confidence: 'high', sampleWords: [] };
-  if (hasTamil) return { language: 'Tamil', isRomanized: false, confidence: 'high', sampleWords: [] };
-  if (hasKannada) return { language: 'Kannada', isRomanized: false, confidence: 'high', sampleWords: [] };
-  if (hasTelugu) return { language: 'Telugu', isRomanized: false, confidence: 'high', sampleWords: [] };
-  if (hasBengali) return { language: 'Bengali', isRomanized: false, confidence: 'high', sampleWords: [] };
-
-  // Romanized Hindi/Hinglish detection
-  const hindiMarkers = ['hai', 'hain', 'kya', 'kaise', 'kyun', 'kuch', 'bahut', 'aap', 'tum', 'mujhe',
-    'hamara', 'tumhara', 'yeh', 'woh', 'kar', 'karna', 'baat', 'nahi', 'nahin', 'hona', 'matlab',
-    'zaroor', 'zaruri', 'samjho', 'samajh', 'dekho', 'sunao', 'suno', 'padho', 'likho', 'bolo',
-    'apna', 'karo', 'karo', 'raha', 'rahi', 'rahe', 'wala', 'wali', 'wale', 'accha', 'theek',
-    'aaj', 'kal', 'abhi', 'jab', 'tab', 'aur', 'lekin', 'par', 'phir', 'pehle', 'baad'];
-
-  // Romanized Kannada detection
-  const kannadaMarkers = ['idu', 'yenu', 'hege', 'yake', 'yavaga', 'nanage', 'ninage', 'avaru',
-    'ivaru', 'aadre', 'antare', 'maadi', 'maadod', 'ella', 'ashte', 'haagu', 'mathu', 'illa',
-    'beku', 'aagalla', 'nodri', 'kelri', 'heli', 'bandu', 'hogod', 'banni', 'barri'];
-
-  // Romanized Tamil detection
-  const tamilMarkers = ['enna', 'epdi', 'yaar', 'enga', 'enge', 'inga', 'appa', 'amma',
-    'panni', 'pannunga', 'vaanga', 'ponga', 'sollu', 'kelvi', 'paaru', 'kudukka',
-    'iruku', 'illa', 'vandhanga', 'poganum', 'varalaam', 'aana', 'aachu'];
-
-  // Romanized Arabic/Urdu detection
-  const arabicMarkers = ['inshallah', 'mashallah', 'alhamdulillah', 'wallah', 'yalla',
-    'habibi', 'habibti', 'shukran', 'maafi', 'kheir', 'ahlan', 'marhaba'];
-
-  // Count matches
-  const countMatches = (markers: string[]) => {
-    const found: string[] = [];
-    for (const word of words) {
-      if (markers.includes(word)) found.push(word);
+    if (!transcript || transcript.trim().length < 5) {
+        return { language: 'English', isRomanized: false, confidence: 'low', sampleWords: [] };
     }
-    return found;
-  };
 
-  const hindiMatches = countMatches(hindiMarkers);
-  const kannadaMatches = countMatches(kannadaMarkers);
-  const tamilMatches = countMatches(tamilMarkers);
-  const arabicMatches = countMatches(arabicMarkers);
+    const text = transcript.toLowerCase();
+    const words = text.split(/\s+/);
 
-  // Return the language with most matches
-  const results = [
-    { lang: 'Hindi', matches: hindiMatches },
-    { lang: 'Kannada', matches: kannadaMatches },
-    { lang: 'Tamil', matches: tamilMatches },
-    { lang: 'Arabic', matches: arabicMatches },
-  ].sort((a, b) => b.matches.length - a.matches.length);
+    // Non-Latin script detection
+    const hasDevanagari = /[\u0900-\u097F]/.test(transcript);
+    const hasArabic = /[\u0600-\u06FF]/.test(transcript);
+    const hasTamil = /[\u0B80-\u0BFF]/.test(transcript);
+    const hasKannada = /[\u0C80-\u0CFF]/.test(transcript);
+    const hasTelugu = /[\u0C00-\u0C7F]/.test(transcript);
+    const hasBengali = /[\u0980-\u09FF]/.test(transcript);
 
-  const best = results[0];
-  if (best.matches.length >= 3) {
-    return {
-      language: best.lang,
-      isRomanized: true,
-      confidence: 'high',
-      sampleWords: best.matches.slice(0, 3)
+    if (hasDevanagari) return { language: 'Hindi', isRomanized: false, confidence: 'high', sampleWords: [] };
+    if (hasArabic) return { language: 'Arabic', isRomanized: false, confidence: 'high', sampleWords: [] };
+    if (hasTamil) return { language: 'Tamil', isRomanized: false, confidence: 'high', sampleWords: [] };
+    if (hasKannada) return { language: 'Kannada', isRomanized: false, confidence: 'high', sampleWords: [] };
+    if (hasTelugu) return { language: 'Telugu', isRomanized: false, confidence: 'high', sampleWords: [] };
+    if (hasBengali) return { language: 'Bengali', isRomanized: false, confidence: 'high', sampleWords: [] };
+
+    // Romanized language detection
+    const hindiMarkers = ['hai', 'hain', 'kya', 'kaise', 'kyun', 'kuch', 'bahut', 'aap', 'tum', 'mujhe',
+        'hamara', 'tumhara', 'yeh', 'woh', 'kar', 'karna', 'baat', 'nahi', 'nahin', 'hona', 'matlab',
+        'zaroor', 'zaruri', 'samjho', 'samajh', 'dekho', 'sunao', 'suno', 'padho', 'likho', 'bolo',
+        'apna', 'karo', 'raha', 'rahi', 'rahe', 'wala', 'wali', 'wale', 'accha', 'theek',
+        'aaj', 'kal', 'abhi', 'jab', 'tab', 'aur', 'lekin', 'par', 'phir', 'pehle', 'baad'];
+
+    const kannadaMarkers = ['idu', 'yenu', 'hege', 'yake', 'yavaga', 'nanage', 'ninage', 'avaru',
+        'ivaru', 'aadre', 'antare', 'maadi', 'maadod', 'ella', 'ashte', 'haagu', 'mathu', 'illa',
+        'beku', 'aagalla', 'nodri', 'kelri', 'heli', 'bandu', 'hogod', 'banni', 'barri'];
+
+    const tamilMarkers = ['enna', 'epdi', 'yaar', 'enga', 'enge', 'inga', 'appa', 'amma',
+        'panni', 'pannunga', 'vaanga', 'ponga', 'sollu', 'kelvi', 'paaru', 'kudukka',
+        'iruku', 'illa', 'vandhanga', 'poganum', 'varalaam', 'aana', 'aachu'];
+
+    const arabicMarkers = ['inshallah', 'mashallah', 'alhamdulillah', 'wallah', 'yalla',
+        'habibi', 'habibti', 'shukran', 'maafi', 'kheir', 'ahlan', 'marhaba'];
+
+    const countMatches = (markers: string[]) => {
+        const found: string[] = [];
+        for (const word of words) {
+            if (markers.includes(word)) found.push(word);
+        }
+        return found;
     };
-  } else if (best.matches.length >= 1) {
-    return {
-      language: best.lang,
-      isRomanized: true,
-      confidence: 'medium',
-      sampleWords: best.matches
-    };
-  }
 
-  // Default to English
-  return { language: 'English', isRomanized: false, confidence: 'high', sampleWords: [] };
+    const hindiMatches = countMatches(hindiMarkers);
+    const kannadaMatches = countMatches(kannadaMarkers);
+    const tamilMatches = countMatches(tamilMarkers);
+    const arabicMatches = countMatches(arabicMarkers);
+
+    const results = [
+        { lang: 'Hindi', matches: hindiMatches },
+        { lang: 'Kannada', matches: kannadaMatches },
+        { lang: 'Tamil', matches: tamilMatches },
+        { lang: 'Arabic', matches: arabicMatches },
+    ].sort((a, b) => b.matches.length - a.matches.length);
+
+    const best = results[0];
+    if (best.matches.length >= 3) {
+        return {
+            language: best.lang,
+            isRomanized: true,
+            confidence: 'high',
+            sampleWords: best.matches.slice(0, 3)
+        };
+    } else if (best.matches.length >= 1) {
+        return {
+            language: best.lang,
+            isRomanized: true,
+            confidence: 'medium',
+            sampleWords: best.matches
+        };
+    }
+
+    return { language: 'English', isRomanized: false, confidence: 'high', sampleWords: [] };
 }
 
 // ============================================
@@ -177,648 +167,762 @@ function detectTranscriptLanguage(transcript: string | null): DetectedLanguage {
 // ============================================
 
 const STORYTELLING_FORMATS: Record<StoryFormat, string> = {
-  story: `
-⚠️ STORYTELLING MODE: PERSONAL JOURNEY (Hero's Arc)
-Use this EXACT structure instead of default format:
+    story: `
+⚠️ STORYTELLING MODE: PERSONAL TRANSFORMATION
 
-[HOOK] → THE BEFORE
-🎬 VISUAL: Relatable expression, slight frustration or confusion
-📝 TEXT OVERLAY: "I used to think..." or "Before I knew..."
-💬 SAY: "I used to [old belief/struggle]..." - Start with relatable past state
+[HOOK] → THE STRUGGLE
+🎬 VISUAL: Vulnerable expression, slight frustration, looking down then up
+📝 TEXT OVERLAY: "I USED TO..."
+💬 SAY: "[Relatable struggle 3-5 words]. [Painful before state]. [What failed]."
 
-[BODY] → THE TURNING POINT
-🎬 VISUAL: Energy shift, lean forward, eyes widen
-📝 TEXT OVERLAY: "Then I discovered..."
-💬 SAY: "Then I [discovered/realized/learned]... This changed everything because [reason]"
-💬 SAY: "The key insight was [specific revelation]..."
+[BODY - PART 1] → THE DISCOVERY
+🎬 VISUAL: Energy shifts - eyes widen, lean forward, hand on chest
+📝 TEXT OVERLAY: "THEN I FOUND..."
+💬 SAY: "[Discovery moment]. [What changed everything]. [Key insight]."
 
-[CTA] → THE AFTER
-🎬 VISUAL: Confident, transformed energy, slight smile
-📝 TEXT OVERLAY: "Now I..." or result
-💬 SAY: "Now I [new state/result]. You can do this too - [specific action]."
+[BODY - PART 2] → THE PROOF
+🎬 VISUAL: Confident, showing results
+📝 TEXT OVERLAY: "[SPECIFIC RESULT]"
+💬 SAY: "[Concrete outcome with numbers]. [Why it worked]. [Mistake to avoid]."
+
+[CTA] → THE INVITATION
+🎬 VISUAL: Direct eye contact, encouraging smile, open gesture
+📝 TEXT OVERLAY: "YOUR TURN"
+💬 SAY: "[You can do this]. [First step]. [Follow for method]."
+
+TONE: Vulnerable → Hopeful → Empowered
+LENGTH: 45-75 seconds
 `,
 
-  edgy: `
-⚠️ STORYTELLING MODE: MYTH BUSTER / CONTRARIAN
-Use this EXACT structure instead of default format:
+    edgy: `
+⚠️ STORYTELLING MODE: CONTRARIAN AUTHORITY
 
-[HOOK] → THE MYTH
-🎬 VISUAL: Skeptical expression, maybe eye roll or head shake
-📝 TEXT OVERLAY: "Everyone says..." or "Common advice:"
-💬 SAY: "Everyone tells you [common belief]... They're completely wrong."
+[HOOK] → THE LIE
+🎬 VISUAL: Skeptical - eye roll, head shake, dismissive wave
+📝 TEXT OVERLAY: "EVERYONE SAYS..."
+💬 SAY: "[Common belief 3-5 words]. [Bad advice directly]. [Pause]."
 
-[BODY] → THE TRUTH
-🎬 VISUAL: Serious, authoritative, direct eye contact
-📝 TEXT OVERLAY: "The truth is..."
-💬 SAY: "Here's what actually happens: [reality]. This is true because [evidence/logic]."
-💬 SAY: "The reason this myth persists is [reason]. But smart people do [alternative]."
+[BODY - PART 1] → THE TRUTH BOMB
+🎬 VISUAL: Serious, leaning in, pointing at camera
+📝 TEXT OVERLAY: "THE TRUTH?"
+💬 SAY: "[Contrarian statement]. [What actually happens]. [Why myth persists]."
 
-[CTA] → THE PROOF
-🎬 VISUAL: Confident close, knowing smile
-📝 TEXT OVERLAY: Result or action
-💬 SAY: "I tried this and [specific result]. Stop following bad advice - do this instead."
+[BODY - PART 2] → THE EVIDENCE
+🎬 VISUAL: Show data or results
+📝 TEXT OVERLAY: "[STAT or RESULT]"
+💬 SAY: "[Specific data]. [What smart people do instead]. [What everyone misses]."
+
+[CTA] → THE CHALLENGE
+🎬 VISUAL: Confident smirk, arms crossed
+📝 TEXT OVERLAY: "TRY IT"
+💬 SAY: "[My result]. [Stop bad advice]. [Follow for real strategy]."
+
+TONE: Skeptical → Authoritative → Challenging
+LENGTH: 30-50 seconds
 `,
 
-  tutorial: `
-⚠️ STORYTELLING MODE: STEP-BY-STEP TUTORIAL
-Use this EXACT structure instead of default format:
+    tutorial: `
+⚠️ STORYTELLING MODE: ACTIONABLE WALKTHROUGH
 
 [HOOK] → THE PROMISE
-🎬 VISUAL: Excited, helpful energy, maybe holding fingers up for "3 steps"
-📝 TEXT OVERLAY: "How to [outcome] in 60 seconds"
-💬 SAY: "Here's exactly how to [outcome] - takes 60 seconds."
+🎬 VISUAL: Excited, holding up fingers for steps
+📝 TEXT OVERLAY: "HOW TO [OUTCOME]"
+💬 SAY: "[Outcome 3-5 words]. [Time promise]. [Credibility]."
 
 [BODY] → THE STEPS
-🎬 VISUAL: Count on fingers, clear gestures for each step
-📝 TEXT OVERLAY: "Step 1: [action]"
-💬 SAY: "Step 1: [specific action]. This matters because [quick reason]."
 
-📝 TEXT OVERLAY: "Step 2: [action]"
-💬 SAY: "Step 2: [specific action]. Key tip: [insight]."
+🎬 VISUAL: Show step, count on fingers
+📝 TEXT OVERLAY: "STEP 1: [ACTION]"
+💬 SAY: "Step 1: [Action]. [Detail]. [Mistake to avoid]."
 
-📝 TEXT OVERLAY: "Step 3: [action]"
-💬 SAY: "Step 3: [specific action]. And that's it."
+🎬 VISUAL: Next step demo
+📝 TEXT OVERLAY: "STEP 2: [ACTION]"
+💬 SAY: "Step 2: [Action]. [Why this order]. [Pro tip]."
 
-[CTA] → THE RESULT
-🎬 VISUAL: Thumbs up or confident nod
-📝 TEXT OVERLAY: "Now go do it!"
-💬 SAY: "Now you can [outcome]. Save this and try it today."
+🎬 VISUAL: Final step, zoom for emphasis
+📝 TEXT OVERLAY: "STEP 3: [ACTION]"
+💬 SAY: "Step 3: [Action]. [Result]. [No fluff]."
+
+[CTA] → THE ACTIVATION
+🎬 VISUAL: Thumbs up, confident nod
+📝 TEXT OVERLAY: "NOW GO"
+💬 SAY: "[Now you can X]. [Save this]. [Follow for more]."
+
+TONE: Helpful → Clear → Encouraging
+LENGTH: 35-60 seconds
 `,
 };
 
 // ============================================
-// Hint Builder (APPENDED to prompt, not replacing)
+// Hint Builder
 // ============================================
 
-/**
- * Build optional hints section
- * These are GENTLE suggestions that work WITH the video's DNA
- * The video's original style is ALWAYS primary
- */
 function buildOptionalHints(options: ScriptGeneratorOptions): string {
-  const hints: string[] = [];
+    const hints: string[] = [];
 
-  // STORYTELLING FORMAT (HIGHEST PRIORITY - changes entire structure)
-  if (options.storyFormat && STORYTELLING_FORMATS[options.storyFormat]) {
-    hints.push(STORYTELLING_FORMATS[options.storyFormat]);
-  }
+    if (options.storyFormat && STORYTELLING_FORMATS[options.storyFormat]) {
+        hints.push(STORYTELLING_FORMATS[options.storyFormat]);
+    }
 
-  if (options.toneHint) {
-    const toneDescriptions: Record<ToneHint, string> = {
-      professional: 'business-focused and authoritative',
-      funny: 'humorous and witty with clever wordplay',
-      provocative: 'edgy and attention-grabbing',
-      educational: 'informative and teaching-focused',
-      casual: 'friendly and conversational'
-    };
+    if (options.toneHint) {
+        const toneDescriptions: Record<ToneHint, string> = {
+            professional: 'business-focused and authoritative',
+            funny: 'humorous and witty with clever wordplay',
+            provocative: 'edgy and attention-grabbing',
+            educational: 'informative and teaching-focused',
+            casual: 'friendly and conversational'
+        };
 
-    hints.push(`
-TONE PREFERENCE (subtle adjustment, preserve video's original energy):
-The user prefers a "${options.toneHint}" feel (${toneDescriptions[options.toneHint]}). 
-Apply this GENTLY while keeping the reference video's authentic style as the PRIMARY influence.
-Do NOT completely change the tone - just lean slightly in this direction.`);
-  }
+        hints.push(`
+TONE PREFERENCE (subtle, video DNA is primary):
+User prefers "${options.toneHint}" (${toneDescriptions[options.toneHint]}). 
+Lean slightly this direction while keeping reference style dominant.`);
+    }
 
-  if (options.languageHint) {
-    hints.push(`
-LANGUAGE PREFERENCE (STRICT):
-Write ALL spoken dialogue (💬 SAY:) in ${options.languageHint} language.`);
-  }
+    if (options.languageHint) {
+        hints.push(`
+LANGUAGE OVERRIDE:
+Write ALL dialogue (💬 SAY:) in ${options.languageHint}.
+Use Roman alphabet (A-Z) for romanization.`);
+    }
 
-  if (options.mode === 'hook_only') {
-    hints.push(`
+    if (options.mode === 'hook_only') {
+        hints.push(`
 MODE: HOOK ONLY
-Generate ONLY the [HOOK] section. Skip [BODY] and [CTA] entirely.
-Make the hook extra impactful since it's standalone.
-Still follow all other formatting rules for the hook.`);
-  }
+Generate ONLY [HOOK]. Skip [BODY] and [CTA].
+Make it extra impactful since standalone.`);
+    }
 
-  // CRITICAL: Add variation avoidance instructions if user is regenerating
-  if (options.previousVariationSummaries && options.previousVariationSummaries.length > 0) {
-    const summaries = options.previousVariationSummaries;
-    hints.push(`
-🔄 VARIATION MODE - CREATE SOMETHING DISTINCTLY DIFFERENT!
-The user has already generated ${summaries.length} script(s) for this SAME idea.
-You MUST create a FRESH, UNIQUE version that is NOTICEABLY DIFFERENT.
+    if (options.previousVariationSummaries && options.previousVariationSummaries.length > 0) {
+        const summaries = options.previousVariationSummaries.slice(-2);
+        hints.push(`
+🔄 VARIATION MODE - MAKE IT DIFFERENT!
+User generated ${options.previousVariationSummaries.length} scripts. Create UNIQUE version.
 
-HOOKS TO AVOID (do NOT use similar openings):
+HOOKS TO AVOID:
 ${summaries.map((s, i) => `${i + 1}. "${s.hookSummary}"`).join('\n')}
 
-ANGLES TO AVOID (do NOT use similar approaches):
+ANGLES TO AVOID:
 ${summaries.map((s, i) => `${i + 1}. "${s.angleSummary}"`).join('\n')}
 
-VARIATION REQUIREMENTS:
-- Use a COMPLETELY DIFFERENT hook style (question vs statement, shocking fact vs relatable moment, etc.)
-- Take a DIFFERENT angle/perspective on the topic
-- Use DIFFERENT examples or analogies
-- Change the emotional tone (curiosity vs urgency vs humor)
-- If previous was direct, try storytelling. If previous was personal, try educational.
+REQUIREMENTS:
+- Different hook archetype
+- Different angle/perspective
+- Different examples
+- Different emotional tone`);
+    }
 
-The user wants VARIETY - give them something they haven't seen before!`);
-  }
+    if (hints.length === 0) return '';
 
-  // Always add visual guidance reminder for better shooting instructions
-  if (hints.length > 0) {
-    hints.push(`
-VISUAL DIRECTION REMINDER:
-For each 🎬 VISUAL: line, be EXTREMELY SPECIFIC about:
-- Exact camera angle (e.g., "Close-up face shot, slightly above eye level")
-- Hand gestures (e.g., "Right hand counting on fingers, palm facing camera")
-- Body language (e.g., "Lean forward slightly with confident posture")
-- Text overlays (e.g., "Text appears top-center: 'THE 3 SECRETS'")
-
-The creator should be able to shoot the video EXACTLY as described without guessing.`);
-  }
-
-  if (hints.length === 0) return '';
-
-  return `
-
---- OPTIONAL USER PREFERENCES (Apply subtly, video DNA is primary) ---
-${hints.join('\n')}`;
+    return `\n\n--- USER PREFERENCES ---${hints.join('\n')}`;
 }
 
 // ============================================
-// Main Generator (Master Prompt UNCHANGED)
+// Main Generator
 // ============================================
 
-/**
- * Generate a script using the "Steal Like an Artist" framework.
- * 
- * When visualAnalysis is provided, the script incorporates visual cues,
- * hook patterns, and scene flow from the reference video.
- */
 export async function generateScript(options: ScriptGeneratorOptions): Promise<string>;
 export async function generateScript(userIdea: string, transcript: string | null): Promise<string>;
 export async function generateScript(
-  optionsOrIdea: ScriptGeneratorOptions | string,
-  transcript?: string | null
+    optionsOrIdea: ScriptGeneratorOptions | string,
+    transcript?: string | null
 ): Promise<string> {
-  // Handle both old and new signatures for backwards compatibility
-  let options: ScriptGeneratorOptions;
+    let options: ScriptGeneratorOptions;
 
-  if (typeof optionsOrIdea === 'string') {
-    // Legacy signature: generateScript(userIdea, transcript)
-    options = {
-      userIdea: optionsOrIdea,
-      transcript: transcript ?? null,
-      visualAnalysis: null
-    };
-  } else {
-    options = optionsOrIdea;
-  }
-
-  const { userIdea, transcript: transcriptText, visualAnalysis } = options;
-
-  // Build reference DNA section - now includes visual context if available
-  let referenceDNA = '';
-
-  if (transcriptText) {
-    referenceDNA += `TRANSCRIPT (What was said):\n"${transcriptText}"\n\n`;
-  }
-
-  if (visualAnalysis) {
-    if (visualAnalysis.visualCues.length > 0) {
-      referenceDNA += `VISUAL HOOKS (What was shown):\n${visualAnalysis.visualCues.map(c => `- ${c}`).join('\n')}\n\n`;
+    if (typeof optionsOrIdea === 'string') {
+        options = {
+            userIdea: optionsOrIdea,
+            transcript: transcript ?? null,
+            visualAnalysis: null
+        };
+    } else {
+        options = optionsOrIdea;
     }
-    if (visualAnalysis.hookType && visualAnalysis.hookType !== 'Unknown') {
-      referenceDNA += `HOOK PATTERN: ${visualAnalysis.hookType}\n\n`;
+
+    const { userIdea, transcript: transcriptText, visualAnalysis } = options;
+
+    // Build reference DNA
+    let referenceDNA = '';
+    const safeTranscript = truncateTranscript(transcriptText);
+
+    if (safeTranscript) {
+        referenceDNA += `TRANSCRIPT:\n"${safeTranscript}"\n\n`;
     }
-    if (visualAnalysis.tone && visualAnalysis.tone !== 'Unknown') {
-      referenceDNA += `DETECTED TONE: ${visualAnalysis.tone}\n\n`;
+
+    if (visualAnalysis) {
+        if (visualAnalysis.visualCues.length > 0) {
+            referenceDNA += `VISUAL CUES:\n${visualAnalysis.visualCues.map(c => `- ${c}`).join('\n')}\n\n`;
+        }
+        if (visualAnalysis.hookType && visualAnalysis.hookType !== 'Unknown') {
+            referenceDNA += `HOOK PATTERN: ${visualAnalysis.hookType}\n\n`;
+        }
+        if (visualAnalysis.tone && visualAnalysis.tone !== 'Unknown') {
+            referenceDNA += `TONE: ${visualAnalysis.tone}\n\n`;
+        }
+        if (visualAnalysis.sceneDescriptions.length > 0) {
+            referenceDNA += `SCENES:\n${visualAnalysis.sceneDescriptions.join('\n')}\n\n`;
+        }
     }
-    if (visualAnalysis.sceneDescriptions.length > 0) {
-      referenceDNA += `SCENE FLOW:\n${visualAnalysis.sceneDescriptions.join('\n')}\n\n`;
+
+    if (!referenceDNA) {
+        referenceDNA = 'No reference. Use strategic, engaging tone.';
     }
-  }
 
-  if (!referenceDNA) {
-    referenceDNA = 'No reference provided. Use an intense, strategic tone.';
-  }
-
-  // NEW: Include previous scripts as learning context
-  let priorContext = '';
-  if (options.previousScripts && options.previousScripts.length > 0) {
-    priorContext = `
-
---- PRIOR GENERATION CONTEXT (Learn from these but create something NEW) ---
-The following scripts were previously generated for THIS SAME video but with DIFFERENT ideas.
-Use them to understand what worked well with this video's style, but DO NOT copy them.
-Create a FRESH script for the NEW concept.
-
-${options.previousScripts.slice(0, 2).map((ps, i) => `
-PREVIOUS IDEA ${i + 1}: "${ps.idea}"
-PREVIOUS SCRIPT ${i + 1}:
-${ps.script}
-`).join('\n')}
---- END PRIOR CONTEXT ---
-`;
-  }
-
-  // Detect language from transcript for Language Lock
-  const detectedLang = detectTranscriptLanguage(options.transcript);
-  const languageOverride = options.languageHint; // User can override if they want different language
-
-  // ============================================
-  // MASTER PROMPT CONSTRUCTION
-  // ============================================
-  const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
-
-  // Append optional hints (if any) WITHOUT modifying master prompt
-  const optionalHints = buildOptionalHints(options);
-  const fullPrompt = masterPrompt + priorContext + optionalHints;
-
-  // Model configuration with fallback hierarchy (Vertex AI compatible)
-  const MODEL_HIERARCHY = [
-    'gemini-2.5-flash',          // Primary (2.5 Flash)
-    'gemini-2.0-flash-001',      // Fallback (2.0 Flash)
-  ];
-
-  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-  let lastError: any = null;
-
-  const systemInstruction = `You are a Master Script Alchemist practicing "Steal Like an Artist."
-
-Your philosophy:
-"Good artists copy. Great artists STEAL." - Picasso
-"Steal the THINKING, not the words." - Austin Kleon
-
-You decode viral content DNA and transplant it into new ideas. Your scripts:
-• Open with psychological hooks (curiosity gaps, pattern interrupts, identity triggers)
-• Explain the WHY behind every claim (not just what, but BECAUSE...)
-• Include both 🎬 VISUAL and 📝 TEXT OVERLAY for each beat
-• Match the reference's language and energy exactly
-
-RULES (NON-NEGOTIABLE):
-- No hashtags, no markdown formatting
-- Technical vocabulary for technical niches, emotional for lifestyle
-- Every insight backed by "because" explanation
-- Each 💬 SAY has a corresponding 📝 TEXT OVERLAY
-- Language MUST match reference transcript (romanize non-English)`;
-
-  for (const modelName of MODEL_HIERARCHY) {
-    try {
-      logger.info(`Generating script with model: ${modelName}${options.toneHint ? ` (tone hint: ${options.toneHint})` : ''}${options.mode === 'hook_only' ? ' (hook only)' : ''}`);
-
-      const model = vertexAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: systemInstruction,
-      });
-
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-      });
-      const script = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return script.trim();
-
-    } catch (error: any) {
-      lastError = error;
-      const isRateLimit = error.message?.includes('429') || error.status === 429;
-
-      logger.warn(`Script generation failed on ${modelName}: ${error.message}`);
-
-      if (isRateLimit) {
-        logger.warn('Rate limit hit, waiting before retry...');
-        await sleep(2000);
-      }
+    // Prior context
+    let priorContext = '';
+    if (options.previousScripts && options.previousScripts.length > 0) {
+        const relevantScripts = options.previousScripts.slice(-2);
+        priorContext = `\n--- LEARN FROM THESE (different ideas, same style) ---\n${relevantScripts.map((ps, i) => `
+IDEA ${i + 1}: "${ps.idea}"
+SCRIPT: ${ps.script}`).join('\n')}\n--- END CONTEXT ---\n`;
     }
-  }
 
-  // If all models fail
-  logger.error('All script generation models failed.');
-  throw lastError || new Error('Script generation failed');
-}
+    const detectedLang = detectTranscriptLanguage(safeTranscript);
+    const languageOverride = options.languageHint;
 
+    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
+    const optionalHints = buildOptionalHints(options);
+    const fullPrompt = masterPrompt + priorContext + optionalHints;
 
-/**
- * ONE-SHOT GENERATOR: Generates script directly from video input (1 API Call)
- * Uses the EXACT SAME master prompt logic, but passes media directly to the model.
- */
-export async function generateScriptFromVideo(options: OneShotGeneratorOptions): Promise<string> {
-  const { userIdea, frames, audioPath } = options;
-
-  // 1. Prepare Media Parts
-  const mediaParts: Part[] = [];
-
-  // Add Frames
-  if (frames && frames.length > 0) {
-    const framePromises = frames
-      .filter(f => fs.existsSync(f))
-      .map(f => fileToGenerativePart(f, 'image/jpeg'));
-    mediaParts.push(...await Promise.all(framePromises));
-  }
-
-  // Add Audio
-  if (audioPath && fs.existsSync(audioPath)) {
-    mediaParts.push(await fileToGenerativePart(audioPath, 'audio/wav'));
-  }
-
-  // 2. Construct Prompt (Identical logic to text version)
-  // Instead of text analysis, we point to the attached media as the reference
-  const referenceDNA = `[VIDEO/AUDIO CONTENT ATTACHED]
-  Analyze the attached video frames and audio directly. 
-  Extract the pacing, tone, hook psychological structure, and language style from this media.
-  THIS IS YOUR REFERENCE DNA.`;
-
-  // For One-Shot, we detect language from audio if provided
-  // Since we don't have transcript yet in One-Shot, we pass null and let AI detect from audio
-  const detectedLang = detectTranscriptLanguage(options.transcript);
-  const languageOverride = options.languageHint;
-
-  const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
-
-  // Hints & Context
-  const optionalHints = buildOptionalHints(options);
-  let priorContext = '';
-  if (options.previousScripts && options.previousScripts.length > 0) {
-    priorContext = `\n--- PRIOR GENERATION CONTEXT ---\n(See previous scripts for style learning)\n` +
-      options.previousScripts.map((ps, i) => `PREVIOUS ${i + 1}: ${ps.script}`).join('\n');
-  }
-
-  const fullPrompt = masterPrompt + priorContext + optionalHints;
-
-  // 3. Call Model (Gemini 2.5 Flash is best for multimodal one-shot)
-  // We use 2.5 Flash because it handles video tokens natively and efficiently
-  const modelName = 'gemini-2.5-flash';
-
-  try {
-    logger.info(`Generating One-Shot script with model: ${modelName}`);
-
-    const model = vertexAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: "You are a World-Class Creative Strategist who follows the 'Steal Like an Artist' framework."
-    });
-
-    // Prepare content parts for Vertex AI
-    const contentParts: Part[] = [
-      { text: fullPrompt },
-      ...mediaParts,
+    const MODEL_HIERARCHY = [
+        'gemini-2.5-flash',          // Primary
+        'gemini-2.0-flash-001',      // Fallback
     ];
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: contentParts }],
-    });
-    const script = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return script.trim();
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    let lastError: any = null;
 
-  } catch (error: any) {
-    logger.error(`One-Shot generation failed: ${error.message}`);
-    throw error;
-  }
+    const systemInstruction = `You are a Viral Script Writer studying human conversation patterns.
+
+Your Goal:
+Write scripts that sound like a friend talking, NOT like an essay.
+
+Your Scripts Must:
+• Hook in 3 words (not 3 seconds)
+• Sound natural when spoken
+• Include camera directions and text overlays
+• Work in ANY language (use A-Z letters for romanization)
+
+NEVER:
+- Use hashtags
+- Use markdown in dialogue
+- Use emojis in spoken words
+- Switch languages mid-script`;
+
+    for (const modelName of MODEL_HIERARCHY) {
+        try {
+            logger.info(`Generating script with ${modelName}${options.toneHint ? ` (${options.toneHint})` : ''}${options.mode === 'hook_only' ? ' [hook only]' : ''}`);
+
+            const model = vertexAI.getGenerativeModel({
+                model: modelName,
+                systemInstruction: systemInstruction,
+                generationConfig: {
+                    maxOutputTokens: 1500,  // FIXED: Allows full scripts
+                    temperature: 0.9,
+                    topP: 0.95,
+                }
+            });
+
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+            });
+
+            const script = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            // Validation
+            const validationIssues = validateScript(script);
+            if (validationIssues.length > 0) {
+                logger.warn(`Validation warnings on ${modelName}: ${validationIssues.join(', ')}`);
+
+                if (validationIssues.some(i => i.includes('Missing required sections'))) {
+                    logger.warn(`Script structure invalid, trying next model.`);
+                    logger.debug(`Malformed output (first 200 chars): ${script.substring(0, 200)}...`);
+                    throw new Error(`Output validation failed: ${validationIssues.join(', ')}`);
+                }
+            }
+
+            return script.trim();
+
+        } catch (error: any) {
+            lastError = error;
+            const isRateLimit = error.message?.includes('429') || error.status === 429;
+
+            logger.warn(`Script generation failed on ${modelName}: ${error.message}`);
+
+            if (isRateLimit) {
+                logger.warn('Rate limit hit, waiting before retry...');
+                await sleep(2000);
+            }
+        }
+    }
+
+    logger.error('All script generation models failed.');
+    throw lastError || new Error('Script generation failed');
 }
 
-/**
- * SHARED MASTER PROMPT BUILDER
- * "Steal Like an Artist" framework with enhanced quality directives
- * 
- * ENHANCED V4:
- * - LANGUAGE LOCK at TOP (highest priority - preserves spoken language)
- * - TEXT OVERLAY separated from VISUAL for easy shooting
- * - "BECAUSE" explanations for every insight
- * - Psychological hook engineering with 10 hook archetypes
- * - Niche-specific tone calibration
- * - Anti-generic language filter
- */
+// ============================================
+// Script Validation
+// ============================================
+
+function validateScript(script: string): string[] {
+    const issues: string[] = [];
+
+    const bannedPhrases = [
+        'in this video',
+        'hey guys',
+        'let me tell you',
+        'so basically',
+        'and that\'s it',
+        'hope this helps'
+    ];
+
+    const lowerScript = script.toLowerCase();
+    for (const phrase of bannedPhrases) {
+        if (lowerScript.includes(phrase)) {
+            issues.push(`Banned phrase: "${phrase}"`);
+        }
+    }
+
+    const becauseCount = (script.match(/because/gi) || []).length;
+    if (becauseCount > 3) {
+        issues.push(`Excessive "because" (${becauseCount}x)`);
+    }
+
+    if (!script.includes('[HOOK]') || !script.includes('[BODY]') || !script.includes('[CTA]')) {
+        issues.push('Missing required sections [HOOK]/[BODY]/[CTA]');
+    }
+
+    return issues;
+}
+
+// ============================================
+// One-Shot Generator
+// ============================================
+
+export async function generateScriptFromVideo(options: OneShotGeneratorOptions): Promise<string> {
+    const { userIdea, frames, audioPath } = options;
+
+    const mediaParts: Part[] = [];
+
+    // FIXED: Simpler file existence check
+    if (frames && frames.length > 0) {
+        const existingFrames = frames.filter(f => fs.existsSync(f));
+        const selectedFrames = existingFrames.slice(0, 6);
+
+        const framePromises = selectedFrames.map(f => fileToGenerativePart(f, 'image/jpeg'));
+        mediaParts.push(...await Promise.all(framePromises));
+    }
+
+    if (audioPath && fs.existsSync(audioPath)) {
+        mediaParts.push(await fileToGenerativePart(audioPath, 'audio/wav'));
+    }
+
+    const referenceDNA = `[VIDEO/AUDIO ATTACHED]
+Analyze frames and audio directly.
+Extract: pacing, tone, hook psychology, language style.
+THIS IS YOUR REFERENCE DNA.`;
+
+    const safeTranscript = truncateTranscript(options.transcript);
+    const detectedLang = detectTranscriptLanguage(safeTranscript);
+    const languageOverride = options.languageHint;
+
+    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
+    const optionalHints = buildOptionalHints(options);
+
+    let priorContext = '';
+    if (options.previousScripts && options.previousScripts.length > 0) {
+        const relevantScripts = options.previousScripts.slice(-2);
+        priorContext = `\n--- PRIOR SCRIPTS ---\n` +
+            relevantScripts.map((ps, i) => `${i + 1}. ${ps.script}`).join('\n');
+    }
+
+    const fullPrompt = masterPrompt + priorContext + optionalHints;
+
+    const modelName = 'gemini-2.0-flash-001';  // FIXED: Correct model name
+
+    try {
+        logger.info(`One-Shot generation with ${modelName}`);
+
+        const model = vertexAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: "You are a Viral Script Writer studying human conversation patterns.",
+            generationConfig: {
+                maxOutputTokens: 1500,  // FIXED: Full script capacity
+                temperature: 0.9,
+                topP: 0.95,
+            }
+        });
+
+        const contentParts: Part[] = [
+            { text: fullPrompt },
+            ...mediaParts,
+        ];
+
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts: contentParts }],
+        });
+
+        const script = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const validationIssues = validateScript(script);
+        if (validationIssues.length > 0) {
+            logger.warn(`One-Shot validation warnings: ${validationIssues.join(', ')}`);
+            if (validationIssues.some(i => i.includes('Missing required sections'))) {
+                logger.debug(`Malformed one-shot output: ${script.substring(0, 200)}...`);
+                throw new Error(`Output validation failed: ${validationIssues.join(', ')}`);
+            }
+        }
+
+        return script.trim();
+
+    } catch (error: any) {
+        logger.error(`One-Shot generation failed: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================
+// Master Prompt Builder
+// ============================================
+
 function createMasterPrompt(
-  userIdea: string,
-  referenceDNA: string,
-  detectedLang: DetectedLanguage,
-  languageOverride?: string
+    userIdea: string,
+    referenceDNA: string,
+    detectedLang: DetectedLanguage,
+    languageOverride?: string
 ): string {
-  // Build LANGUAGE LOCK section - appears FIRST in prompt for highest priority
-  const effectiveLanguage = languageOverride || detectedLang.language;
-  const isRomanized = !languageOverride && detectedLang.isRomanized;
+    const effectiveLanguage = languageOverride || detectedLang.language;
+    const isRomanized = !languageOverride && detectedLang.isRomanized;
 
-  const languageLockSection = `
-🔒🔒🔒 LANGUAGE LOCK (HIGHEST PRIORITY - READ FIRST!) 🔒🔒🔒
+    const languageSection = `
+🔒 LANGUAGE DETECTION
 ═══════════════════════════════════════════════════════════════════════
-DETECTED LANGUAGE: ${detectedLang.language}${detectedLang.isRomanized ? ' (Romanized/Transliterated)' : ''}
-${detectedLang.sampleWords.length > 0 ? `DETECTED FROM: "${detectedLang.sampleWords.join('", "')}"` : ''}
-${languageOverride ? `USER OVERRIDE: ${languageOverride}` : ''}
+DETECTED: ${detectedLang.language}${detectedLang.sampleWords.length > 0 ? ` (${detectedLang.sampleWords.join(', ')})` : ''}
+OUTPUT: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED A-Z)' : ''}
 
-⚠️ OUTPUT LANGUAGE: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED using Latin alphabet A-Z)' : ''}
-
-STRICT RULES:
-• ALL spoken dialogue (💬 SAY:) MUST be in ${effectiveLanguage}${isRomanized ? ' using ONLY Latin letters (A-Z)' : ''}
-• If source is romanized Hindi/Kannada/Tamil/etc → output MUST also be romanized
-• DO NOT translate to English unless user explicitly requested English
-• DO NOT switch languages mid-script
-• Technical labels (🎬 VISUAL, 📝 TEXT OVERLAY) are always in English
-• When in doubt, match the SOURCE language exactly
-
-EXAMPLE:
-${effectiveLanguage === 'Hindi' && isRomanized ?
-      '✅ CORRECT: "Aap yeh galti mat karo - yeh bahut important hai"\n❌ WRONG: "Don\'t make this mistake - it\'s very important"' :
-      effectiveLanguage === 'Kannada' && isRomanized ?
-        '✅ CORRECT: "Idu tumba important - nodri please"\n❌ WRONG: "This is very important - please watch"' :
-        '✅ CORRECT: Preserve the exact language style from the reference'}
+RULES:
+• Hindi/Arabic/Tamil → Roman alphabet (A-Z)
+  Example: "Aap yeh galti mat karo" NOT "आप यह"
+• Labels (🎬 📝) → Always English
+• Dialogue (💬 SAY) → ${effectiveLanguage}
+• NO script mixing
+• When unsure → Default to English
 ═══════════════════════════════════════════════════════════════════════
-
 `;
-  return `${languageLockSection}
-═══════════════════════════════════════════════════════════════════════
-"STEAL LIKE AN ARTIST" - SURGICAL SCRIPT TRANSFORMATION V3
-═══════════════════════════════════════════════════════════════════════
 
-You are performing a SURGICAL GOOD THEFT:
-• BAD THIEF: Steals the words → obvious copy
-• GOOD THIEF: Steals the THINKING → original work that FEELS familiar
+    return `${languageSection}
 
-═══════════════════════════════════════════════════════════════════════
-STEP 1: DECODE THE REFERENCE DNA
-═══════════════════════════════════════════════════════════════════════
+REFERENCE VIDEO DATA:
 ${referenceDNA}
 
-Extract these elements:
-1. HOOK PSYCHOLOGY: What emotion triggers the opening? (curiosity, fear, shock, relatability)
-2. STRUCTURE PATTERN: How does tension build? (problem→solution, myth→truth, story→lesson)
-3. PACING DNA: Fast punchy cuts or slow emotional builds?
-4. AUTHORITY MARKERS: What makes the speaker credible?
-5. NICHE VOCABULARY: What specific terminology resonates with this audience?
-
-═══════════════════════════════════════════════════════════════════════
-STEP 2: TRANSFORM FOR NEW CONCEPT
-═══════════════════════════════════════════════════════════════════════
 NEW CONCEPT: "${userIdea}"
 
-Apply the reference's THINKING (not words) to this new topic.
-The output should feel like it could be from the same creator, but on a different subject.
+═══════════════════════════════════════════════════════════════════════
+🎨 STEAL LIKE AN ARTIST FRAMEWORK
+═══════════════════════════════════════════════════════════════════════
+
+"Good artists copy. Great artists STEAL." - Picasso
+You're stealing the PSYCHOLOGY, not the words.
+
+PHASE 1: DECODE THE REFERENCE
+─────────────────────────────────────────────────────────────────────
+Extract from Reference Data above:
+
+1. HOOK EMOTION → What feeling does it trigger?
+   (Fear, curiosity, shock, FOMO, validation, anger)
+
+2. TENSION PATTERN → How does interest build?
+   (Problem→Solution / Myth→Truth / Story→Lesson / Before→After)
+
+3. RHYTHM → Fast punchy or slow dramatic?
+   (Count words per sentence to match pace)
+
+4. CREDIBILITY → Why should anyone listen?
+   (Stats, personal results, expertise, relatability)
+
+5. VOCABULARY → What insider language is used?
+   (Niche terms, slang, technical jargon)
+
+─────────────────────────────────────────────────────────────────────
+PHASE 2: TRANSPLANT TO NEW CONCEPT
+─────────────────────────────────────────────────────────────────────
+
+STEAL THESE:
+✅ Opening emotion trigger
+✅ Story building pattern
+✅ Speech rhythm and pacing
+✅ Trust-building style
+✅ Vocabulary sophistication level
+
+DON'T STEAL THESE:
+❌ Exact words or phrases
+❌ Specific examples
+❌ Topic details
+
+RESULT: Same CREATOR vibe, different TOPIC.
 
 ═══════════════════════════════════════════════════════════════════════
-HOOK ENGINEERING - CHOOSE THE RIGHT ARCHETYPE:
+🎣 HOOK ENGINEERING (First 3 Words Rule)
 ═══════════════════════════════════════════════════════════════════════
-Select the BEST hook type for this concept:
 
-1. 🚫 CONTRARIAN: "Everyone says X... but here's the truth"
-2. ❓ CURIOSITY GAP: "I discovered something that changed everything"
-3. 🔢 LISTICLE TEASE: "3 things nobody tells you about..."
-4. 😱 SHOCK OPENER: Start with the most surprising fact FIRST
-5. 🪞 IDENTITY CALL: "If you're a [type of person], you need to hear this"
-6. 🎭 STORY HOOK: "I was doing [X] when [unexpected thing happened]..."
-7. ⚠️ URGENT WARNING: "Stop doing [common thing] immediately"
-8. 🤔 MYTH BUSTER: "[Common belief] is actually destroying your [goal]"
-9. 💡 AHA MOMENT: "The moment I realized [insight], everything changed"
-10. 🎯 DIRECT CHALLENGE: "You're probably making this mistake right now"
+First 3 words MUST stop the scroll. Choose ONE archetype:
 
-Pick ONE that fits the concept. Do NOT use generic hooks.
+HIGH-IMPACT (Use 80% of time):
+1. 💥 SHOCK STAT → "97% of creators fail..."
+2. 🚫 STOP COMMAND → "Stop posting daily..."
+3. 💸 LOSS WARNING → "You're losing $10K monthly..."
+4. 🤫 INSIDER SECRET → "Nobody tells you this..."
+5. ⚠️ URGENT FIX → "Your hook kills engagement..."
+6. 🎯 IDENTITY CALL → "If you're under 10K followers..."
 
-═══════════════════════════════════════════════════════════════════════
-LANGUAGE RULES (CRITICAL - READ CAREFULLY):
-═══════════════════════════════════════════════════════════════════════
-PRIORITY ORDER for language detection:
-1. AUDIO (spoken words in transcript) > CAPTIONS (on-screen text) > VISUAL TEXT
-2. The SPOKEN language in the transcript is what matters, NOT the caption language
+MEDIUM-IMPACT (Use 20% of time):
+7. 🔍 MYTH BUSTER → "Consistency beats quality? Wrong."
+8. 📈 TRANSFORMATION → "I went from 0 to 100K..."
+9. 🎭 STORY OPEN → "I was quitting when..."
 
-STRICT RULES:
-• Detect the SPOKEN language from the transcript (ignore on-screen text language)
-• If the video SPEAKS in English but has captions in Hindi/Arabic/etc → OUTPUT IN ENGLISH
-• If the video SPEAKS in Hindi/Arabic/etc → Romanize to English alphabet (transliterate)
-• ALL output MUST use Roman alphabet (A-Z) - no Hindi, Arabic, Chinese, or other scripts
-• Visual directions (🎬 VISUAL) and Technical labels must ALWAYS be in English
-• NO random language switching mid-script
-• When in doubt, default to ENGLISH
-
-EXAMPLES:
-✅ CORRECT: Video speaks English with Hindi captions → Script in English
-✅ CORRECT: Video speaks Hindi → Script in romanized Hindi (e.g., "Aap yeh galti mat karo")
-❌ WRONG: Video speaks English → Script outputs in Hindi/Arabic script
-❌ WRONG: Mixing देवनागरी or عربي characters in output
+NEVER USE:
+❌ "Have you ever...?" → Passive
+❌ "Hey guys..." → Wastes time
+❌ "I'm going to show you..." → Delays value
 
 ═══════════════════════════════════════════════════════════════════════
-QUALITY REQUIREMENTS V4 (NATURAL + VIRAL):
+⏱️ PACING GUARDRAIL (Natural Speaking Speed)
 ═══════════════════════════════════════════════════════════════════════
-• Every claim needs "BECAUSE" - explain WHY, not just WHAT
-• Hooks must trigger ONE specific emotion from the archetype list above
-• 25-40 seconds total spoken time (punchy, no filler)
-• Each insight must provide ACTIONABLE value, not just information
-• Use SPECIFIC numbers/examples (not "many people" but "73% of creators")
 
-🎯 DIALOGUE NATURALNESS (CRITICAL FOR ENGAGEMENT):
-Dialogue must sound like you're talking to a FRIEND, not reading a script.
+Humans speak at ~150 words/minute = 2.5 words/second with natural pauses.
 
-✅ NATURAL (Use these patterns):
-• "Look, here's the thing..." (conversational opener)
-• "I'm gonna be honest with you..." (creates trust)
-• "You know what? Most people get this wrong." (relatable challenge)
-• "Here's what changed everything for me..." (story hook)
-• "And honestly? That's the part nobody talks about." (insider knowledge)
-• Use contractions: "I'm", "you're", "don't", "here's", "that's"
-• Short sentences. Punchy. Like this.
-• Questions that make them think: "Sound familiar?", "Right?"
+WORD COUNT LIMITS:
+[HOOK] Maximum 12 words (fits in 5 seconds with impact)
+[BODY] Maximum 60-75 words (fits in 25-30 seconds)
+[CTA] Maximum 15 words (fits in 6 seconds)
 
-❌ ROBOTIC (Never use these patterns):
-• "It is important to note that..." (formal, boring)
-• "One should consider..." (third person, detached)
-• "This is a significant factor..." (essay language)
-• "In order to achieve success..." (overly formal)
-• Long compound sentences with multiple clauses
-• Perfect grammar that sounds unnatural when spoken
+Total script: 90-100 words = 35-40 seconds of natural speech.
 
-🔥 VIRAL HOOK TECHNIQUES (Use first 3 words to STOP scrolling):
-• "I lost $10,000..." (loss triggers stronger than gain)
-• "Stop doing this..." (pattern interrupt + urgency)
-• "Nobody talks about..." (exclusive insider info)
-• "The real reason..." (conspiracy/truth reveal)
-• "I tested 100..." (curiosity + specific number)
-• "Delete this now..." (urgency + taboo)
-• "Warning: This will..." (threat/promise combo)
-• "They don't want you to know..." (us vs them)
+If HOOK exceeds 12 words, viewer scrolls. Keep it PUNCHY.
+Exceeding these limits causes immediate generation failure.
 
 ═══════════════════════════════════════════════════════════════════════
-BANNED PHRASES (NEVER USE - These kill engagement):
+💬 NATURAL DIALOGUE (Anti-Robotic Framework)
 ═══════════════════════════════════════════════════════════════════════
-❌ "In this video..." (boring YouTuber energy)
-❌ "Let me tell you..." (sounds like a lecture)
-❌ "So basically..." (filler, wastes time)
-❌ "What I'm going to show you..." (kills curiosity)
-❌ "You might be wondering..." (assumes their thoughts)
-❌ "Trust me when I say..." (desperation signal)
-❌ "It's important to understand..." (essay language)
-❌ "The thing is..." (vague, unhelpful)
-❌ Starting with "So..." or "Okay so..." (weak openers)
-❌ Ending with "...and that's it" or "...hope this helps" (flat closings)
-❌ "First of all..." (boring list energy)
-❌ "As you can see..." (obvious, filler)
-❌ "I just wanted to share..." (weak, apologetic)
-❌ "Quick tip:" (overused, generic)
-❌ "Game changer" (buzzword, meaningless)
-❌ "Did you know that..." (trivia energy, not viral)
 
+RULE 1: THOUGHT UNITS (Short-Long-Short Rhythm)
+People speak in chunks with natural pauses.
+
+Pattern:
+Short (3-5 words) → Punch
+Long (8-12 words) → Explanation
+Short (4-6 words) → Transition
+
+Example:
+"Your hook is dead. (3 words)
+Most creators front-load fluff, so viewers scroll instantly. (9 words)
+Fix the opening. Everything changes. (5 words)"
+
+─────────────────────────────────────────────────────────────────────
+RULE 2: CONVERSATIONAL CONNECTORS
+
+START WITH:
+✅ "Look..." / "Listen..." / "Real talk..." / "Here's the thing..."
+
+TRANSITIONS:
+✅ "But here's the catch..." / "Translation?" / "What changed?"
+
+EMPHASIS:
+✅ "Not just [X]. [Y]." → Creates contrast
+✅ "[Statement]. Period." → Adds authority
+✅ "The problem? [Issue]." → Self-Q&A
+
+─────────────────────────────────────────────────────────────────────
+RULE 3: NATURAL EXPLANATIONS (No Forced "Because")
+
+Instead of: "X happens BECAUSE Y"
+Use:
+✅ "X happens. Why? Y." (Self-Q&A)
+✅ "X happens. The reason? Y." (Reveal)
+✅ "X happens - Y is the culprit." (Dash connector)
+
+Example:
+❌ Robotic: "Videos fail because hooks lack emotional triggers."
+✅ Natural: "Videos fail. The reason? Hooks don't trigger emotion."
+
+─────────────────────────────────────────────────────────────────────
+RULE 4: ALWAYS USE CONTRACTIONS
+
+✅ "I'm", "you're", "don't", "can't", "here's", "that's"
+❌ "I am", "you are", "do not", "cannot", "here is", "that is"
 
 ═══════════════════════════════════════════════════════════════════════
-OUTPUT FORMAT (EXACT - FOLLOW PRECISELY):
+🚫 BANNED PHRASES (Instant Engagement Killers)
 ═══════════════════════════════════════════════════════════════════════
+
+NEVER START WITH:
+❌ "In this video..." → Wastes 3 words
+❌ "Hey guys, so today..." → Generic cliché
+❌ "I want to talk about..." → Passive
+❌ "So basically..." → Filler
+❌ "Let me tell you..." → Lecture tone
+❌ "Okay so..." → Uncertain
+
+NEVER SAY MID-SCRIPT:
+❌ "You might be wondering..." → Assumes
+❌ "Trust me when I say..." → Desperate
+❌ "It's important to understand..." → Essay language
+❌ "The thing is..." → Vague
+❌ "As you can see..." → Obvious
+
+NEVER END WITH:
+❌ "...and that's it." → Flat
+❌ "Hope this helps!" → Passive
+❌ "See you next time!" → Assumes
+❌ "Peace out!" → Tryhard
+
+OVERUSED BUZZWORDS (avoid):
+❌ "Game changer" → Meaningless
+❌ "Next level" → Vague
+❌ "Literally" (when not literal) → Annoying
+❌ "Crazy" / "Insane" → Lazy emphasis
+❌ "Secret" / "Hack" (overused) → Only if genuinely unknown
+
+═══════════════════════════════════════════════════════════════════════
+📐 OUTPUT FORMAT (Exact Structure)
+═══════════════════════════════════════════════════════════════════════
+
+SHORT SCRIPT (25-40 seconds):
 
 [HOOK]
-🎬 VISUAL: (Camera position, facial expression, gestures, background)
-📝 TEXT OVERLAY: "(Exact on-screen text - 3-5 words max, bold impact)"
-💬 SAY: "(Opening line - pattern interrupt, max 2 sentences)"
+🎬 VISUAL: [Camera: Shot type, angle | Face: Expression | Hands: Gesture | Light: Type]
+📝 TEXT OVERLAY: "[3-5 WORDS MAX - CAPS]"
+💬 SAY: "[First 3 words STOP scroll]. [Build tension max 12 words total]."
 
 [BODY]
-🎬 VISUAL: (Camera setup for insight 1)
-📝 TEXT OVERLAY: "(Key point #1 summary)"
-💬 SAY: "(Insight #1 + BECAUSE explanation - explain WHY this matters)"
+🎬 VISUAL: [Camera: New angle | Face: New expression | Hands: Different gesture | Movement: Zoom/pan if any]
+📝 TEXT OVERLAY: "[KEY POINT #1 - 3-5 WORDS]"
+💬 SAY: "[Main insight]. [Why it matters]. [Quick punch]."
 
-🎬 VISUAL: (Camera setup for insight 2)
-📝 TEXT OVERLAY: "(Key point #2 summary)"
-💬 SAY: "(Insight #2 + BECAUSE explanation - deeper value, connect to audience)"
-
-🎬 VISUAL: (Camera setup for insight 3 - optional if content needs depth)
-📝 TEXT OVERLAY: "(Key point #3 summary)"
-💬 SAY: "(Insight #3 + BECAUSE explanation - tie everything together)"
+🎬 VISUAL: [Camera: Another angle | Face: Different look | Hands: New gesture]
+📝 TEXT OVERLAY: "[KEY POINT #2 - 3-5 WORDS]"
+💬 SAY: "[Second insight]. [Connection to first]. [Emphasis]."
 
 [CTA]
-🎬 VISUAL: (Confident close-up, engaging expression, hand gesture if needed)
-📝 TEXT OVERLAY: "(Action words: Follow, Save, Share, Try This)"
-💬 SAY: "(Clear call to action - what should viewer do NOW?)"
+🎬 VISUAL: [Camera: Close-up | Face: Confident smile | Hands: Action gesture]
+📝 TEXT OVERLAY: "[ACTION: FOLLOW/SAVE/TRY]"
+💬 SAY: "[What to do NOW]. [Bonus reason]."
 
 ═══════════════════════════════════════════════════════════════════════
-VISUAL DIRECTION STANDARDS (BE HYPER-SPECIFIC):
+🎬 VISUAL DIRECTION STANDARDS (Realistic & Specific)
 ═══════════════════════════════════════════════════════════════════════
-For 🎬 VISUAL, specify ALL of these:
-✓ Shot type: "Close-up face shot" / "Medium shot waist-up" / "Wide shot with background"
-✓ Camera angle: "Phone at eye level" / "Slightly above looking down" / "Low angle looking up"
-✓ Distance: "2 feet from face" / "Arms length away"
-✓ Expression: "Eyebrows raised, slight smirk" / "Serious, direct eye contact"
-✓ Hands/Body: "Right hand counting on fingers" / "Arms crossed, leaning back"
-✓ Movement: "Quick zoom in on 'secret'" / "Pan left to reveal whiteboard"
-✓ Lighting mood: "Bright ring light" / "Moody side lighting" / "Natural window light"
 
-For 📝 TEXT OVERLAY:
-✓ Keep it 3-5 words MAX (shorter = more impact)
-✓ Use power words: "The REAL Reason...", "Nobody Tells You...", "3 Secrets..."
-✓ Position: "Top-center" / "Bottom-third" if relevant
-✓ Style hint: "Bold caps" / "Handwritten style" if impactful
+CRITICAL: You're directing a SOLO CREATOR with ONE SMARTPHONE.
+Do NOT invent impossible Hollywood camera movements.
+Only use realistic transitions: jump cuts, static framing, handheld.
+B-Roll must be easily filmable at home or office.
+
+For EVERY 🎬 VISUAL, include ALL:
+
+CAMERA SETUP:
+✓ Shot: "Close-up face" / "Medium waist-up" / "Wide full-body"
+✓ Angle: "Eye level" / "10° above" / "Low angle up"
+✓ Distance: "2 feet from lens" / "Arm's length" / "6 feet back"
+
+SUBJECT:
+✓ Face: "Eyebrows raised, smirk" / "Serious, jaw set"
+✓ Eyes: "Direct to camera" / "Looking off-left"
+✓ Hands: "Counting fingers" / "Arms crossed" / "Pointing"
+✓ Body: "Leaning forward 15°" / "Standing straight"
+
+MOVEMENT (only realistic ones):
+✓ Camera: "Static - no movement" / "Slow zoom 20% on 'secret'"
+✓ Subject: "Step forward mid-sentence" / "Gesture on beat"
+
+LIGHT:
+✓ Type: "Bright ring light" / "Natural window" / "Moody spotlight"
+✓ Mood: "High-key energetic" / "Low-key serious" / "Neutral"
+
+BACKGROUND:
+✓ "White wall" / "Blurred office" / "Bookshelf visible"
+
+─────────────────────────────────────────────────────────────────────
+TEXT OVERLAY SPECS:
+✓ 3-5 words MAX (shorter = more impact)
+✓ Action verbs: "STOP THIS" / "3 SECRETS" / "THE TRUTH"
+✓ Position: "Top-center" / "Bottom-third" (if critical)
 
 ═══════════════════════════════════════════════════════════════════════
-NICHE-SPECIFIC TONE CALIBRATION:
+🎯 NICHE ADAPTATION (Match Audience)
 ═══════════════════════════════════════════════════════════════════════
-Adapt your vocabulary and energy:
-• Business/Finance: Data-driven, authority language, ROI focus
-• Fitness/Health: Energetic, motivational, transformation stories
-• Tech/Coding: Precise, problem-solution, efficiency focus
-• Lifestyle/Fashion: Aspirational, aesthetic, relatable moments
-• Education: Clear explanations, examples, step-by-step
-• Comedy/Entertainment: Timing, callbacks, unexpected twists
-• Relationships: Emotional intelligence, vulnerability, connection
 
-Match the niche energy in your word choices, examples, and delivery style.
+BUSINESS/FINANCE:
+- Words: Data, ROI, profit, margins, CAC, LTV
+- Speed: Moderate (clear, confident)
+- Trust: Numbers, case studies, frameworks
+- Example: "Your CAC is killing margins..."
+
+FITNESS/HEALTH:
+- Words: Transform, gains, shred, recovery, form
+- Speed: Fast (high energy)
+- Trust: Before/after, personal results, science
+- Example: "Your form kills gains..."
+
+TECH/CODING:
+- Words: Efficient, algorithm, API, optimize, O(n)
+- Speed: Medium-fast (respect their time)
+- Trust: Code examples, benchmarks
+- Example: "This is O(n²). Here's O(n)..."
+
+LIFESTYLE/CREATIVE:
+- Words: Routine, mindset, vibe, aesthetic, journey
+- Speed: Variable (slow builds, fast punches)
+- Trust: Personal stories, emotions
+- Example: "I hated mornings. Then..."
+
+EDUCATION/LEARNING:
+- Words: Simple, understand, master, apply, learn
+- Speed: Medium (allow comprehension)
+- Trust: Step-by-step, simplifying complex
+- Example: "Think of it like this..."
 
 ═══════════════════════════════════════════════════════════════════════
-QUALITY CHECKLIST (Verify before output):
+✅ QUALITY CHECKLIST (Run Before Finalizing)
 ═══════════════════════════════════════════════════════════════════════
-✓ Hook uses ONE specific archetype from the list above
-✓ Hook triggers emotion in first 3 words
-✓ Each insight has "because" explanation (the WHY)
-✓ Every 💬 SAY has matching 📝 TEXT OVERLAY  
-✓ Visuals specific enough for a stranger to film exactly
-✓ Dialogue sounds like natural speech (contractions, rhythm)
-✓ Language matches reference transcript exactly
-✓ NO banned phrases anywhere in the script
-✓ Total spoken time: 25-40 seconds (read it aloud mentally)
-✓ Each section provides standalone value
 
-Return ONLY the formatted script with [HOOK], [BODY], [CTA] sections.
-No additional commentary or explanation outside the script.`;
+HOOK:
+☐ First 3 words stop scroll (not "Hey guys...")
+☐ Triggers ONE emotion (fear/curiosity/shock/FOMO)
+☐ Under 12 words total
+☐ Visual matches energy
+
+BODY:
+☐ Uses short-long-short rhythm
+☐ NO banned phrases
+☐ Natural connectors ("Look...", "Here's the thing...")
+☐ Specific examples ("10K views" not "many views")
+☐ Camera angles change between points
+☐ Under 75 words total
+
+NATURAL SOUND:
+☐ Sounds normal if spoken aloud
+☐ Uses contractions ("I'm" not "I am")
+☐ No robot talk
+☐ Explanations flow naturally (no forced "because because")
+
+CTA:
+☐ Clear action (Follow/Save/Try)
+☐ Creates urgency or teases next video
+☐ Confident (not "hope this helps")
+☐ Under 15 words total
+
+TECHNICAL:
+☐ Dialogue in correct language
+☐ All scenes have camera + face + hands + light
+☐ Text overlays 3-5 words max
+☐ No emojis in dialogue
+☐ No hashtags
+☐ Only realistic camera movements (solo creator with phone)
+
+NICHE:
+☐ Vocabulary matches audience
+☐ Speed fits content type
+☐ Trust signals fit topic
+
+`;
 }

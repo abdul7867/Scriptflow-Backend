@@ -11,14 +11,10 @@ services:
       - PORT=3000
       # Memory optimized for t3.micro (1GB RAM) - heap 512MB, expose GC for memory governor
       # CRITICAL: These values MUST match Dockerfile defaults and memoryGovernor config
-      - NODE_OPTIONS=--max-old-space-size=512 --expose-gc
-      - MEMORY_HEAP_LIMIT_MB=512
-      # yt-dlp filesystem configuration (prevents read-only errors)
-      - HOME=/app/temp
-      - XDG_CACHE_HOME=/app/temp/.cache
-      - XDG_CONFIG_HOME=/app/temp/.config
       - MONGODB_URI=${MONGODB_URI}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://redis:6379
+      - NODE_OPTIONS=--max-old-space-size=600 --expose-gc
+      - MEMORY_HEAP_LIMIT_MB=600
       - QUEUE_CONCURRENCY=${QUEUE_CONCURRENCY:-2}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
       # Vertex AI (replaces GEMINI_API_KEY)
@@ -91,8 +87,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - local # Only start in local profile
 
   # MongoDB (only for local development)
   # In production, use MongoDB Atlas

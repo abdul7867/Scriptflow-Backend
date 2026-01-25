@@ -8,6 +8,7 @@ import { submitFeedbackHandler, getFeedbackStatsHandler } from './api/controller
 import { submitFeedbackHandlerV2, getFeedbackStatsHandlerV2, quickFeedbackHandler } from './api/controllers/feedbackV2.controller';
 import { viewScriptHandler } from './api/controllers/viewScript.controller';
 import { webhookHandler, jobStatusHandler as webhookJobStatusHandler } from './api/controllers/webhook.controller';
+import { localDashboardHandler } from './api/controllers/localView.controller';
 import metricsRouter from './api/routes/metrics.routes';
 import { logger } from './utils/logger';
 import { config } from './config';
@@ -127,6 +128,9 @@ export function createServer() {
   // Short URL: /s/:publicId
   // Rate limited: 60 requests per minute per IP (generous for normal use)
   app.get('/s/:publicId', viewScriptHandler);
+
+  // Local Dashboard to view generated scripts (Offline/Dev usage)
+  app.get('/local-dashboard', localDashboardHandler);
 
   // Main API endpoint with ACCESS CONTROL
   // 1. betaAccessControl - Only first 100 users, others on waitlist

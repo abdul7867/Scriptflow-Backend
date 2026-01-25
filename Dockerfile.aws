@@ -46,8 +46,7 @@ COPY --from=builder /app/package*.json ./
 # Install production dependencies only (npm 7+ syntax)
 RUN npm ci --omit=dev
 
-# Copy necessary static assets (fonts for Satori image generation)
-COPY fonts ./fonts
+
 
 # Create temp directory with cache/config subdirectories for yt-dlp
 RUN mkdir -p temp/.cache temp/.config \
@@ -64,8 +63,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 # Memory configuration for t3.micro (1GB RAM)
 # Heap limit: 640MB, leaving room for OS + FFmpeg + yt-dlp
-ENV NODE_OPTIONS="--max-old-space-size=640 --expose-gc"
-ENV MEMORY_HEAP_LIMIT_MB=640
+ENV NODE_OPTIONS="--max-old-space-size=600 --expose-gc"
+ENV MEMORY_HEAP_LIMIT_MB=600
 # Redirect yt-dlp to use writable temp directory (prevents read-only filesystem errors)
 ENV HOME=/app/temp
 ENV XDG_CACHE_HOME=/app/temp/.cache

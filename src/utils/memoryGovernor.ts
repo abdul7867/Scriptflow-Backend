@@ -12,6 +12,7 @@
  * @see PRD_System_Robustness_t3micro.txt Section 6
  */
 
+import v8 from 'v8';
 import { Worker } from 'bullmq';
 import { logger } from './logger';
 import { getRedis } from '../queue/redis';
@@ -57,21 +58,20 @@ export interface MemoryStats {
 // Development mode uses higher thresholds (ts-node uses more memory)
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
-// Get the configured heap limit (--max-old-space-size or default 512MB for Node.js)
-// This is more accurate than heapTotal which grows dynamically
-const HEAP_LIMIT_MB = parseInt(process.env.MEMORY_HEAP_LIMIT_MB || '512', 10);
-const HEAP_LIMIT_BYTES = HEAP_LIMIT_MB * 1024 * 1024;
+// Get the configured heap limit from Node.js itself (most accurate)
+// This respects --max-old-space-size passed to the process
+const stats = v8.getHeapStatistics();
+const HEAP_LIMIT_BYTES = stats.heap_size_limit;
+const HEAP_LIMIT_MB = Math.round(HEAP_LIMIT_BYTES / 1024 / 1024);
 
 const DEFAULT_CONFIG: MemoryGovernorConfig = {
     checkInterval: parseInt(process.env.MEMORY_GOVERNOR_INTERVAL || '10000', 10),
-    // Production thresholds based on configured heap limit (512MB default)
-    // These percentages are of the LIMIT, not the current allocation
-    yellowThreshold: parseFloat(process.env.MEMORY_GOVERNOR_YELLOW || (isDevelopment ? '0.75' : '0.70')),
-    orangeThreshold: parseFloat(process.env.MEMORY_GOVERNOR_ORANGE || (isDevelopment ? '0.85' : '0.80')),
-    redThreshold: parseFloat(process.env.MEMORY_GOVERNOR_RED || (isDevelopment ? '0.92' : '0.85')),
-    criticalThreshold: parseFloat(process.env.MEMORY_GOVERNOR_CRITICAL || (isDevelopment ? '0.96' : '0.90')),
-    // In development, disable fatal shutdown (set to 1.0 = never trigger)
-    fatalThreshold: parseFloat(process.env.MEMORY_GOVERNOR_FATAL || (isDevelopment ? '1.0' : '0.95')),
+    // Production thresholds based on configured heap limit
+    yellowThreshold: parseFloat(process.env.MEMORY_GOVERNOR_YELLOW || '0.70'),
+    orangeThreshold: parseFloat(process.env.MEMORY_GOVERNOR_ORANGE || '0.80'),
+    redThreshold: parseFloat(process.env.MEMORY_GOVERNOR_RED || '0.85'),
+    criticalThreshold: parseFloat(process.env.MEMORY_GOVERNOR_CRITICAL || '0.90'),
+    fatalThreshold: parseFloat(process.env.MEMORY_GOVERNOR_FATAL || '0.95'),
     minConcurrency: 2,
     originalConcurrency: parseInt(process.env.QUEUE_CONCURRENCY || '3', 10),
 };
@@ -109,6 +109,8 @@ class MemoryGovernor {
         this.intervalId = setInterval(() => this.check(), this.config.checkInterval);
         logger.info('✅ Memory Governor started', {
             checkInterval: `${this.config.checkInterval}ms`,
+            limit: `${HEAP_LIMIT_MB}MB`, // Log the actual detected limit
+            mode: isDevelopment ? 'DEVELOPMENT (Restrictions Disabled)' : 'PRODUCTION (Restrictions Active)',
             thresholds: {
                 yellow: `${this.config.yellowThreshold * 100}%`,
                 orange: `${this.config.orangeThreshold * 100}%`,
@@ -146,13 +148,12 @@ class MemoryGovernor {
      */
     getStats(): MemoryStats {
         const usage = process.memoryUsage();
-        // Use the configured heap limit, not heapTotal (which grows dynamically)
         const heapPercent = usage.heapUsed / HEAP_LIMIT_BYTES;
 
         return {
             level: this.currentLevel,
             heapUsedMB: Math.round(usage.heapUsed / 1024 / 1024),
-            heapTotalMB: HEAP_LIMIT_MB, // Use configured limit
+            heapTotalMB: HEAP_LIMIT_MB,
             heapPercent: Math.round(heapPercent * 100),
             rssMB: Math.round(usage.rss / 1024 / 1024),
             externalMB: Math.round(usage.external / 1024 / 1024),
@@ -171,13 +172,12 @@ class MemoryGovernor {
      */
     private async check(): Promise<void> {
         const usage = process.memoryUsage();
-        // Use configured heap limit for accurate percentage calculation
         const heapPercent = usage.heapUsed / HEAP_LIMIT_BYTES;
         const level = this.calculateLevel(heapPercent);
 
-        // Log stats periodically (every check at warning+, every 6th check normally)
+        // Log stats periodically
         const stats = this.getStats();
-        const shouldLog = level !== 'green' || Math.random() < 0.16; // ~1 in 6
+        const shouldLog = level !== 'green' || Math.random() < 0.16;
 
         if (shouldLog) {
             logger.debug('Memory Governor check', {
@@ -210,6 +210,11 @@ class MemoryGovernor {
      * Calculate memory level based on heap percentage
      */
     private calculateLevel(heapPercent: number): MemoryLevel {
+        // DISABLE restrictions in development mode
+        if (isDevelopment) {
+            return 'green';
+        }
+
         if (heapPercent >= this.config.fatalThreshold) return 'fatal';
         if (heapPercent >= this.config.criticalThreshold) return 'critical';
         if (heapPercent >= this.config.redThreshold) return 'red';

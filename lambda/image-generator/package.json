@@ -1,0 +1,17 @@
+{
+    "name": "scriptflow-image-generator",
+    "version": "1.0.0",
+    "description": "AWS Lambda function for ScriptFlow image generation",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@resvg/resvg-js": "^2.6.0",
+        "axios": "^1.6.0",
+        "cloudinary": "^2.0.0",
+        "form-data": "^4.0.0",
+        "satori": "^0.10.11",
+        "satori-html": "^0.3.2"
+    }
+}

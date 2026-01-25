@@ -16,6 +16,7 @@
     "prebuild": "npm run clean"
   },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.975.0",
     "@aws-sdk/client-s3": "^3.958.0",
     "@google-cloud/vertexai": "^1.10.0",
     "@resvg/resvg-js": "^2.6.2",

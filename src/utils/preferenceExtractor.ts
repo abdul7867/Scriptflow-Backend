@@ -233,11 +233,33 @@ export function extractPreferencesFromIdea(userIdea: string): ExtractedPreferenc
     }
 
     // Clean up any leftover punctuation and whitespace
-    const cleanedIdea = workingText
+    let cleanedIdea = workingText
         .replace(/^\s*[-–—:,;]\s*/, '') // Remove leading punctuation
         .replace(/\s*[-–—:,;]\s*$/, '') // Remove trailing punctuation
         .replace(/\s{2,}/g, ' ')        // Collapse multiple spaces
         .trim();
+
+    // Fix: Remove dangling command phrases like "make the", "create a" if that's all that's left
+    // This happens when user says "make the script in hindi" -> "in hindi" is extracted -> "make the script" remains
+    // We want to detect if the remaining text is just a command stub
+    const commandStubPattern = /^(?:make|create|write|generate|give|do|start)\s+(?:me\s+)?(?:a|the|an|this)\s*(?:script|video|reel|content)?\s*$/i;
+
+    // Also check for just "make" or "script" left over
+    const singleWordStub = /^(?:make|create|script|video|reel)\s*$/i;
+
+    if (commandStubPattern.test(cleanedIdea) || singleWordStub.test(cleanedIdea)) {
+        // If the remaining text is just a command stub (e.g. "make the script"), 
+        // treat it as empty so the system falls back to a sensible default or the original text
+        cleanedIdea = '';
+    }
+
+    // Clean leading verbs if there is still substantial content
+    // e.g. "make a video about coffee" -> "video about coffee" (redundant but harmless)
+    // but "make the script in hindi" -> "script" (if "in hindi" removed) is handled above
+    cleanedIdea = cleanedIdea
+        .replace(/^(?:make|create|write|generate)\s+(?:me\s+)?(?:a|the|an)\s+/i, '')
+        .trim();
+
 
     const hasExplicitPreferences = !!(languageHint || toneHint);
 
