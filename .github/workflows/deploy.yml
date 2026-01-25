@@ -67,18 +67,20 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to project folder (Case-insensitive check)
-            if [ -d "~/scriptflow-backend" ]; then
-              cd ~/scriptflow-backend
-            elif [ -d "~/Scriptflow-Backend" ]; then
-              cd ~/Scriptflow-Backend
+            # STRICTLY use lowercase folder: /home/ubuntu/scriptflow-backend
+            TARGET_DIR="/home/ubuntu/scriptflow-backend"
+            
+            if [ -d "$TARGET_DIR" ]; then
+              echo "✅ Found existing directory: $TARGET_DIR"
+              cd "$TARGET_DIR"
             else
-              # Neither exists, clone fresh
-              git clone https://github.com/abdul7867/Scriptflow-Backend.git ~/Scriptflow-Backend
-              cd ~/Scriptflow-Backend
+              echo "⚠️ Directory not found. Cloning fresh into: $TARGET_DIR"
+              # Clone specifically into lowercase target name
+              git clone https://github.com/abdul7867/Scriptflow-Backend.git "$TARGET_DIR"
+              cd "$TARGET_DIR"
             fi
             
-            # Pull latest code configuration (docker-compose.yml updates)
+            # Pull latest code configuration
             git pull origin main
 
             # Login to Docker (to pull private image)
