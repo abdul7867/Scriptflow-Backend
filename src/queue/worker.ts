@@ -14,7 +14,7 @@ import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
 // LEGACY imports removed: sendToManyChat, sendTextMessage - using pull-based delivery via manychatStateService
 import { manychatStateService } from '../services/external/manychatState.service';
 import { generateScriptImage, generateExtractImage } from '../utils/imageGenerator';
-import { generateCarouselImages, generateExtractCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
+import { generateCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl, generateRequestHashV2 } from '../utils/hash';
 import { uploadVideoToS3 } from '../services/external/s3.service';
@@ -708,39 +708,27 @@ async function processJobWithTimeout(
     let carouselImages: CarouselImages | null = null;
 
     if (isCopyMode) {
-      // EXTRACT MODE: Use special extract image generator
-      // The extract format doesn't have [HOOK]/[BODY]/[CTA] sections
-      logger.info(`[${requestId}] EXTRACT MODE - Generating 3-card carousel for extract content`);
-      try {
-        carouselImages = await withCircuitBreaker('cloudinary', async () => {
-          return generateExtractCarouselImages(scriptText);
-        });
+      // EXTRACT MODE: Generate single transcript image
+      // The extract format is a long transcript, best suited for a single scrollable image
+      logger.info(`[${requestId}] EXTRACT MODE - Generating single image for extract content`);
 
+      imageUrl = await withCircuitBreaker('cloudinary', async () => {
+        return generateExtractImage(scriptText);
+      });
 
-        if (carouselImages) {
-          imageUrl = carouselImages.hookCard; // Use transcript card as primary
+      carouselImages = null; // No carousel for extract mode
 
-          logger.info(`[${requestId}] ✅ Extract carousel generated with 3 cards`, {
-            transcriptCard: carouselImages.hookCard.substring(0, 50) + '...',
-            visualsCard: carouselImages.bodyCard.substring(0, 50) + '...',
-            analysisCard: carouselImages.ctaCard.substring(0, 50) + '...'
-          });
-        } else {
-          throw new Error('Carousel generation returned null');
-        }
-      } catch (carouselError: any) {
-        logger.warn(`[${requestId}] Extract carousel failed, falling back to single image: ${carouselError.message}`);
-        // Fallback to legacy single image if carousel fails
-        imageUrl = await withCircuitBreaker('cloudinary', async () => {
-          return generateExtractImage(scriptText);
-        });
-      }
     } else if (isV2) {
       // V2: Generate 3-card carousel (reduces system load by parallel generation)
       logger.info(`[${requestId}] Generating carousel images (3 cards)...`);
       try {
         carouselImages = await withCircuitBreaker('cloudinary', async () => {
-          return generateCarouselImages(scriptText, job.data.variationIndex || 0, storyFormat);
+          return generateCarouselImages(scriptText, {
+            variationIndex: job.data.variationIndex || 0,
+            storyFormat: storyFormat,
+            showTimings: true,
+            theme: 'dark'
+          });
         });
 
         // Use hook card as the primary image for backward compatibility

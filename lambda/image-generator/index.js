@@ -38,7 +38,7 @@ try {
 } catch (e) { console.error(e); }
 
 const COLORS = {
-    bgDark: '#0a0a0c', textMain: '#fafafa', textMuted: '#6b6b7a',
+    bgDark: '#0a0a0c', textMain: '#fafafa', textMuted: '#6b6b7a', textSecondary: '#cbd5e1',
     accent: '#8b5cf6', accentSecondary: '#f59e0b', accentCamera: '#64748b', accentOverlay: '#f59e0b', accentSuccess: '#22c55e',
 };
 
