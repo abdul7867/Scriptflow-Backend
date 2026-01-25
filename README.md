@@ -2,6 +2,9 @@
 
 AI Backend for generating viral scripts from Instagram Reels, integrated with ManyChat.
 
+## Deployment Status
+**Automated Deployment: Active 🚀**
+
 ## Tech Stack
 - **Runtime**: Node.js + TypeScript (Express)
 - **Database**: MongoDB (Mongoose)
