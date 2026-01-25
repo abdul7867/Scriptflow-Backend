@@ -67,9 +67,16 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to project folder
-            cd ~/Scriptflow-Backend || git clone https://github.com/abdul7867/Scriptflow-Backend.git ~/Scriptflow-Backend
-            cd ~/Scriptflow-Backend
+            # Navigate to project folder (Case-insensitive check)
+            if [ -d "~/scriptflow-backend" ]; then
+              cd ~/scriptflow-backend
+            elif [ -d "~/Scriptflow-Backend" ]; then
+              cd ~/Scriptflow-Backend
+            else
+              # Neither exists, clone fresh
+              git clone https://github.com/abdul7867/Scriptflow-Backend.git ~/Scriptflow-Backend
+              cd ~/Scriptflow-Backend
+            fi
             
             # Pull latest code configuration (docker-compose.yml updates)
             git pull origin main
