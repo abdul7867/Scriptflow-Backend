@@ -622,41 +622,55 @@ RULES:
 ═══════════════════════════════════════════════════════════════════════
 `;
 
-    // NEW: Remix mode section - tells AI to preserve topic but REIMAGINE delivery
+    // NEW: Remix mode section - tells AI to preserve topic, perspective, names, but REIMAGINE delivery
     const remixSection = isRemix ? `
 ═══════════════════════════════════════════════════════════════════════
-🔄 REMIX MODE - SAME TOPIC, FRESH DELIVERY
+🔄 REMIX MODE - SAME STORY, ELEVATED DELIVERY
 ═══════════════════════════════════════════════════════════════════════
 
-You are REIMAGINING an existing script. Keep the TOPIC but make it BETTER.
+You are ELEVATING an existing script. Same story, same perspective, but BETTER execution.
 
-KEEP THE SAME:
-✅ Core topic/subject (if about music taste → stay on music taste)
-✅ Main message and key points
-✅ Any specific names (people, apps, products mentioned)
+PRESERVE EXACTLY (CRITICAL):
+✅ PERSPECTIVE: If original says "Prachi did X" → Keep talking ABOUT Prachi (don't change to "I did X")
+   - "We" stays "we", "I" stays "I", "Prachi" stays "Prachi"
+✅ ALL NAMES: Keep every person/place/product name EXACTLY as mentioned
+   - "Fatima Rizwana" must stay "Fatima Rizwana" (not "Fatima" or "her")
+   - "Prachi" must stay "Prachi" (not "me" or "my friend")
+✅ CORE EVENTS: If original mentions 5 things, remix should mention same 5 things
+✅ THE VIBE: Nostalgic video = remix is nostalgic. Hype video = remix is hype.
 
-COMPLETELY REWRITE:
-🔥 The HOOK - make it 10x more attention-grabbing, punchy, scroll-stopping
-🔥 Word choices - use fresher, punchier language (don't copy original phrases)
-🔥 Sentence structure - vary rhythm, add contrast, create flow
-🔥 Delivery angle - find a more engaging way to present the same info
-🔥 CTA - make it compelling and actionable
+UNDERSTAND THE PATTERN:
+Before writing, ASK yourself:
+→ Who is the speaker? (first person sharing their story)
+→ Who are they talking ABOUT? (themselves? friends? audience?)
+→ What's the emotional arc? (nostalgia, excitement, drama, humor)
+→ What's the structure? (list format? timeline? comparison?)
 
-THINK OF IT LIKE THIS:
-→ Original: "I'm done gatekeeping my music taste, here's a list..."
-→ Remix: "The algorithm tried to hide these from you. My top 5 secret weapons..."
+ELEVATE THESE:
+🔥 HOOK: Stronger opening that stops the scroll
+   → Original: "I was going through videos from last exam time"
+   → Elevated: "Found our exam-time footage. We were UNHINGED."
 
-→ Original: "Number 5 is Ritviz. He has funky beats..."
-→ Remix: "First up, Ritviz. This guy's beats hit DIFFERENT..."
+🔥 WORD CHOICES: Punchier, more conversational
+   → Original: "We were so cooked it was funny"
+   → Elevated: "Honestly, we were absolutely COOKED. Like, embarrassingly so."
 
-THE GOAL:
-Same topic + Same key info + COMPLETELY FRESH WORDING = Scroll-stopping content
+🔥 RHYTHM: Short punchy + longer setup sentences
+🔥 TRANSITIONS: Smoother flow between points
+🔥 CTA: Clear, compelling close
+
+CAMERA DIRECTIONS (Be Specific):
+📹 Instead of: "Close-up" 
+   Say: "Close-up face, phone held at forehead level, slightly looking up"
+📹 Instead of: "Medium shot"
+   Say: "Medium shot, phone propped on desk showing upper body, sitting position"
+📹 Include: Lighting source, hand position, background context
 
 DO NOT:
-❌ Change the topic to something unrelated
-❌ Remove the key points/facts
-❌ Just copy-paste the original with minor tweaks (BORING!)
-❌ Change names of people/products mentioned
+❌ Change perspective (if talking ABOUT friends, don't switch to talking about yourself)
+❌ Drop or rename any person mentioned
+❌ Change the emotional vibe/pattern
+❌ Just copy-paste with minor tweaks
 
 ═══════════════════════════════════════════════════════════════════════
 ` : '';
