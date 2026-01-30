@@ -615,17 +615,19 @@ function createMasterPrompt(
     isRemix?: boolean  // NEW: Flag to preserve original topic
 ): string {
     const effectiveLanguage = languageOverride || detectedLang.language;
-    const isRomanized = !languageOverride && detectedLang.isRomanized;
+    // Force Romanized for specific languages regardless of input script
+    const forceRomanized = ['Hindi', 'Arabic', 'Tamil', 'Kannada', 'Telugu', 'Bengali', 'Hinglish'].includes(effectiveLanguage);
+    const isRomanized = forceRomanized || (!languageOverride && detectedLang.isRomanized);
 
     const languageSection = `
 🔒 LANGUAGE DETECTION
 ═══════════════════════════════════════════════════════════════════════
 DETECTED: ${detectedLang.language}${detectedLang.sampleWords.length > 0 ? ` (${detectedLang.sampleWords.join(', ')})` : ''}
-OUTPUT: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED A-Z)' : ''}
+OUTPUT: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED A-Z Characters Only/Hinglish)' : ''}
 
 RULES:
-• Hindi/Arabic/Tamil → Roman alphabet (A-Z)
-  Example: "Aap yeh galti mat karo" NOT "आप यह"
+• If language is ${effectiveLanguage} → Write in ${effectiveLanguage} but using English Alphabet (A-Z)
+• Example: "Aap yeh galti mat karo" (Correct) vs "आप यह" (Wrong)
 • Labels (🎬 📝) → Always English
 • Dialogue (💬 SAY) → ${effectiveLanguage}
 • NO script mixing
