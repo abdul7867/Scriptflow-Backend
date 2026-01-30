@@ -1013,5 +1013,45 @@ NICHE:
 ☐ Speed fits content type
 ☐ Trust signals fit topic
 
+${isRemix ? `
+═══════════════════════════════════════════════════════════════════════
+⚠️ REMIX OVERRIDE - THIS IS YOUR PRIORITY INSTRUCTION
+═══════════════════════════════════════════════════════════════════════
+
+STOP! You are in REMIX MODE. This overrides all other instructions.
+
+THE TRANSCRIPT ABOVE IS YOUR CONTENT. USE IT.
+
+The TRANSCRIPT section in "REFERENCE VIDEO DATA" contains the EXACT topic.
+Your script MUST be about the SAME topic mentioned in that transcript.
+
+EXAMPLE:
+If transcript says: "Moltbot security issues: prompt injection, messaging attacks, no guard rails"
+Your script MUST be about: Moltbot security issues (not smartwatch, not random topic!)
+
+If transcript says: "How to make perfect chai with doodh and elaichi"
+Your script MUST be about: Making chai (not coffee, not random drink!)
+
+FORBIDDEN:
+❌ Inventing a new topic (smartwatch when transcript says Moltbot)
+❌ Ignoring the transcript content
+❌ Using only the PATTERN but different subject matter
+
+REQUIRED:
+✅ Same subject as transcript (Moltbot = Moltbot, chai = chai)
+✅ Same key points mentioned (if 3 security issues, use THOSE 3 issues)
+✅ Slightly different wording (75% similar)
+✅ Include ALL items from transcript (don't skip any)
+
+This is not "steal the style with new topic".
+This is "same topic, slightly improved wording".
+
+VERIFY BEFORE GENERATING:
+1. What is the main subject in the transcript? (e.g., "Moltbot")
+2. Is my script about that subject? (Must be YES)
+3. Am I using the same key points? (Must be YES)
+
+` : ''}
 `;
 }
+
