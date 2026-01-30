@@ -488,7 +488,13 @@ function validateScript(script: string): string[] {
         issues.push(`Excessive "because" (${becauseCount}x)`);
     }
 
-    if (!script.includes('[HOOK]') || !script.includes('[BODY]') || !script.includes('[CTA]')) {
+    // Flexible validation: Accept both standard [BODY] and storytelling formats with [BODY - PART 1]/[BODY - PART 2]
+    const hasHook = script.includes('[HOOK]');
+    const hasBody = script.includes('[BODY]') ||
+        (script.includes('[BODY - PART 1]') && script.includes('[BODY - PART 2]'));
+    const hasCTA = script.includes('[CTA]');
+
+    if (!hasHook || !hasBody || !hasCTA) {
         issues.push('Missing required sections [HOOK]/[BODY]/[CTA]');
     }
 

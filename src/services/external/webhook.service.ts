@@ -45,6 +45,7 @@ import { getRedis } from '../../queue/redis';
 
 // Database
 import { Job, UserMemory } from '../../db/models';
+import { ReelDNA } from '../../db/models/ReelDNA';
 
 // Services
 import { manychatFlowService, ManyChatFlow } from './manychatFlow.service';
@@ -52,6 +53,8 @@ import { manychatStateService } from './manychatState.service';
 import { loopPrevention } from '../chatbot/loopPrevention.service';
 import { normalizeInstagramUrl, generateRequestHashV2, generateReelHash } from '../../utils/hash';
 import { requestCoalescer } from '../requestCoalescer';
+import { extractPatternDNA, buildPatternMandate } from '../ai/patternExtractor.service';
+import { classifyFirstReelIntent, FirstReelIntent } from '../chatbot/firstReelIntentClassifier.service';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -406,6 +409,25 @@ class WebhookService {
         }
 
         if (userIdea) {
+            // ═════════════════════════════════════════════════════════════════════════
+            // FIRST REEL INTENT CLASSIFICATION - Determine if user wants to transform
+            // the original reel or create a completely new script
+            // ═════════════════════════════════════════════════════════════════════════
+
+            const firstReelIntent = classifyFirstReelIntent(rawMessage);
+
+            logger.info(`[Webhook:${requestId}] First reel intent classified`, {
+                intent: firstReelIntent.intent,
+                confidence: firstReelIntent.confidence,
+                reasoning: firstReelIntent.reasoning,
+                extractedIdea: firstReelIntent.extractedIdea,
+            });
+
+            // Store base mode in metadata for future remix operations
+            await chatbotFSM.updateMetadata(subscriberId, {
+                baseMode: firstReelIntent.intent, // TRANSFORM_ORIGINAL or CREATE_NEW
+            });
+
             // ─────────────────────────────────────────────────────────────────────────
             // SCENARIO C: Check if userIdea is "Extract" (case insensitive)
             // This triggers transcript extraction without creative rewriting
@@ -433,7 +455,10 @@ class WebhookService {
             // ─────────────────────────────────────────────────────────────────────────
             // SCENARIO A: Combined - user provided reel + idea (creative rewriting)
             // ─────────────────────────────────────────────────────────────────────────
-            logger.info(`[Webhook:${requestId}] Queueing job with reel + idea (single-message flow)`);
+            logger.info(`[Webhook:${requestId}] Queueing job with reel + idea (single-message flow)`, {
+                baseMode: firstReelIntent.intent,
+            });
+
             return this.queueScriptJob(requestId, {
                 subscriberId,
                 reelUrl: normalizedUrl,
@@ -723,9 +748,58 @@ class WebhookService {
             };
         }
 
+        // ═════════════════════════════════════════════════════════════════════════
+        // PATTERN DNA INTEGRATION - Load appropriate pattern DNA based on base mode
+        // ═════════════════════════════════════════════════════════════════════════
+
+        let patternMandate = '';
+
+        try {
+            // Load pattern DNA from cache
+            const reelHash = generateReelHash(lastReelUrl);
+            const cachedDNA = await ReelDNA.findOne({ reelUrlHash: reelHash }).lean();
+
+            // Determine which pattern DNA to use based on user's original intent
+            const baseMode = context.metadata.baseMode as FirstReelIntent | undefined;
+            const useOriginalDNA = baseMode === FirstReelIntent.TRANSFORM_ORIGINAL ||
+                baseMode === FirstReelIntent.ENHANCE_ORIGINAL;
+
+            if (cachedDNA) {
+                const selectedDNA = useOriginalDNA ? cachedDNA.originalPatternDNA : cachedDNA.patternDNA;
+
+                if (selectedDNA) {
+                    const dnaType = useOriginalDNA ? 'ORIGINAL (creator\'s style)' : 'GENERATED (our style)';
+
+                    logger.info(`[Webhook:${requestId}] Pattern DNA found for remix`, {
+                        dnaType,
+                        baseMode,
+                        hookArchetype: selectedDNA.hookArchetype,
+                        pacing: selectedDNA.pacing,
+                        visualStyle: selectedDNA.visualStyle,
+                    });
+
+                    // Build pattern preservation mandate
+                    patternMandate = buildPatternMandate(selectedDNA, remixType);
+                } else {
+                    logger.info(`[Webhook:${requestId}] No ${useOriginalDNA ? 'original' : 'generated'} pattern DNA cached`, {
+                        reelHash,
+                        baseMode,
+                        fallback: 'standard remix'
+                    });
+                }
+            } else {
+                logger.info(`[Webhook:${requestId}] No ReelDNA cache found - using standard remix`, { reelHash });
+            }
+        } catch (error) {
+            logger.error(`[Webhook:${requestId}] Error loading pattern DNA - falling back to standard remix`, { error });
+            // Graceful fallback - continue without pattern mandate
+        }
+
         // Queue remix job with transformation instruction
-        // The remixInstruction will be prepended to the user idea
-        const enhancedIdea = `[REMIX: ${remixType.toUpperCase()}] ${remixInstruction}\n\nOriginal idea: ${lastUserIdea || 'Same topic, new approach'}`;
+        // Pattern mandate is prepended if available (preserves structure)
+        const enhancedIdea = patternMandate
+            ? `${patternMandate}\n\n[REMIX: ${remixType.toUpperCase()}] ${remixInstruction}\n\nOriginal idea: ${lastUserIdea || 'Same topic, new approach'}`
+            : `[REMIX: ${remixType.toUpperCase()}] ${remixInstruction}\n\nOriginal idea: ${lastUserIdea || 'Same topic, new approach'}`;
 
         return this.queueScriptJob(requestId, {
             subscriberId,
