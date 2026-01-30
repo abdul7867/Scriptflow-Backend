@@ -622,55 +622,60 @@ RULES:
 ═══════════════════════════════════════════════════════════════════════
 `;
 
-    // NEW: Remix mode section - tells AI to preserve topic, perspective, names, but REIMAGINE delivery
+    // Remix mode: Same events, minimal subtle tweaks, simple vocabulary
     const remixSection = isRemix ? `
 ═══════════════════════════════════════════════════════════════════════
-🔄 REMIX MODE - SAME STORY, ELEVATED DELIVERY
+🔄 REMIX MODE - SUBTLE TWEAKS, SIMPLE WORDS
 ═══════════════════════════════════════════════════════════════════════
 
-You are ELEVATING an existing script. Same story, same perspective, but BETTER execution.
+You are POLISHING an existing script with MINIMAL changes. Small word swaps, not full restructure.
 
-PRESERVE EXACTLY (CRITICAL):
-✅ PERSPECTIVE: If original says "Prachi did X" → Keep talking ABOUT Prachi (don't change to "I did X")
-   - "We" stays "we", "I" stays "I", "Prachi" stays "Prachi"
-✅ ALL NAMES: Keep every person/place/product name EXACTLY as mentioned
-   - "Fatima Rizwana" must stay "Fatima Rizwana" (not "Fatima" or "her")
-   - "Prachi" must stay "Prachi" (not "me" or "my friend")
-✅ CORE EVENTS: If original mentions 5 things, remix should mention same 5 things
-✅ THE VIBE: Nostalgic video = remix is nostalgic. Hype video = remix is hype.
+THE GOLDEN RULE: 
+Same content + Small word tweaks + Simple vocabulary = Perfect remix
 
-UNDERSTAND THE PATTERN:
-Before writing, ASK yourself:
-→ Who is the speaker? (first person sharing their story)
-→ Who are they talking ABOUT? (themselves? friends? audience?)
-→ What's the emotional arc? (nostalgia, excitement, drama, humor)
-→ What's the structure? (list format? timeline? comparison?)
+KEEP THE SAME:
+✅ Every event mentioned (hair cut = still hair cut)
+✅ All names, places, things mentioned
+✅ The story sequence and structure
+✅ Sentence structure (mostly)
 
-ELEVATE THESE:
-🔥 HOOK: Stronger opening that stops the scroll
-   → Original: "I was going through videos from last exam time"
-   → Elevated: "Found our exam-time footage. We were UNHINGED."
+MAKE MINIMAL TWEAKS:
+🔥 Small word swaps (huge → big, really → super)
+🔥 Add tiny reactions (just add "you know?" or "honestly")
+🔥 Slight reordering if needed (not full restructure!)
 
-🔥 WORD CHOICES: Punchier, more conversational
-   → Original: "We were so cooked it was funny"
-   → Elevated: "Honestly, we were absolutely COOKED. Like, embarrassingly so."
+EXAMPLES OF GOOD MINIMAL TWEAKS:
+Original: "I have chopped off a huge part of my hair by mistake"
+Remix:   "I accidentally cut off a big part of my hair"
+         (Small word changes: chopped→cut, huge→big, by mistake→accidentally)
 
-🔥 RHYTHM: Short punchy + longer setup sentences
-🔥 TRANSITIONS: Smoother flow between points
-🔥 CTA: Clear, compelling close
+Original: "Fallen in muddy water while trying to fly a kite"
+Remix:   "Fell in the mud while flying a kite, honestly so funny"
+         (Minimal change + tiny reaction added)
 
-CAMERA DIRECTIONS (Be Specific):
-📹 Instead of: "Close-up" 
-   Say: "Close-up face, phone held at forehead level, slightly looking up"
-📹 Instead of: "Medium shot"
-   Say: "Medium shot, phone propped on desk showing upper body, sitting position"
-📹 Include: Lighting source, hand position, background context
+USE SIMPLE VOCABULARY:
+✅ Use everyday common words (not fancy vocabulary)
+✅ Words your friend would use, not a professor
+✅ NO complex English words (performative → just "showing off")
+✅ For Hindi/Romanized: Simple common Hindi words
+   - Use "bahut acha" not "atyant uttam"
+   - Use "mazaa aaya" not "anand prapt hua"
+   - Use words everyone knows, not textbook words
 
-DO NOT:
-❌ Change perspective (if talking ABOUT friends, don't switch to talking about yourself)
-❌ Drop or rename any person mentioned
-❌ Change the emotional vibe/pattern
-❌ Just copy-paste with minor tweaks
+WHAT NOT TO DO:
+❌ "Fell in mud" → "Tripped in front of crush" (changing the event)
+❌ Full sentence restructure (keep structure similar)
+❌ Fancy vocabulary like "exhilarating" or "unprecedented"
+❌ Copy word-for-word with zero changes
+
+THE SWEET SPOT:
+→ Read both versions - they should sound 90% similar
+→ Small differences that make it slightly fresher
+→ Simple words anyone can understand
+
+CAMERA DIRECTIONS:
+📹 Match each event with appropriate shot
+📹 Include: Shot type + expression + lighting
 
 ═══════════════════════════════════════════════════════════════════════
 ` : '';
@@ -678,7 +683,7 @@ DO NOT:
     // Use different framing for remix vs new concept
     const conceptLabel = isRemix ? 'REMIX REQUEST' : 'NEW CONCEPT';
     const transformResult = isRemix
-        ? 'SAME topic as the reference, but with IMPROVED delivery, structure, and engagement.'
+        ? 'SAME events and facts, but with SHARPER, PUNCHIER delivery.'
         : 'Same CREATOR vibe, different TOPIC.';
 
     return `${languageSection}
