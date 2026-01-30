@@ -80,7 +80,10 @@ jobs:
               cd "$TARGET_DIR"
             fi
             
-            # Pull latest code configuration
+            # Force sync with repository (discards local changes to ensure clean deploy)
+            git fetch origin
+            git reset --hard origin/main
+            git checkout main
             git pull origin main
 
             # Login to Docker (to pull private image)
