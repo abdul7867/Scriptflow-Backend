@@ -619,19 +619,37 @@ function createMasterPrompt(
     const forceRomanized = ['Hindi', 'Arabic', 'Tamil', 'Kannada', 'Telugu', 'Bengali', 'Hinglish'].includes(effectiveLanguage);
     const isRomanized = forceRomanized || (!languageOverride && detectedLang.isRomanized);
 
+    // Detect if transcript is a mixed language (regional + English)
+    const isMixedLanguage = effectiveLanguage !== 'English' || detectedLang.sampleWords.length > 0;
+
     const languageSection = `
-🔒 LANGUAGE DETECTION
+🔒 LANGUAGE DETECTION - MATCH THE ORIGINAL LANGUAGE STYLE
 ═══════════════════════════════════════════════════════════════════════
 DETECTED: ${detectedLang.language}${detectedLang.sampleWords.length > 0 ? ` (${detectedLang.sampleWords.join(', ')})` : ''}
-OUTPUT: ${effectiveLanguage}${isRomanized ? ' (ROMANIZED A-Z Characters Only/Hinglish)' : ''}
+OUTPUT LANGUAGE: ${effectiveLanguage}${isMixedLanguage ? ' (mixed with English)' : ''} using A-Z characters ONLY
 
-RULES:
-• If language is ${effectiveLanguage} → Write in ${effectiveLanguage} but using English Alphabet (A-Z)
-• Example: "Aap yeh galti mat karo" (Correct) vs "आप यह" (Wrong)
-• Labels (🎬 📝) → Always English
-• Dialogue (💬 SAY) → ${effectiveLanguage}
-• NO script mixing
-• When unsure → Default to English
+⚠️ CRITICAL LANGUAGE RULE - MATCH THE TRANSCRIPT STYLE:
+Your output MUST match the EXACT language style of the transcript.
+
+IF TRANSCRIPT IS MIXED (e.g., Hindi+English, Tamil+English, Kannada+English):
+- Write in the SAME mixed style
+- Use SAME ratio of regional words to English words
+- Example: "Ek amazing app idea jo viral ho raha hai" (Hindi+English mix)
+- Example: "Idu super idea, neevu try maadi" (Kannada+English mix)
+- Example: "Indha app romba viral, neenga try pannunga" (Tamil+English mix)
+
+IF TRANSCRIPT IS PURE REGIONAL LANGUAGE:
+- Write in that language using Roman alphabet (A-Z)
+- Example: "Aap yeh galti mat karo" NOT "आप यह गलती मत करो"
+
+WRONG: Converting mixed language to pure English
+WRONG: Using native scripts (Devanagari, Tamil script, etc.)
+RIGHT: Same language mix as transcript, written in A-Z characters
+
+OTHER RULES:
+• Labels (🎬 📝 💬) → Always English
+• Camera directions → Always English
+• NO Devanagari/Arabic/Tamil/native scripts - ONLY A-Z characters
 ═══════════════════════════════════════════════════════════════════════
 `;
 
