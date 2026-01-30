@@ -10,20 +10,38 @@ export interface IReelDNA extends Document {
   reelUrl: string;           // Original URL for reference
   videoUrl?: string;         // S3 URL of the downloaded video (if uploaded)
   analysis: VideoAnalysis;   // The cached video analysis
+  originalPatternDNA?: {     // Pattern DNA from ORIGINAL reel (creator's style)
+    hookArchetype: string;
+    openingWords: string;
+    pacing: 'fast' | 'medium' | 'dramatic';
+    visualStyle: 'minimal' | 'dynamic' | 'instructional';
+    sentenceLengthPattern: number[];
+    toneMarkers: string[];
+    extractedAt: Date;
+  };
+  patternDNA?: {             // Pattern DNA from GENERATED script (our interpretation's style)
+    hookArchetype: string;
+    openingWords: string;
+    pacing: 'fast' | 'medium' | 'dramatic';
+    visualStyle: 'minimal' | 'dynamic' | 'instructional';
+    sentenceLengthPattern: number[];
+    toneMarkers: string[];
+    extractedAt: Date;
+  };
   createdAt: Date;
   expiresAt: Date;           // Cache expiration (e.g., 7 days)
 }
 
 const ReelDNASchema = new Schema<IReelDNA>({
-  reelUrlHash: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    index: true 
+  reelUrlHash: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
   },
-  reelUrl: { 
-    type: String, 
-    required: true 
+  reelUrl: {
+    type: String,
+    required: true
   },
   videoUrl: {
     type: String,
@@ -35,6 +53,24 @@ const ReelDNASchema = new Schema<IReelDNA>({
     hookType: { type: String },
     tone: { type: String },
     sceneDescriptions: [{ type: String }]
+  },
+  originalPatternDNA: {
+    hookArchetype: { type: String },
+    openingWords: { type: String },
+    pacing: { type: String, enum: ['fast', 'medium', 'dramatic'] },
+    visualStyle: { type: String, enum: ['minimal', 'dynamic', 'instructional'] },
+    sentenceLengthPattern: [{ type: Number }],
+    toneMarkers: [{ type: String }],
+    extractedAt: { type: Date }
+  },
+  patternDNA: {
+    hookArchetype: { type: String },
+    openingWords: { type: String },
+    pacing: { type: String, enum: ['fast', 'medium', 'dramatic'] },
+    visualStyle: { type: String, enum: ['minimal', 'dynamic', 'instructional'] },
+    sentenceLengthPattern: [{ type: Number }],
+    toneMarkers: [{ type: String }],
+    extractedAt: { type: Date }
   },
   expiresAt: {
     type: Date,

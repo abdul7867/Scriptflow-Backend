@@ -14,7 +14,7 @@ import { cleanupFiles, forceCleanupTempDir } from '../services/cleanup.service';
 // LEGACY imports removed: sendToManyChat, sendTextMessage - using pull-based delivery via manychatStateService
 import { manychatStateService } from '../services/external/manychatState.service';
 import { generateScriptImage, generateExtractImage } from '../utils/imageGenerator';
-import { generateCarouselImages, generateExtractCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
+import { generateCarouselImages, CarouselImages } from '../services/ai/carouselGenerator.service';
 import { generateUniquePublicId, buildScriptUrl } from '../api/controllers/viewScript.controller';
 import { generateReelHash, normalizeInstagramUrl, generateRequestHashV2 } from '../utils/hash';
 import { uploadVideoToS3 } from '../services/external/s3.service';
@@ -22,6 +22,9 @@ import { requestCoalescer } from '../services/requestCoalescer';
 
 // FSM for state updates
 import { chatbotFSM, ChatbotEvent, ChatbotState } from '../services/chatbot/chatbotStateMachine.service';
+
+// Pattern DNA extraction
+import { extractPatternDNA } from '../services/ai/patternExtractor.service';
 
 // Production hardening
 import { withCircuitBreaker, CircuitOpenError } from '../utils/circuitBreaker';
@@ -550,6 +553,29 @@ async function processJobWithTimeout(
           },
           { upsert: true }
         );
+
+        // Extract ORIGINAL pattern DNA from the reel's actual transcript
+        // This captures the creator's authentic style for future transformations
+        if (transcript) {
+          try {
+            const originalPatternDNA = extractPatternDNA(videoAnalysis, transcript);
+
+            if (originalPatternDNA) {
+              await ReelDNA.findOneAndUpdate(
+                { reelUrlHash: reelHash },
+                { $set: { originalPatternDNA } },
+                { upsert: false }
+              );
+
+              logger.info(`[${requestId}] ✅ Original pattern DNA extracted from reel`, {
+                hookArchetype: originalPatternDNA.hookArchetype,
+                pacing: originalPatternDNA.pacing,
+              });
+            }
+          } catch (err: any) {
+            logger.warn(`[${requestId}] Original pattern DNA extraction failed (non-critical): ${err.message}`);
+          }
+        }
       }
 
       await job.updateProgress(60);
@@ -678,19 +704,45 @@ async function processJobWithTimeout(
       transcript = videoAnalysis.transcript;
       recordVideoAnalysisDuration(Date.now() - analysisStartTime);
 
-      // E. Save ReelDNA for future requests (with complete analysis + transcript!)
+      // Cache the full-quality analysis in ReelDNA
       await ReelDNA.findOneAndUpdate(
         { reelUrlHash: reelHash },
         {
           reelUrlHash: reelHash,
           reelUrl: normalizeInstagramUrl(reelUrl),
           analysis: videoAnalysis,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         },
-        { upsert: true, new: true }
+        { upsert: true }
       );
 
-      logger.info(`[${requestId}] ✅ ReelDNA cached with transcript for future use`);
+      // Extract ORIGINAL pattern DNA from the reel's actual transcript
+      // This captures the creator's authentic style for future transformations
+      if (videoAnalysis?.transcript) {
+        try {
+          const originalPatternDNA = extractPatternDNA(videoAnalysis, videoAnalysis.transcript);
+
+          if (originalPatternDNA) {
+            await ReelDNA.findOneAndUpdate(
+              { reelUrlHash: reelHash },
+              { $set: { originalPatternDNA } },
+              { upsert: false }
+            );
+
+            logger.info(`[${requestId}] ✅ Original pattern DNA extracted from reel`, {
+              hookArchetype: originalPatternDNA.hookArchetype,
+              pacing: originalPatternDNA.pacing,
+              visualStyle: originalPatternDNA.visualStyle,
+            });
+          }
+        } catch (err: any) {
+          logger.warn(`[${requestId}] Original pattern DNA extraction failed (non-critical): ${err.message}`);
+        }
+      }
+
+      usedTier1Cache = false;
+      transcript = videoAnalysis.transcript;
+      logger.info(`[${requestId}] ✅ ReelDNA cache populated for future fast-path requests`);
     }
 
     const scriptGenTimeMs = Date.now() - scriptGenStartTime;
@@ -712,22 +764,18 @@ async function processJobWithTimeout(
       // The extract format doesn't have [HOOK]/[BODY]/[CTA] sections
       logger.info(`[${requestId}] EXTRACT MODE - Generating 3-card carousel for extract content`);
       try {
-        carouselImages = await withCircuitBreaker('cloudinary', async () => {
-          return generateExtractCarouselImages(scriptText);
-        });
+        // TEMPORARY: generateExtractCarouselImages is not implemented yet
+        // Fallback to single image automatically by throwing error
+        throw new Error('Extract carousel not implemented');
 
-
+        /* Unreachable code removed
         if (carouselImages) {
-          imageUrl = carouselImages.hookCard; // Use transcript card as primary
-
-          logger.info(`[${requestId}] ✅ Extract carousel generated with 3 cards`, {
-            transcriptCard: carouselImages.hookCard.substring(0, 50) + '...',
-            visualsCard: carouselImages.bodyCard.substring(0, 50) + '...',
-            analysisCard: carouselImages.ctaCard.substring(0, 50) + '...'
-          });
+          imageUrl = carouselImages.hookCard;
+           // ...
         } else {
           throw new Error('Carousel generation returned null');
         }
+        */
       } catch (carouselError: any) {
         logger.warn(`[${requestId}] Extract carousel failed, falling back to single image: ${carouselError.message}`);
         // Fallback to legacy single image if carousel fails
@@ -740,7 +788,12 @@ async function processJobWithTimeout(
       logger.info(`[${requestId}] Generating carousel images (3 cards)...`);
       try {
         carouselImages = await withCircuitBreaker('cloudinary', async () => {
-          return generateCarouselImages(scriptText, job.data.variationIndex || 0, storyFormat);
+          return generateCarouselImages(scriptText, {
+            variationIndex: job.data.variationIndex || 0,
+            showTimings: false,
+            theme: 'light',
+            storyFormat: storyFormat
+          });
         });
 
         // Use hook card as the primary image for backward compatibility
@@ -801,6 +854,53 @@ async function processJobWithTimeout(
       },
       { upsert: true, new: true }
     );
+
+    // ═════════════════════════════════════════════════════════════════════════════
+    // PATTERN DNA EXTRACTION - Extract and cache pattern DNA for first-time scripts
+    // ═════════════════════════════════════════════════════════════════════════════
+    // IMPORTANT: Only extract for first scripts, NOT for variations or remixes
+    // Variations/remixes should use cached pattern DNA, not create new patterns
+
+    const isFirstScript = !(job.data.isVariation || (job.data.variationIndex || 0) > 0);
+
+    if (isFirstScript && !isCopyMode && videoAnalysis) {
+      try {
+        logger.info(`[${requestId}] Extracting pattern DNA from generated script...`);
+
+        const patternDNA = extractPatternDNA(videoAnalysis, scriptText);
+
+        if (patternDNA) {
+          // Cache pattern DNA in ReelDNA for future remixes
+          await ReelDNA.findOneAndUpdate(
+            { reelUrlHash: reelHash },
+            {
+              $set: { patternDNA }
+            },
+            { upsert: false } // Don't create new record, only update existing
+          );
+
+          logger.info(`[${requestId}] ✅ Pattern DNA extracted and cached`, {
+            hookArchetype: patternDNA.hookArchetype,
+            pacing: patternDNA.pacing,
+            visualStyle: patternDNA.visualStyle,
+            toneMarkersCount: patternDNA.toneMarkers.length,
+          });
+        } else {
+          logger.warn(`[${requestId}] Pattern DNA extraction returned null`);
+        }
+      } catch (patternError: any) {
+        // Non-critical: Pattern DNA extraction failure doesn't block script delivery
+        logger.warn(`[${requestId}] Pattern DNA extraction failed (non-critical): ${patternError.message}`);
+      }
+    } else {
+      if (!isFirstScript) {
+        logger.debug(`[${requestId}] Skipping pattern DNA extraction (variation/remix)`);
+      } else if (isCopyMode) {
+        logger.debug(`[${requestId}] Skipping pattern DNA extraction (copy mode)`);
+      } else if (!videoAnalysis) {
+        logger.debug(`[${requestId}] Skipping pattern DNA extraction (no video analysis)`);
+      }
+    }
 
     // E. Save to Dataset for ML training (Enhanced schema v2.0)
     // For One-Shot, analysis fields will be empty/undefined.
