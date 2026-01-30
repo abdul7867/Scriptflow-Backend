@@ -77,7 +77,38 @@ function parseUserIdea(userIdea: string): ParsedUserIdea {
     };
   }
 
-  // 3. Remix shorter - ManyChat sends "remix shorter"
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REMIX DETECTION - Handles TWO formats:
+  // 1. "[REMIX: TYPE]" - From V1 webhook (handleRemix function)
+  // 2. "remix shorter" - Direct user input from ManyChat
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // 3a. Check for [REMIX: TYPE] format from V1 webhook
+  // Pattern: [REMIX: SHORTER], [REMIX: LONGER], [REMIX: CUSTOM], [REMIX]
+  const bracketRemixMatch = lowerIdea.match(/^\[remix(?::\s*(\w+))?\]/);
+  if (bracketRemixMatch) {
+    const remixTypeFromBracket = bracketRemixMatch[1]?.toLowerCase() || 'custom';
+
+    // Determine the normalized remix type
+    let remixType: 'shorter' | 'longer' | 'custom' = 'custom';
+    if (remixTypeFromBracket === 'shorter' || remixTypeFromBracket === 'brief') {
+      remixType = 'shorter';
+    } else if (remixTypeFromBracket === 'longer' || remixTypeFromBracket === 'detailed') {
+      remixType = 'longer';
+    }
+
+    // The cleanIdea should be the full original (it already has [REMIX: TYPE] prefix)
+    return {
+      isExtract: false,
+      isRemix: true,  // ✅ CRITICAL: This enables transcript pre-extraction
+      isFormatRestyle: false,
+      remixType,
+      cleanIdea: userIdea,  // Keep full idea with [REMIX:] prefix for AI
+      needsStoredIdea: false  // Idea is already in the string (e.g., "Original idea: ...")
+    };
+  }
+
+  // 3b. Remix shorter - ManyChat sends "remix shorter" (bare format)
   if (lowerIdea === 'remix shorter' || lowerIdea === 'shorter') {
     return {
       isExtract: false,
@@ -101,7 +132,7 @@ function parseUserIdea(userIdea: string): ParsedUserIdea {
     };
   }
 
-  // 5. Custom remix - User might say "remix funnier" or just "remix"
+  // 5. Custom remix - User might say "remix funnier" or just "remix" (bare format)
   if (lowerIdea.startsWith('remix')) {
     const customInstruction = userIdea.replace(/remix/gi, '').trim();
     return {
