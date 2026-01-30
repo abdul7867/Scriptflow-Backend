@@ -622,60 +622,73 @@ RULES:
 ═══════════════════════════════════════════════════════════════════════
 `;
 
-    // Remix mode: Same events, minimal subtle tweaks, simple vocabulary
+    // Remix mode: Include ALL content, balanced alterations, preserve third persons
     const remixSection = isRemix ? `
 ═══════════════════════════════════════════════════════════════════════
-🔄 REMIX MODE - SUBTLE TWEAKS, SIMPLE WORDS
+🔄 REMIX MODE - INCLUDE EVERYTHING, ALTER EACH PART
 ═══════════════════════════════════════════════════════════════════════
 
-You are POLISHING an existing script with MINIMAL changes. Small word swaps, not full restructure.
+You are POLISHING an existing script. Include ALL content, alter each part slightly.
+
+⚠️ CRITICAL - NEVER SKIP CONTENT:
+If original mentions: "Books, camera equipment, parcels, laptop, charger"
+Your remix MUST include: Books, camera equipment, parcels, laptop, charger
+→ Don't drop items to make it shorter
+→ Every single thing mentioned must appear in remix
 
 THE GOLDEN RULE: 
-Same content + Small word tweaks + Simple vocabulary = Perfect remix
+Include 100% of the content + Alter each part slightly = Perfect remix
 
-KEEP THE SAME:
-✅ Every event mentioned (hair cut = still hair cut)
-✅ All names, places, things mentioned
-✅ The story sequence and structure
-✅ Sentence structure (mostly)
+INCLUDE ALL CONTENT (NEVER SKIP):
+✅ If original has 10 items in a list → remix has 10 items
+✅ If original mentions books, camera, laptop → remix mentions books, camera, laptop
+✅ If original has 5 scenes → remix has 5 scenes
+✅ Count items in original, your remix must have same count
 
-MAKE MINIMAL TWEAKS:
-🔥 Small word swaps (huge → big, really → super)
-🔥 Add tiny reactions (just add "you know?" or "honestly")
-🔥 Slight reordering if needed (not full restructure!)
+HOW TO ALTER EACH PART:
+🔥 Take each sentence and change 2-3 words (not skip it!)
+🔥 Original: "Books that I have emotional attachment with"
+   Remix: "Books I'm emotionally attached to, you know?"
+   (Changed wording, added reaction, DIDN'T SKIP)
 
-EXAMPLES OF GOOD MINIMAL TWEAKS:
-Original: "I have chopped off a huge part of my hair by mistake"
-Remix:   "I accidentally cut off a big part of my hair"
-         (Small word changes: chopped→cut, huge→big, by mistake→accidentally)
+🔥 Original: "Camera equipment"
+   Remix: "My camera stuff"
+   (Simpler wording, DIDN'T SKIP)
 
-Original: "Fallen in muddy water while trying to fly a kite"
-Remix:   "Fell in the mud while flying a kite, honestly so funny"
-         (Minimal change + tiny reaction added)
+EXAMPLE OF CORRECT REMIX:
+ORIGINAL: "Books with emotional attachment. Camera equipment. Parcels. Laptop, charger."
+WRONG:   "Books. Laptop." (SKIPPED camera, parcels, charger!)
+RIGHT:   "Books I'm attached to. My camera stuff. Those parcels. Laptop and charger."
+         (ALL items present, each slightly different)
+
+PRESERVE COMPLETELY:
+✅ ALL NAMES: Prachi, Fatima Rizwana → never change
+✅ ALL ITEMS: If 10 things listed, all 10 must appear
+✅ PERSPECTIVE: "We" stays "we", "I" stays "I"
+
+WHAT PARTS TO ALTER HOW:
+🔥 HOOK: Change more words (make catchier)
+📝 BODY: Change few words per sentence (keep all content)
+📝 CTA: Change slightly (keep message)
 
 USE SIMPLE VOCABULARY:
-✅ Use everyday common words (not fancy vocabulary)
-✅ Words your friend would use, not a professor
-✅ NO complex English words (performative → just "showing off")
-✅ For Hindi/Romanized: Simple common Hindi words
-   - Use "bahut acha" not "atyant uttam"
-   - Use "mazaa aaya" not "anand prapt hua"
-   - Use words everyone knows, not textbook words
+✅ Everyday common words, not fancy vocabulary
+✅ For Hindi/Romanized: Simple words everyone knows
 
 WHAT NOT TO DO:
-❌ "Fell in mud" → "Tripped in front of crush" (changing the event)
-❌ Full sentence restructure (keep structure similar)
-❌ Fancy vocabulary like "exhilarating" or "unprecedented"
+❌ SKIP items, scenes, or details from original (BIGGEST MISTAKE!)
 ❌ Copy word-for-word with zero changes
+❌ Change the entire meaning
+❌ Use fancy vocabulary
 
 THE SWEET SPOT:
-→ Read both versions - they should sound 90% similar
-→ Small differences that make it slightly fresher
-→ Simple words anyone can understand
+→ Original has 10 items? Remix has 10 items (with slight word changes)
+→ Each sentence slightly different, nothing missing
+→ 75% similar overall
 
 CAMERA DIRECTIONS:
-📹 Match each event with appropriate shot
-📹 Include: Shot type + expression + lighting
+📹 Include shot for each scene mentioned
+📹 Shot type + expression + lighting
 
 ═══════════════════════════════════════════════════════════════════════
 ` : '';
