@@ -622,36 +622,41 @@ RULES:
 ═══════════════════════════════════════════════════════════════════════
 `;
 
-    // NEW: Remix mode section - tells AI to preserve topic
+    // NEW: Remix mode section - tells AI to preserve topic but REIMAGINE delivery
     const remixSection = isRemix ? `
 ═══════════════════════════════════════════════════════════════════════
-🔄 REMIX MODE ACTIVE - PRESERVE THE ORIGINAL TOPIC
+🔄 REMIX MODE - SAME TOPIC, FRESH DELIVERY
 ═══════════════════════════════════════════════════════════════════════
 
-You are IMPROVING an existing script about the SAME TOPIC, NOT creating a new one.
+You are REIMAGINING an existing script. Keep the TOPIC but make it BETTER.
 
-PRESERVE (CRITICAL):
-✅ The EXACT same topic/subject from the reference transcript
-✅ Key facts, names, and specific details from the original
-✅ The core message and value proposition
-✅ Any specific examples, stats, or proof points mentioned
+KEEP THE SAME:
+✅ Core topic/subject (if about music taste → stay on music taste)
+✅ Main message and key points
+✅ Any specific names (people, apps, products mentioned)
 
-IMPROVE:
-✅ Hook engagement (stronger, more attention-grabbing opening)
-✅ Pacing and flow (better rhythm, more natural delivery)
-✅ Word choice and delivery (punchier language, contractions)
-✅ CTA effectiveness (clearer call to action)
-✅ Structure (better transitions between sections)
+COMPLETELY REWRITE:
+🔥 The HOOK - make it 10x more attention-grabbing, punchy, scroll-stopping
+🔥 Word choices - use fresher, punchier language (don't copy original phrases)
+🔥 Sentence structure - vary rhythm, add contrast, create flow
+🔥 Delivery angle - find a more engaging way to present the same info
+🔥 CTA - make it compelling and actionable
+
+THINK OF IT LIKE THIS:
+→ Original: "I'm done gatekeeping my music taste, here's a list..."
+→ Remix: "The algorithm tried to hide these from you. My top 5 secret weapons..."
+
+→ Original: "Number 5 is Ritviz. He has funky beats..."
+→ Remix: "First up, Ritviz. This guy's beats hit DIFFERENT..."
+
+THE GOAL:
+Same topic + Same key info + COMPLETELY FRESH WORDING = Scroll-stopping content
 
 DO NOT:
 ❌ Change the topic to something unrelated
-❌ Remove important information from the original
-❌ Add new facts/examples that weren't in the original
-❌ Change the name of any person, product, or app mentioned
-
-EXAMPLE:
-If original is about "GitHub Store app by Usmon" → Script MUST still be about GitHub Store app by Usmon
-If original is about "Coffee brewing tips" → Script MUST still be about Coffee brewing tips
+❌ Remove the key points/facts
+❌ Just copy-paste the original with minor tweaks (BORING!)
+❌ Change names of people/products mentioned
 
 ═══════════════════════════════════════════════════════════════════════
 ` : '';
