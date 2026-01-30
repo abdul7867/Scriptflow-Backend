@@ -361,7 +361,8 @@ export const generateScriptHandlerV2 = async (req: Request, res: Response): Prom
       storyFormat: storyFormat,
       isCopyMode: isCopyMode,
       isVariation: isVariation,
-      variationIndex: variationIndex
+      variationIndex: variationIndex,
+      isRemix: parsed.isRemix  // NEW: Pass remix flag to preserve original topic
     };
 
     await addScriptJob(jobData);

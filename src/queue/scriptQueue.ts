@@ -40,6 +40,9 @@ export interface ScriptJobData {
   isVariation?: boolean;
   variationIndex?: number;
 
+  // Remix mode: preserve original topic, improve delivery
+  isRemix?: boolean;
+
   // V2 flag: Use V2 ManyChat field names (ai_generated_script, script_image, script_copy_link)
   isV2?: boolean;
 

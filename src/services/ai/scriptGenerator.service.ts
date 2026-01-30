@@ -61,6 +61,9 @@ export interface ScriptGeneratorOptions {
     mode?: GenerationMode;
     storyFormat?: StoryFormat;
 
+    // NEW: Remix mode - preserve original topic, improve delivery
+    isRemix?: boolean;
+
     previousScripts?: { idea: string; script: string }[];
     previousVariationSummaries?: VariationSummary[];
 }
@@ -380,7 +383,8 @@ SCRIPT: ${ps.script}`).join('\n')}\n--- END CONTEXT ---\n`;
     const detectedLang = detectTranscriptLanguage(safeTranscript);
     const languageOverride = options.languageHint;
 
-    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
+    // Pass isRemix flag so prompt preserves original topic instead of changing it
+    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride, options.isRemix);
     const optionalHints = buildOptionalHints(options);
     const fullPrompt = masterPrompt + priorContext + optionalHints;
 
@@ -532,7 +536,8 @@ THIS IS YOUR REFERENCE DNA.`;
     const detectedLang = detectTranscriptLanguage(safeTranscript);
     const languageOverride = options.languageHint;
 
-    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride);
+    // Pass isRemix flag so prompt preserves original topic instead of changing it
+    const masterPrompt = createMasterPrompt(userIdea, referenceDNA, detectedLang, languageOverride, options.isRemix);
     const optionalHints = buildOptionalHints(options);
 
     let priorContext = '';
@@ -595,7 +600,8 @@ function createMasterPrompt(
     userIdea: string,
     referenceDNA: string,
     detectedLang: DetectedLanguage,
-    languageOverride?: string
+    languageOverride?: string,
+    isRemix?: boolean  // NEW: Flag to preserve original topic
 ): string {
     const effectiveLanguage = languageOverride || detectedLang.language;
     const isRomanized = !languageOverride && detectedLang.isRomanized;
@@ -616,12 +622,52 @@ RULES:
 ═══════════════════════════════════════════════════════════════════════
 `;
 
-    return `${languageSection}
+    // NEW: Remix mode section - tells AI to preserve topic
+    const remixSection = isRemix ? `
+═══════════════════════════════════════════════════════════════════════
+🔄 REMIX MODE ACTIVE - PRESERVE THE ORIGINAL TOPIC
+═══════════════════════════════════════════════════════════════════════
 
+You are IMPROVING an existing script about the SAME TOPIC, NOT creating a new one.
+
+PRESERVE (CRITICAL):
+✅ The EXACT same topic/subject from the reference transcript
+✅ Key facts, names, and specific details from the original
+✅ The core message and value proposition
+✅ Any specific examples, stats, or proof points mentioned
+
+IMPROVE:
+✅ Hook engagement (stronger, more attention-grabbing opening)
+✅ Pacing and flow (better rhythm, more natural delivery)
+✅ Word choice and delivery (punchier language, contractions)
+✅ CTA effectiveness (clearer call to action)
+✅ Structure (better transitions between sections)
+
+DO NOT:
+❌ Change the topic to something unrelated
+❌ Remove important information from the original
+❌ Add new facts/examples that weren't in the original
+❌ Change the name of any person, product, or app mentioned
+
+EXAMPLE:
+If original is about "GitHub Store app by Usmon" → Script MUST still be about GitHub Store app by Usmon
+If original is about "Coffee brewing tips" → Script MUST still be about Coffee brewing tips
+
+═══════════════════════════════════════════════════════════════════════
+` : '';
+
+    // Use different framing for remix vs new concept
+    const conceptLabel = isRemix ? 'REMIX REQUEST' : 'NEW CONCEPT';
+    const transformResult = isRemix
+        ? 'SAME topic as the reference, but with IMPROVED delivery, structure, and engagement.'
+        : 'Same CREATOR vibe, different TOPIC.';
+
+    return `${languageSection}
+${remixSection}
 REFERENCE VIDEO DATA:
 ${referenceDNA}
 
-NEW CONCEPT: "${userIdea}"
+${conceptLabel}: "${userIdea}"
 
 ═══════════════════════════════════════════════════════════════════════
 🎨 STEAL LIKE AN ARTIST FRAMEWORK
@@ -650,7 +696,7 @@ Extract from Reference Data above:
    (Niche terms, slang, technical jargon)
 
 ─────────────────────────────────────────────────────────────────────
-PHASE 2: TRANSPLANT TO NEW CONCEPT
+PHASE 2: ${isRemix ? 'IMPROVE THE DELIVERY' : 'TRANSPLANT TO NEW CONCEPT'}
 ─────────────────────────────────────────────────────────────────────
 
 STEAL THESE:
@@ -662,10 +708,10 @@ STEAL THESE:
 
 DON'T STEAL THESE:
 ❌ Exact words or phrases
-❌ Specific examples
-❌ Topic details
+${isRemix ? '✅ Keep specific examples and facts from original' : '❌ Specific examples'}
+${isRemix ? '✅ Keep original topic details' : '❌ Topic details'}
 
-RESULT: Same CREATOR vibe, different TOPIC.
+RESULT: ${transformResult}
 
 ═══════════════════════════════════════════════════════════════════════
 🎣 HOOK ENGINEERING (First 3 Words Rule)

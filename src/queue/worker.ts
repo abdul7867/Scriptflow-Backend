@@ -374,7 +374,8 @@ async function processJobWithTimeout(
     mode,
     isCopyMode, // When true, output transcript as-is formatted as script
     isV2, // When true, use V2 ManyChat field names
-    storyFormat // Storytelling format for restyling
+    storyFormat, // Storytelling format for restyling
+    isRemix // When true, preserve original topic during remix
   } = job.data;
 
   logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}${isCopyMode ? ' [COPY MODE]' : ''}${isV2 ? ' [V2]' : ''}${storyFormat ? ` [format: ${storyFormat}]` : ''}`);
@@ -613,6 +614,7 @@ async function processJobWithTimeout(
           languageHint,
           mode,
           storyFormat, // Storytelling format for restyling
+          isRemix, // NEW: Preserve original topic in remix mode
           previousScripts: previousScripts.map(ps => ({ idea: ps.idea, script: ps.script })),
           previousVariationSummaries: previousScriptSummaries
         });
@@ -681,6 +683,7 @@ async function processJobWithTimeout(
           languageHint,
           mode,
           storyFormat, // Storytelling format for restyling
+          isRemix, // NEW: Preserve original topic in remix mode
           previousScripts: previousScripts.map(ps => ({ idea: ps.idea, script: ps.script })),
           previousVariationSummaries: previousScriptSummaries
         });
