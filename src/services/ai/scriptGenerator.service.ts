@@ -527,12 +527,23 @@ export async function generateScriptFromVideo(options: OneShotGeneratorOptions):
         mediaParts.push(await fileToGenerativePart(audioPath, 'audio/wav'));
     }
 
-    const referenceDNA = `[VIDEO/AUDIO ATTACHED]
+    const safeTranscript = truncateTranscript(options.transcript);
+
+    // Build referenceDNA - include transcript if available (critical for remix mode)
+    let referenceDNA = `[VIDEO/AUDIO ATTACHED]
 Analyze frames and audio directly.
 Extract: pacing, tone, hook psychology, language style.
 THIS IS YOUR REFERENCE DNA.`;
 
-    const safeTranscript = truncateTranscript(options.transcript);
+    // CRITICAL: Add transcript to referenceDNA if available
+    // This is essential for remix mode so AI knows what content to remix
+    if (safeTranscript) {
+        referenceDNA = `TRANSCRIPT:
+"${safeTranscript}"
+
+${referenceDNA}`;
+    }
+
     const detectedLang = detectTranscriptLanguage(safeTranscript);
     const languageOverride = options.languageHint;
 

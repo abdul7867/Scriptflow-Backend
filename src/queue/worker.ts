@@ -669,6 +669,32 @@ async function processJobWithTimeout(
       // Check abort signal before AI call
       checkAborted(signal, requestId);
 
+      // ============================================
+      // CRITICAL FIX FOR REMIX MODE:
+      // ============================================
+      // In remix mode, we MUST extract the transcript FIRST so the AI knows
+      // what content to remix. Without the transcript, it just sees frames+audio
+      // and invents a completely new topic!
+      let oneShotTranscript: string | null = null;
+
+      if (isRemix) {
+        logger.info(`[${requestId}] REMIX MODE: Extracting transcript FIRST for content preservation...`);
+        const preAnalysis = await withCircuitBreaker('gemini', async () => {
+          return analyzeVideo({
+            frames,
+            audioPath,
+            includeAudio: true
+          });
+        });
+        oneShotTranscript = preAnalysis?.transcript || null;
+
+        if (oneShotTranscript) {
+          logger.info(`[${requestId}] REMIX MODE: Transcript extracted (${oneShotTranscript.length} chars)`);
+        } else {
+          logger.warn(`[${requestId}] REMIX MODE: No transcript found, remix may use visual cues only`);
+        }
+      }
+
       // C. Generate Script Directly (One-Shot)
       logger.info(`[${requestId}] Generating script (One-Shot Video Mode)...`);
       scriptGenStartTime = Date.now();
@@ -678,7 +704,7 @@ async function processJobWithTimeout(
           userIdea,
           frames,
           audioPath,
-          transcript: null,
+          transcript: oneShotTranscript, // FIXED: Pass transcript for remix mode
           toneHint,
           languageHint,
           mode,
