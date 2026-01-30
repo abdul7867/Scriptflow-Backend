@@ -69,8 +69,6 @@ ENV MEMORY_HEAP_LIMIT_MB=600
 ENV HOME=/app/temp
 ENV XDG_CACHE_HOME=/app/temp/.cache
 ENV XDG_CONFIG_HOME=/app/temp/.config
-# GCP credentials path (mounted at runtime from ./secrets volume)
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/gcp-service-account.json
 
 # Switch to non-root user (node user has UID/GID 1000)
 USER node

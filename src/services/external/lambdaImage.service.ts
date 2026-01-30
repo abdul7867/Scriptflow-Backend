@@ -63,14 +63,23 @@ export async function invokeImageLambda(
         }
 
         const resultPayload = response.Payload ? Buffer.from(response.Payload).toString() : '{}';
-        const result = JSON.parse(resultPayload) as LambdaImageResponse;
+        let result = JSON.parse(resultPayload);
+
+        // Handle Lambda Proxy Response (API Gateway style)
+        if (result.statusCode && result.body) {
+            if (result.statusCode !== 200) {
+                throw new Error(`Lambda returned status ${result.statusCode}: ${result.body}`);
+            }
+            // Parse the body string into the actual response object
+            result = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+        }
 
         if (result.error) {
             throw new Error(`Lambda reported error: ${result.error}`);
         }
 
         logger.info(`Lambda invocation successful (${duration}ms)`);
-        return result;
+        return result as LambdaImageResponse;
 
     } catch (error: any) {
         logger.error(`Lambda invocation error: ${error.message}`);

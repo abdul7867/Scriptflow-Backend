@@ -760,29 +760,16 @@ async function processJobWithTimeout(
     let carouselImages: CarouselImages | null = null;
 
     if (isCopyMode) {
-      // EXTRACT MODE: Use special extract image generator
-      // The extract format doesn't have [HOOK]/[BODY]/[CTA] sections
-      logger.info(`[${requestId}] EXTRACT MODE - Generating 3-card carousel for extract content`);
-      try {
-        // TEMPORARY: generateExtractCarouselImages is not implemented yet
-        // Fallback to single image automatically by throwing error
-        throw new Error('Extract carousel not implemented');
+      // EXTRACT MODE: Generate single transcript image
+      // The extract format is a long transcript, best suited for a single scrollable image
+      logger.info(`[${requestId}] EXTRACT MODE - Generating single image for extract content`);
 
-        /* Unreachable code removed
-        if (carouselImages) {
-          imageUrl = carouselImages.hookCard;
-           // ...
-        } else {
-          throw new Error('Carousel generation returned null');
-        }
-        */
-      } catch (carouselError: any) {
-        logger.warn(`[${requestId}] Extract carousel failed, falling back to single image: ${carouselError.message}`);
-        // Fallback to legacy single image if carousel fails
-        imageUrl = await withCircuitBreaker('cloudinary', async () => {
-          return generateExtractImage(scriptText);
-        });
-      }
+      imageUrl = await withCircuitBreaker('cloudinary', async () => {
+        return generateExtractImage(scriptText);
+      });
+
+      carouselImages = null; // No carousel for extract mode
+
     } else if (isV2) {
       // V2: Generate 3-card carousel (reduces system load by parallel generation)
       logger.info(`[${requestId}] Generating carousel images (3 cards)...`);
@@ -790,9 +777,9 @@ async function processJobWithTimeout(
         carouselImages = await withCircuitBreaker('cloudinary', async () => {
           return generateCarouselImages(scriptText, {
             variationIndex: job.data.variationIndex || 0,
-            showTimings: false,
-            theme: 'light',
-            storyFormat: storyFormat
+            storyFormat: storyFormat,
+            showTimings: true,
+            theme: 'dark'
           });
         });
 
